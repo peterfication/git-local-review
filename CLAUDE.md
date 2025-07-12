@@ -38,7 +38,9 @@ The application uses an async event-driven pattern:
 1. Events are processed through an `EventHandler` with unbounded channels
 2. Three event types: Tick (30 FPS), Crossterm (terminal input), App (custom events)
 3. Main loop renders UI and processes events asynchronously
-4. Key bindings: Esc/q/Ctrl-C to quit, arrow keys for counter increment/decrement
+4. Key bindings:
+  - Main view: Esc/q/Ctrl-C to quit
+  - Review create view: Esc to close, Enter to submit
 
 ### Dependencies
 
@@ -51,7 +53,6 @@ The application uses an async event-driven pattern:
 
 ### Development Notes
 
-- Application currently implements a basic counter example
-- Review functionality appears to be planned but not yet implemented
+- Reviews can be created and listed
 - Logging outputs to `tmp/app.log` file
 - Uses Rust 2024 edition
