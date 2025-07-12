@@ -31,12 +31,13 @@ pub enum Event {
 /// You can extend this enum with your own custom events.
 #[derive(Clone, Debug)]
 pub enum AppEvent {
-    /// Increment the counter.
     Increment,
-    /// Decrement the counter.
     Decrement,
-    /// Quit the application.
     Quit,
+
+    ReviewCreateOpen,
+    ReviewCreateClose,
+    ReviewCreateSubmit,
 }
 
 /// Terminal event handler.
@@ -46,6 +47,12 @@ pub struct EventHandler {
     sender: mpsc::UnboundedSender<Event>,
     /// Event receiver channel.
     receiver: mpsc::UnboundedReceiver<Event>,
+}
+
+impl Default for EventHandler {
+    fn default() -> Self {
+        panic!("Use EventHandler::new() instead of Default");
+    }
 }
 
 impl EventHandler {
@@ -91,7 +98,7 @@ struct EventTask {
 }
 
 impl EventTask {
-    /// Constructs a new instance of [`EventThread`].
+    /// Constructs a new instance of [`Event`].
     fn new(sender: mpsc::UnboundedSender<Event>) -> Self {
         Self { sender }
     }
