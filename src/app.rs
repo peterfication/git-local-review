@@ -10,8 +10,6 @@ use ratatui::{
 pub struct App {
     /// Is the application running?
     pub running: bool,
-    /// Counter.
-    pub counter: u8,
     /// Event handler.
     pub events: EventHandler,
     /// Database connection.
@@ -38,7 +36,6 @@ impl App {
 
         Ok(Self {
             running: true,
-            counter: 0,
             events: EventHandler::new(),
             database,
             reviews,
@@ -59,8 +56,6 @@ impl App {
                     _ => {}
                 },
                 Event::App(app_event) => match app_event {
-                    AppEvent::Increment => self.increment_counter(),
-                    AppEvent::Decrement => self.decrement_counter(),
                     AppEvent::Quit => self.quit(),
                     AppEvent::ReviewCreateOpen => self.review_create_open(),
                     AppEvent::ReviewCreateClose => self.review_create_close(),
@@ -81,8 +76,6 @@ impl App {
                 KeyCode::Char('c' | 'C') if key_event.modifiers == KeyModifiers::CONTROL => {
                     self.events.send(AppEvent::Quit)
                 }
-                KeyCode::Right => self.events.send(AppEvent::Increment),
-                KeyCode::Left => self.events.send(AppEvent::Decrement),
                 KeyCode::Char('n') => self.events.send(AppEvent::ReviewCreateOpen),
                 _ => {}
             }
@@ -114,14 +107,6 @@ impl App {
     /// Set running to false to quit the application.
     pub fn quit(&mut self) {
         self.running = false;
-    }
-
-    pub fn increment_counter(&mut self) {
-        self.counter = self.counter.saturating_add(1);
-    }
-
-    pub fn decrement_counter(&mut self) {
-        self.counter = self.counter.saturating_sub(1);
     }
 
     pub fn review_create_open(&mut self) {
