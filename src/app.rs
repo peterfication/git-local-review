@@ -1,11 +1,12 @@
+use crate::database::Database;
 use crate::event::{AppEvent, Event, EventHandler};
+use crate::models::review::Review;
 use ratatui::{
     DefaultTerminal,
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
 };
 
 /// Application.
-#[derive(Debug)]
 pub struct App {
     /// Is the application running?
     pub running: bool,
@@ -13,22 +14,37 @@ pub struct App {
     pub counter: u8,
     /// Event handler.
     pub events: EventHandler,
+    /// Database connection.
+    pub database: Database,
+    /// Reviews list.
+    pub reviews: Vec<Review>,
+    /// Show create review popup.
+    pub review_create_popup_show: bool,
+    /// Title input for new review.
+    pub review_create_title_input: String,
 }
 
 impl Default for App {
     fn default() -> Self {
-        Self {
-            running: true,
-            counter: 0,
-            events: EventHandler::new(),
-        }
+        panic!("Use App::new() instead of Default");
     }
 }
 
 impl App {
     /// Constructs a new instance of [`App`].
-    pub fn new() -> Self {
-        Self::default()
+    pub async fn new() -> color_eyre::Result<Self> {
+        let database = Database::new().await?;
+        let reviews = Review::list_all(database.pool()).await.unwrap_or_default();
+
+        Ok(Self {
+            running: true,
+            counter: 0,
+            events: EventHandler::new(),
+            database,
+            reviews,
+            review_create_popup_show: false,
+            review_create_title_input: String::new(),
+        })
     }
 
     /// Run the application's main loop.
@@ -45,6 +61,9 @@ impl App {
                     AppEvent::Increment => self.increment_counter(),
                     AppEvent::Decrement => self.decrement_counter(),
                     AppEvent::Quit => self.quit(),
+                    AppEvent::ReviewCreateOpen => self.review_create_open(),
+                    AppEvent::ReviewCreateClose => self.review_create_close(),
+                    AppEvent::ReviewCreateSubmit => self.review_create_submit().await?,
                 },
             }
         }
@@ -53,14 +72,33 @@ impl App {
 
     /// Handles the key events and updates the state of [`App`].
     pub fn handle_key_events(&mut self, key_event: KeyEvent) -> color_eyre::Result<()> {
-        match key_event.code {
-            KeyCode::Esc | KeyCode::Char('q') => self.events.send(AppEvent::Quit),
-            KeyCode::Char('c' | 'C') if key_event.modifiers == KeyModifiers::CONTROL => {
-                self.events.send(AppEvent::Quit)
+        if self.review_create_popup_show {
+            self.handle_popup_keys(key_event)?;
+        } else {
+            match key_event.code {
+                KeyCode::Esc | KeyCode::Char('q') => self.events.send(AppEvent::Quit),
+                KeyCode::Char('c' | 'C') if key_event.modifiers == KeyModifiers::CONTROL => {
+                    self.events.send(AppEvent::Quit)
+                }
+                KeyCode::Right => self.events.send(AppEvent::Increment),
+                KeyCode::Left => self.events.send(AppEvent::Decrement),
+                KeyCode::Char('n') => self.events.send(AppEvent::ReviewCreateOpen),
+                _ => {}
             }
-            KeyCode::Right => self.events.send(AppEvent::Increment),
-            KeyCode::Left => self.events.send(AppEvent::Decrement),
-            // Other handlers you could add here.
+        }
+        Ok(())
+    }
+
+    fn handle_popup_keys(&mut self, key_event: KeyEvent) -> color_eyre::Result<()> {
+        match key_event.code {
+            KeyCode::Esc => self.events.send(AppEvent::ReviewCreateClose),
+            KeyCode::Enter => self.events.send(AppEvent::ReviewCreateSubmit),
+            KeyCode::Char(char) => {
+                self.review_create_title_input.push(char);
+            }
+            KeyCode::Backspace => {
+                self.review_create_title_input.pop();
+            }
             _ => {}
         }
         Ok(())
@@ -83,5 +121,26 @@ impl App {
 
     pub fn decrement_counter(&mut self) {
         self.counter = self.counter.saturating_sub(1);
+    }
+
+    pub fn review_create_open(&mut self) {
+        self.review_create_popup_show = true;
+        self.review_create_title_input.clear();
+    }
+
+    pub fn review_create_close(&mut self) {
+        self.review_create_popup_show = false;
+        self.review_create_title_input.clear();
+    }
+
+    pub async fn review_create_submit(&mut self) -> color_eyre::Result<()> {
+        if !self.review_create_title_input.trim().is_empty() {
+            let review = Review::new(self.review_create_title_input.trim().to_string());
+            review.save(self.database.pool()).await?;
+            self.reviews = Review::list_all(self.database.pool()).await.unwrap_or_default();
+            log::info!("Created review: {}", review.title);
+        }
+        self.review_create_close();
+        Ok(())
     }
 }
