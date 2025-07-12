@@ -53,6 +53,7 @@ impl App {
             terminal.draw(|frame| frame.render_widget(&self, frame.area()))?;
             match self.events.next().await? {
                 Event::Tick => self.tick(),
+                #[allow(clippy::single_match)]
                 Event::Crossterm(event) => match event {
                     crossterm::event::Event::Key(key_event) => self.handle_key_events(key_event)?,
                     _ => {}
@@ -137,7 +138,9 @@ impl App {
         if !self.review_create_title_input.trim().is_empty() {
             let review = Review::new(self.review_create_title_input.trim().to_string());
             review.save(self.database.pool()).await?;
-            self.reviews = Review::list_all(self.database.pool()).await.unwrap_or_default();
+            self.reviews = Review::list_all(self.database.pool())
+                .await
+                .unwrap_or_default();
             log::info!("Created review: {}", review.title);
         }
         self.review_create_close();

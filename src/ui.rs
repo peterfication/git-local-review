@@ -20,9 +20,10 @@ impl Widget for &App {
             .constraints([Constraint::Length(3), Constraint::Min(0)])
             .split(area);
 
-        let header = Paragraph::new("Git Local Review - Press 'n' to create new review, 'q' to quit")
-            .block(Block::bordered().title("git-local-review"))
-            .fg(Color::Cyan);
+        let header =
+            Paragraph::new("Git Local Review - Press 'n' to create new review, 'q' to quit")
+                .block(Block::bordered().title("git-local-review"))
+                .fg(Color::Cyan);
         header.render(chunks[0], buf);
 
         // Reviews list
@@ -30,7 +31,11 @@ impl Widget for &App {
             .reviews
             .iter()
             .map(|review| {
-                ListItem::new(format!("{} ({})", review.title, review.created_at.format("%Y-%m-%d %H:%M")))
+                ListItem::new(format!(
+                    "{} ({})",
+                    review.title,
+                    review.created_at.format("%Y-%m-%d %H:%M")
+                ))
             })
             .collect();
 
@@ -62,7 +67,11 @@ fn render_create_review_popup(app: &App, area: Rect, buf: &mut Buffer) {
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Length(3), Constraint::Length(1)])
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(3),
+            Constraint::Length(1),
+        ])
         .split(inner);
 
     let title_label = Paragraph::new("Title:");
