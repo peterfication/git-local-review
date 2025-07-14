@@ -1,9 +1,12 @@
 use crate::database::Database;
-use crate::event::{EventHandler, ReviewCreateData};
+use crate::event::{AppEvent, EventHandler, ReviewCreateData};
 use crate::event_handler::EventProcessor;
 use crate::models::review::Review;
-use crate::views::{View, ViewHandler, main::MainView, review_create::ReviewCreateView};
-use ratatui::{DefaultTerminal, crossterm::event::KeyEvent};
+use crate::views::{View, main::MainView, review_create::ReviewCreateView};
+use ratatui::{
+    DefaultTerminal,
+    crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
+};
 
 /// Application.
 pub struct App {
@@ -17,8 +20,10 @@ pub struct App {
     pub reviews: Vec<Review>,
     /// Current view stack.
     pub view_stack: Vec<View>,
-    /// Title input for new review.
-    pub review_create_title_input: String,
+    /// Main view instance.
+    pub main_view: MainView,
+    /// Review create view instance.
+    pub review_create_view: ReviewCreateView,
 }
 
 impl Default for App {
@@ -39,7 +44,8 @@ impl App {
             database,
             reviews,
             view_stack: vec![View::Main],
-            review_create_title_input: String::new(),
+            main_view: MainView,
+            review_create_view: ReviewCreateView::default(),
         })
     }
 
@@ -57,8 +63,44 @@ impl App {
     pub fn handle_key_events(&mut self, key_event: KeyEvent) -> color_eyre::Result<()> {
         let current_view = self.current_view();
         match current_view {
-            View::Main => MainView.handle_key_events(self, key_event)?,
-            View::ReviewCreate => ReviewCreateView.handle_key_events(self, key_event)?,
+            View::Main => self.handle_main_key_events(key_event)?,
+            View::ReviewCreate => self.handle_review_create_key_events(key_event)?,
+        }
+        Ok(())
+    }
+
+    fn handle_main_key_events(&mut self, key_event: KeyEvent) -> color_eyre::Result<()> {
+        match key_event.code {
+            KeyCode::Esc | KeyCode::Char('q') => self.events.send(AppEvent::Quit),
+            KeyCode::Char('c' | 'C') if key_event.modifiers == KeyModifiers::CONTROL => {
+                self.events.send(AppEvent::Quit)
+            }
+            KeyCode::Char('n') => self.events.send(AppEvent::ReviewCreateOpen),
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn handle_review_create_key_events(&mut self, key_event: KeyEvent) -> color_eyre::Result<()> {
+        match key_event.code {
+            KeyCode::Esc => {
+                self.review_create_view.title_input.clear();
+                self.events.send(AppEvent::ReviewCreateClose);
+            }
+            KeyCode::Enter => {
+                self.events
+                    .send(AppEvent::ReviewCreateSubmit(ReviewCreateData {
+                        title: self.review_create_view.title_input.clone(),
+                    }));
+                self.review_create_view.title_input.clear();
+            }
+            KeyCode::Char(char) => {
+                self.review_create_view.title_input.push(char);
+            }
+            KeyCode::Backspace => {
+                self.review_create_view.title_input.pop();
+            }
+            _ => {}
         }
         Ok(())
     }
@@ -93,12 +135,10 @@ impl App {
 
     pub fn review_create_open(&mut self) {
         self.push_view(View::ReviewCreate);
-        self.review_create_title_input.clear();
     }
 
     pub fn review_create_close(&mut self) {
         self.pop_view();
-        self.review_create_title_input.clear();
     }
 
     pub async fn review_create_submit(&mut self, data: ReviewCreateData) -> color_eyre::Result<()> {

@@ -1,9 +1,6 @@
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
 
-use crate::{
-    app::App,
-    views::{View, ViewHandler, main::MainView, review_create::ReviewCreateView},
-};
+use crate::{app::App, views::View};
 
 impl Widget for &App {
     /// Renders the user interface widgets.
@@ -17,11 +14,11 @@ impl Widget for &App {
 
         match current_view {
             View::Main => {
-                MainView.render(self, area, buf);
+                self.main_view.render(self, area, buf);
             }
             View::ReviewCreate => {
-                MainView.render(self, area, buf);
-                ReviewCreateView.render(self, area, buf);
+                self.main_view.render(self, area, buf);
+                self.review_create_view.render(self, area, buf);
             }
         }
     }

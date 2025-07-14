@@ -1,7 +1,6 @@
-use crate::{app::App, event::AppEvent, views::ViewHandler};
+use crate::app::App;
 use ratatui::{
     buffer::Buffer,
-    crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style, Stylize},
     widgets::{Block, List, ListItem, Paragraph, Widget},
@@ -9,8 +8,8 @@ use ratatui::{
 
 pub struct MainView;
 
-impl ViewHandler for MainView {
-    fn render(&self, app: &App, area: Rect, buf: &mut Buffer) {
+impl MainView {
+    pub fn render(&self, app: &App, area: Rect, buf: &mut Buffer) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(3), Constraint::Min(0)])
@@ -39,17 +38,5 @@ impl ViewHandler for MainView {
             .style(Style::default().fg(Color::White));
 
         reviews_list.render(chunks[1], buf);
-    }
-
-    fn handle_key_events(&self, app: &mut App, key_event: KeyEvent) -> color_eyre::Result<()> {
-        match key_event.code {
-            KeyCode::Esc | KeyCode::Char('q') => app.events.send(AppEvent::Quit),
-            KeyCode::Char('c' | 'C') if key_event.modifiers == KeyModifiers::CONTROL => {
-                app.events.send(AppEvent::Quit)
-            }
-            KeyCode::Char('n') => app.events.send(AppEvent::ReviewCreateOpen),
-            _ => {}
-        }
-        Ok(())
     }
 }

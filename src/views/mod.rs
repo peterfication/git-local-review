@@ -13,5 +13,5 @@ pub enum View {
 
 pub trait ViewHandler {
     fn render(&self, app: &App, area: Rect, buf: &mut Buffer);
-    fn handle_key_events(&self, app: &mut App, key_event: KeyEvent) -> color_eyre::Result<()>;
+    fn handle_key_events(&mut self, app: &mut App, key_event: KeyEvent) -> color_eyre::Result<()>;
 }
