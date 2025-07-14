@@ -1,5 +1,5 @@
 use crate::database::Database;
-use crate::event::{AppEvent, EventHandler, ReviewCreateData};
+use crate::event::EventHandler;
 use crate::event_handler::EventProcessor;
 use crate::models::review::Review;
 use crate::services::ReviewService;
@@ -85,11 +85,5 @@ impl App {
     /// Set running to false to quit the application.
     pub fn quit(&mut self) {
         self.running = false;
-    }
-
-    pub async fn review_create_submit(&mut self, data: ReviewCreateData) -> color_eyre::Result<()> {
-        self.reviews = ReviewService::create_review(&self.database, data).await?;
-        self.events.send(AppEvent::ReviewCreateClose);
-        Ok(())
     }
 }
