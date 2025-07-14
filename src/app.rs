@@ -1,5 +1,5 @@
 use crate::database::Database;
-use crate::event::EventHandler;
+use crate::event::{EventHandler, ReviewCreateData};
 use crate::event_handler::EventProcessor;
 use crate::models::review::Review;
 use crate::views::{View, ViewHandler, main::MainView, review_create::ReviewCreateView};
@@ -101,9 +101,9 @@ impl App {
         self.review_create_title_input.clear();
     }
 
-    pub async fn review_create_submit(&mut self) -> color_eyre::Result<()> {
-        if !self.review_create_title_input.trim().is_empty() {
-            let review = Review::new(self.review_create_title_input.trim().to_string());
+    pub async fn review_create_submit(&mut self, data: ReviewCreateData) -> color_eyre::Result<()> {
+        if !data.title.trim().is_empty() {
+            let review = Review::new(data.title.trim().to_string());
             review.save(self.database.pool()).await?;
             self.reviews = Review::list_all(self.database.pool())
                 .await

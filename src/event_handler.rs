@@ -16,7 +16,7 @@ impl EventProcessor {
                 AppEvent::Quit => app.quit(),
                 AppEvent::ReviewCreateOpen => app.review_create_open(),
                 AppEvent::ReviewCreateClose => app.review_create_close(),
-                AppEvent::ReviewCreateSubmit => app.review_create_submit().await?,
+                AppEvent::ReviewCreateSubmit(data) => app.review_create_submit(data).await?,
             },
         }
         Ok(())

@@ -1,4 +1,8 @@
-use crate::{app::App, event::AppEvent, views::ViewHandler};
+use crate::{
+    app::App,
+    event::{AppEvent, ReviewCreateData},
+    views::ViewHandler,
+};
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{KeyCode, KeyEvent},
@@ -48,7 +52,11 @@ impl ViewHandler for ReviewCreateView {
     fn handle_key_events(&self, app: &mut App, key_event: KeyEvent) -> color_eyre::Result<()> {
         match key_event.code {
             KeyCode::Esc => app.events.send(AppEvent::ReviewCreateClose),
-            KeyCode::Enter => app.events.send(AppEvent::ReviewCreateSubmit),
+            KeyCode::Enter => app
+                .events
+                .send(AppEvent::ReviewCreateSubmit(ReviewCreateData {
+                    title: app.review_create_title_input.clone(),
+                })),
             KeyCode::Char(char) => {
                 app.review_create_title_input.push(char);
             }

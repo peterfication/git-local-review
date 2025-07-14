@@ -35,7 +35,12 @@ pub enum AppEvent {
 
     ReviewCreateOpen,
     ReviewCreateClose,
-    ReviewCreateSubmit,
+    ReviewCreateSubmit(ReviewCreateData),
+}
+
+#[derive(Clone, Debug)]
+pub struct ReviewCreateData {
+    pub title: String,
 }
 
 /// Terminal event handler.
