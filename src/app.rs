@@ -2,6 +2,7 @@ use crate::database::Database;
 use crate::event::{EventHandler, ReviewCreateData};
 use crate::event_handler::EventProcessor;
 use crate::models::review::Review;
+use crate::services::ReviewService;
 use crate::views::{ViewHandler, main::MainView, review_create::ReviewCreateView};
 use ratatui::{DefaultTerminal, crossterm::event::KeyEvent};
 
@@ -29,7 +30,7 @@ impl App {
     /// Constructs a new instance of [`App`].
     pub async fn new() -> color_eyre::Result<Self> {
         let database = Database::new().await?;
-        let reviews = Review::list_all(database.pool()).await.unwrap_or_default();
+        let reviews = ReviewService::list_reviews(&database).await?;
 
         Ok(Self {
             running: true,
@@ -95,14 +96,7 @@ impl App {
     }
 
     pub async fn review_create_submit(&mut self, data: ReviewCreateData) -> color_eyre::Result<()> {
-        if !data.title.trim().is_empty() {
-            let review = Review::new(data.title.trim().to_string());
-            review.save(self.database.pool()).await?;
-            self.reviews = Review::list_all(self.database.pool())
-                .await
-                .unwrap_or_default();
-            log::info!("Created review: {}", review.title);
-        }
+        self.reviews = ReviewService::create_review(&self.database, data).await?;
         self.review_create_close();
         Ok(())
     }
