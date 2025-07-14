@@ -22,6 +22,11 @@ impl Database {
         Ok(Self { pool })
     }
 
+    #[cfg(test)]
+    pub fn from_pool(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+
     pub fn pool(&self) -> &SqlitePool {
         &self.pool
     }
