@@ -1,8 +1,9 @@
 use crate::database::Database;
-use crate::event::{EventHandler, ReviewCreateData};
+use crate::event::EventHandler;
 use crate::event_handler::EventProcessor;
 use crate::models::review::Review;
-use crate::views::{ViewHandler, main::MainView, review_create::ReviewCreateView};
+use crate::services::ReviewService;
+use crate::views::{ViewHandler, main::MainView};
 use ratatui::{DefaultTerminal, crossterm::event::KeyEvent};
 
 /// Application.
@@ -29,7 +30,7 @@ impl App {
     /// Constructs a new instance of [`App`].
     pub async fn new() -> color_eyre::Result<Self> {
         let database = Database::new().await?;
-        let reviews = Review::list_all(database.pool()).await.unwrap_or_default();
+        let reviews = ReviewService::list_reviews(&database).await?;
 
         Ok(Self {
             running: true,
@@ -84,26 +85,5 @@ impl App {
     /// Set running to false to quit the application.
     pub fn quit(&mut self) {
         self.running = false;
-    }
-
-    pub fn review_create_open(&mut self) {
-        self.push_view(Box::new(ReviewCreateView::default()));
-    }
-
-    pub fn review_create_close(&mut self) {
-        self.pop_view();
-    }
-
-    pub async fn review_create_submit(&mut self, data: ReviewCreateData) -> color_eyre::Result<()> {
-        if !data.title.trim().is_empty() {
-            let review = Review::new(data.title.trim().to_string());
-            review.save(self.database.pool()).await?;
-            self.reviews = Review::list_all(self.database.pool())
-                .await
-                .unwrap_or_default();
-            log::info!("Created review: {}", review.title);
-        }
-        self.review_create_close();
-        Ok(())
     }
 }

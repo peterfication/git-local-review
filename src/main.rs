@@ -6,6 +6,7 @@ pub mod event;
 pub mod event_handler;
 pub mod logging;
 pub mod models;
+pub mod services;
 pub mod ui;
 pub mod views;
 
