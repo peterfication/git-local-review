@@ -1,9 +1,9 @@
 use crate::database::Database;
-use crate::event::{EventHandler, ReviewCreateData};
+use crate::event::{AppEvent, EventHandler, ReviewCreateData};
 use crate::event_handler::EventProcessor;
 use crate::models::review::Review;
 use crate::services::ReviewService;
-use crate::views::{ViewHandler, main::MainView, review_create::ReviewCreateView};
+use crate::views::{ViewHandler, main::MainView};
 use ratatui::{DefaultTerminal, crossterm::event::KeyEvent};
 
 /// Application.
@@ -87,17 +87,9 @@ impl App {
         self.running = false;
     }
 
-    pub fn review_create_open(&mut self) {
-        self.push_view(Box::new(ReviewCreateView::default()));
-    }
-
-    pub fn review_create_close(&mut self) {
-        self.pop_view();
-    }
-
     pub async fn review_create_submit(&mut self, data: ReviewCreateData) -> color_eyre::Result<()> {
         self.reviews = ReviewService::create_review(&self.database, data).await?;
-        self.review_create_close();
+        self.events.send(AppEvent::ReviewCreateClose);
         Ok(())
     }
 }
