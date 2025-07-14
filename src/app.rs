@@ -1,5 +1,6 @@
 use crate::database::Database;
-use crate::event::{AppEvent, Event, EventHandler};
+use crate::event::EventHandler;
+use crate::event_handler::EventProcessor;
 use crate::models::review::Review;
 use crate::views::{View, ViewHandler, main::MainView, review_create::ReviewCreateView};
 use ratatui::{DefaultTerminal, crossterm::event::KeyEvent};
@@ -46,20 +47,8 @@ impl App {
     pub async fn run(mut self, mut terminal: DefaultTerminal) -> color_eyre::Result<()> {
         while self.running {
             terminal.draw(|frame| frame.render_widget(&self, frame.area()))?;
-            match self.events.next().await? {
-                Event::Tick => self.tick(),
-                #[allow(clippy::single_match)]
-                Event::Crossterm(event) => match event {
-                    crossterm::event::Event::Key(key_event) => self.handle_key_events(key_event)?,
-                    _ => {}
-                },
-                Event::App(app_event) => match app_event {
-                    AppEvent::Quit => self.quit(),
-                    AppEvent::ReviewCreateOpen => self.review_create_open(),
-                    AppEvent::ReviewCreateClose => self.review_create_close(),
-                    AppEvent::ReviewCreateSubmit => self.review_create_submit().await?,
-                },
-            }
+            let event = self.events.next().await?;
+            EventProcessor::process_event(&mut self, event).await?;
         }
         Ok(())
     }
