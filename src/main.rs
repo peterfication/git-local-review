@@ -3,6 +3,7 @@ use crate::app::App;
 pub mod app;
 pub mod database;
 pub mod event;
+pub mod event_handler;
 pub mod logging;
 pub mod models;
 pub mod ui;

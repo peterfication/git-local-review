@@ -1,7 +1,8 @@
 use crate::database::Database;
-use crate::event::{AppEvent, Event, EventHandler};
+use crate::event::{EventHandler, ReviewCreateData};
+use crate::event_handler::EventProcessor;
 use crate::models::review::Review;
-use crate::views::{View, ViewHandler, main::MainView, review_create::ReviewCreateView};
+use crate::views::{ViewHandler, main::MainView, review_create::ReviewCreateView};
 use ratatui::{DefaultTerminal, crossterm::event::KeyEvent};
 
 /// Application.
@@ -15,9 +16,7 @@ pub struct App {
     /// Reviews list.
     pub reviews: Vec<Review>,
     /// Current view stack.
-    pub view_stack: Vec<View>,
-    /// Title input for new review.
-    pub review_create_title_input: String,
+    pub view_stack: Vec<Box<dyn ViewHandler>>,
 }
 
 impl Default for App {
@@ -37,8 +36,7 @@ impl App {
             events: EventHandler::new(),
             database,
             reviews,
-            view_stack: vec![View::Main],
-            review_create_title_input: String::new(),
+            view_stack: vec![Box::new(MainView)],
         })
     }
 
@@ -46,41 +44,27 @@ impl App {
     pub async fn run(mut self, mut terminal: DefaultTerminal) -> color_eyre::Result<()> {
         while self.running {
             terminal.draw(|frame| frame.render_widget(&self, frame.area()))?;
-            match self.events.next().await? {
-                Event::Tick => self.tick(),
-                #[allow(clippy::single_match)]
-                Event::Crossterm(event) => match event {
-                    crossterm::event::Event::Key(key_event) => self.handle_key_events(key_event)?,
-                    _ => {}
-                },
-                Event::App(app_event) => match app_event {
-                    AppEvent::Quit => self.quit(),
-                    AppEvent::ReviewCreateOpen => self.review_create_open(),
-                    AppEvent::ReviewCreateClose => self.review_create_close(),
-                    AppEvent::ReviewCreateSubmit => self.review_create_submit().await?,
-                },
-            }
+            let event = self.events.next().await?;
+            EventProcessor::process_event(&mut self, event).await?;
         }
         Ok(())
     }
 
     /// Handles the key events and updates the state of [`App`].
+    /// Only the top view in the stack will handle the key events.
     pub fn handle_key_events(&mut self, key_event: KeyEvent) -> color_eyre::Result<()> {
-        let current_view = self.current_view();
-        match current_view {
-            View::Main => MainView.handle_key_events(self, key_event)?,
-            View::ReviewCreate => ReviewCreateView.handle_key_events(self, key_event)?,
+        // We need to avoid borrowing self twice, so we'll extract the view temporarily
+        if !self.view_stack.is_empty() {
+            let mut current_view = self.view_stack.pop().unwrap();
+            let result = current_view.handle_key_events(self, key_event);
+            self.view_stack.push(current_view);
+            result?;
         }
         Ok(())
     }
 
-    /// Get the current view from the view stack.
-    pub fn current_view(&self) -> View {
-        self.view_stack.last().cloned().unwrap_or_default()
-    }
-
     /// Push a view onto the view stack.
-    pub fn push_view(&mut self, view: View) {
+    pub fn push_view(&mut self, view: Box<dyn ViewHandler>) {
         self.view_stack.push(view);
     }
 
@@ -103,18 +87,16 @@ impl App {
     }
 
     pub fn review_create_open(&mut self) {
-        self.push_view(View::ReviewCreate);
-        self.review_create_title_input.clear();
+        self.push_view(Box::new(ReviewCreateView::default()));
     }
 
     pub fn review_create_close(&mut self) {
         self.pop_view();
-        self.review_create_title_input.clear();
     }
 
-    pub async fn review_create_submit(&mut self) -> color_eyre::Result<()> {
-        if !self.review_create_title_input.trim().is_empty() {
-            let review = Review::new(self.review_create_title_input.trim().to_string());
+    pub async fn review_create_submit(&mut self, data: ReviewCreateData) -> color_eyre::Result<()> {
+        if !data.title.trim().is_empty() {
+            let review = Review::new(data.title.trim().to_string());
             review.save(self.database.pool()).await?;
             self.reviews = Review::list_all(self.database.pool())
                 .await

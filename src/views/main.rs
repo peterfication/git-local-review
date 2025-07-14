@@ -10,6 +10,18 @@ use ratatui::{
 pub struct MainView;
 
 impl ViewHandler for MainView {
+    fn handle_key_events(&mut self, app: &mut App, key_event: KeyEvent) -> color_eyre::Result<()> {
+        match key_event.code {
+            KeyCode::Esc | KeyCode::Char('q') => app.events.send(AppEvent::Quit),
+            KeyCode::Char('c' | 'C') if key_event.modifiers == KeyModifiers::CONTROL => {
+                app.events.send(AppEvent::Quit)
+            }
+            KeyCode::Char('n') => app.events.send(AppEvent::ReviewCreateOpen),
+            _ => {}
+        }
+        Ok(())
+    }
+
     fn render(&self, app: &App, area: Rect, buf: &mut Buffer) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -39,17 +51,5 @@ impl ViewHandler for MainView {
             .style(Style::default().fg(Color::White));
 
         reviews_list.render(chunks[1], buf);
-    }
-
-    fn handle_key_events(&self, app: &mut App, key_event: KeyEvent) -> color_eyre::Result<()> {
-        match key_event.code {
-            KeyCode::Esc | KeyCode::Char('q') => app.events.send(AppEvent::Quit),
-            KeyCode::Char('c' | 'C') if key_event.modifiers == KeyModifiers::CONTROL => {
-                app.events.send(AppEvent::Quit)
-            }
-            KeyCode::Char('n') => app.events.send(AppEvent::ReviewCreateOpen),
-            _ => {}
-        }
-        Ok(())
     }
 }

@@ -1,4 +1,8 @@
-use crate::{app::App, event::AppEvent, views::ViewHandler};
+use crate::{
+    app::App,
+    event::{AppEvent, ReviewCreateData},
+    views::ViewHandler,
+};
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{KeyCode, KeyEvent},
@@ -7,10 +11,37 @@ use ratatui::{
     widgets::{Block, BorderType, Clear, Paragraph, Widget},
 };
 
-pub struct ReviewCreateView;
+#[derive(Default)]
+pub struct ReviewCreateView {
+    pub title_input: String,
+}
 
 impl ViewHandler for ReviewCreateView {
-    fn render(&self, app: &App, area: Rect, buf: &mut Buffer) {
+    fn handle_key_events(&mut self, app: &mut App, key_event: KeyEvent) -> color_eyre::Result<()> {
+        match key_event.code {
+            KeyCode::Esc => {
+                self.title_input.clear();
+                app.events.send(AppEvent::ReviewCreateClose);
+            }
+            KeyCode::Enter => {
+                app.events
+                    .send(AppEvent::ReviewCreateSubmit(ReviewCreateData {
+                        title: self.title_input.clone(),
+                    }));
+                self.title_input.clear();
+            }
+            KeyCode::Char(char) => {
+                self.title_input.push(char);
+            }
+            KeyCode::Backspace => {
+                self.title_input.pop();
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn render(&self, _app: &App, area: Rect, buf: &mut Buffer) {
         let popup_area = centered_rect(60, 20, area);
 
         Clear.render(popup_area, buf);
@@ -35,7 +66,7 @@ impl ViewHandler for ReviewCreateView {
         let title_label = Paragraph::new("Title:");
         title_label.render(chunks[0], buf);
 
-        let title_input = Paragraph::new(app.review_create_title_input.as_str())
+        let title_input = Paragraph::new(self.title_input.as_str())
             .block(Block::bordered())
             .style(Style::default().fg(Color::Yellow));
         title_input.render(chunks[1], buf);
@@ -43,21 +74,6 @@ impl ViewHandler for ReviewCreateView {
         let help = Paragraph::new("Press Enter to create, Esc to cancel")
             .style(Style::default().fg(Color::Gray));
         help.render(chunks[2], buf);
-    }
-
-    fn handle_key_events(&self, app: &mut App, key_event: KeyEvent) -> color_eyre::Result<()> {
-        match key_event.code {
-            KeyCode::Esc => app.events.send(AppEvent::ReviewCreateClose),
-            KeyCode::Enter => app.events.send(AppEvent::ReviewCreateSubmit),
-            KeyCode::Char(char) => {
-                app.review_create_title_input.push(char);
-            }
-            KeyCode::Backspace => {
-                app.review_create_title_input.pop();
-            }
-            _ => {}
-        }
-        Ok(())
     }
 }
 
