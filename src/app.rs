@@ -1,10 +1,8 @@
 use crate::database::Database;
 use crate::event::{AppEvent, Event, EventHandler};
 use crate::models::review::Review;
-use ratatui::{
-    DefaultTerminal,
-    crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
-};
+use crate::views::{View, ViewHandler, main::MainView, review_create::ReviewCreateView};
+use ratatui::{DefaultTerminal, crossterm::event::KeyEvent};
 
 /// Application.
 pub struct App {
@@ -16,8 +14,8 @@ pub struct App {
     pub database: Database,
     /// Reviews list.
     pub reviews: Vec<Review>,
-    /// Show create review popup.
-    pub review_create_popup_show: bool,
+    /// Current view stack.
+    pub view_stack: Vec<View>,
     /// Title input for new review.
     pub review_create_title_input: String,
 }
@@ -39,7 +37,7 @@ impl App {
             events: EventHandler::new(),
             database,
             reviews,
-            review_create_popup_show: false,
+            view_stack: vec![View::Main],
             review_create_title_input: String::new(),
         })
     }
@@ -68,34 +66,29 @@ impl App {
 
     /// Handles the key events and updates the state of [`App`].
     pub fn handle_key_events(&mut self, key_event: KeyEvent) -> color_eyre::Result<()> {
-        if self.review_create_popup_show {
-            self.handle_popup_keys(key_event)?;
-        } else {
-            match key_event.code {
-                KeyCode::Esc | KeyCode::Char('q') => self.events.send(AppEvent::Quit),
-                KeyCode::Char('c' | 'C') if key_event.modifiers == KeyModifiers::CONTROL => {
-                    self.events.send(AppEvent::Quit)
-                }
-                KeyCode::Char('n') => self.events.send(AppEvent::ReviewCreateOpen),
-                _ => {}
-            }
+        let current_view = self.current_view();
+        match current_view {
+            View::Main => MainView.handle_key_events(self, key_event)?,
+            View::ReviewCreate => ReviewCreateView.handle_key_events(self, key_event)?,
         }
         Ok(())
     }
 
-    fn handle_popup_keys(&mut self, key_event: KeyEvent) -> color_eyre::Result<()> {
-        match key_event.code {
-            KeyCode::Esc => self.events.send(AppEvent::ReviewCreateClose),
-            KeyCode::Enter => self.events.send(AppEvent::ReviewCreateSubmit),
-            KeyCode::Char(char) => {
-                self.review_create_title_input.push(char);
-            }
-            KeyCode::Backspace => {
-                self.review_create_title_input.pop();
-            }
-            _ => {}
+    /// Get the current view from the view stack.
+    pub fn current_view(&self) -> View {
+        self.view_stack.last().cloned().unwrap_or_default()
+    }
+
+    /// Push a view onto the view stack.
+    pub fn push_view(&mut self, view: View) {
+        self.view_stack.push(view);
+    }
+
+    /// Pop the current view from the view stack.
+    pub fn pop_view(&mut self) {
+        if self.view_stack.len() > 1 {
+            self.view_stack.pop();
         }
-        Ok(())
     }
 
     /// Handles the tick event of the terminal.
@@ -110,12 +103,12 @@ impl App {
     }
 
     pub fn review_create_open(&mut self) {
-        self.review_create_popup_show = true;
+        self.push_view(View::ReviewCreate);
         self.review_create_title_input.clear();
     }
 
     pub fn review_create_close(&mut self) {
-        self.review_create_popup_show = false;
+        self.pop_view();
         self.review_create_title_input.clear();
     }
 
