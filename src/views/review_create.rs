@@ -1,6 +1,11 @@
-use crate::app::App;
+use crate::{
+    app::App,
+    event::{AppEvent, ReviewCreateData},
+    views::ViewHandler,
+};
 use ratatui::{
     buffer::Buffer,
+    crossterm::event::{KeyCode, KeyEvent},
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     widgets::{Block, BorderType, Clear, Paragraph, Widget},
@@ -11,8 +16,32 @@ pub struct ReviewCreateView {
     pub title_input: String,
 }
 
-impl ReviewCreateView {
-    pub fn render(&self, _app: &App, area: Rect, buf: &mut Buffer) {
+impl ViewHandler for ReviewCreateView {
+    fn handle_key_events(&mut self, app: &mut App, key_event: KeyEvent) -> color_eyre::Result<()> {
+        match key_event.code {
+            KeyCode::Esc => {
+                self.title_input.clear();
+                app.events.send(AppEvent::ReviewCreateClose);
+            }
+            KeyCode::Enter => {
+                app.events
+                    .send(AppEvent::ReviewCreateSubmit(ReviewCreateData {
+                        title: self.title_input.clone(),
+                    }));
+                self.title_input.clear();
+            }
+            KeyCode::Char(char) => {
+                self.title_input.push(char);
+            }
+            KeyCode::Backspace => {
+                self.title_input.pop();
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn render(&self, _app: &App, area: Rect, buf: &mut Buffer) {
         let popup_area = centered_rect(60, 20, area);
 
         Clear.render(popup_area, buf);

@@ -1,6 +1,6 @@
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
 
-use crate::{app::App, views::View};
+use crate::app::App;
 
 impl Widget for &App {
     /// Renders the user interface widgets.
@@ -10,16 +10,8 @@ impl Widget for &App {
     // - https://docs.rs/ratatui/latest/ratatui/widgets/index.html
     // - https://github.com/ratatui/ratatui/tree/master/examples
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let current_view = self.current_view();
-
-        match current_view {
-            View::Main => {
-                self.main_view.render(self, area, buf);
-            }
-            View::ReviewCreate => {
-                self.main_view.render(self, area, buf);
-                self.review_create_view.render(self, area, buf);
-            }
+        for view in self.view_stack.iter() {
+            view.render(self, area, buf);
         }
     }
 }

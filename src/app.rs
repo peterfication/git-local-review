@@ -1,12 +1,9 @@
 use crate::database::Database;
-use crate::event::{AppEvent, EventHandler, ReviewCreateData};
+use crate::event::{EventHandler, ReviewCreateData};
 use crate::event_handler::EventProcessor;
 use crate::models::review::Review;
-use crate::views::{View, main::MainView, review_create::ReviewCreateView};
-use ratatui::{
-    DefaultTerminal,
-    crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
-};
+use crate::views::{ViewHandler, main::MainView, review_create::ReviewCreateView};
+use ratatui::{DefaultTerminal, crossterm::event::KeyEvent};
 
 /// Application.
 pub struct App {
@@ -19,11 +16,7 @@ pub struct App {
     /// Reviews list.
     pub reviews: Vec<Review>,
     /// Current view stack.
-    pub view_stack: Vec<View>,
-    /// Main view instance.
-    pub main_view: MainView,
-    /// Review create view instance.
-    pub review_create_view: ReviewCreateView,
+    pub view_stack: Vec<Box<dyn ViewHandler>>,
 }
 
 impl Default for App {
@@ -43,9 +36,7 @@ impl App {
             events: EventHandler::new(),
             database,
             reviews,
-            view_stack: vec![View::Main],
-            main_view: MainView,
-            review_create_view: ReviewCreateView::default(),
+            view_stack: vec![Box::new(MainView)],
         })
     }
 
@@ -60,58 +51,20 @@ impl App {
     }
 
     /// Handles the key events and updates the state of [`App`].
+    /// Only the top view in the stack will handle the key events.
     pub fn handle_key_events(&mut self, key_event: KeyEvent) -> color_eyre::Result<()> {
-        let current_view = self.current_view();
-        match current_view {
-            View::Main => self.handle_main_key_events(key_event)?,
-            View::ReviewCreate => self.handle_review_create_key_events(key_event)?,
+        // We need to avoid borrowing self twice, so we'll extract the view temporarily
+        if !self.view_stack.is_empty() {
+            let mut current_view = self.view_stack.pop().unwrap();
+            let result = current_view.handle_key_events(self, key_event);
+            self.view_stack.push(current_view);
+            result?;
         }
         Ok(())
-    }
-
-    fn handle_main_key_events(&mut self, key_event: KeyEvent) -> color_eyre::Result<()> {
-        match key_event.code {
-            KeyCode::Esc | KeyCode::Char('q') => self.events.send(AppEvent::Quit),
-            KeyCode::Char('c' | 'C') if key_event.modifiers == KeyModifiers::CONTROL => {
-                self.events.send(AppEvent::Quit)
-            }
-            KeyCode::Char('n') => self.events.send(AppEvent::ReviewCreateOpen),
-            _ => {}
-        }
-        Ok(())
-    }
-
-    fn handle_review_create_key_events(&mut self, key_event: KeyEvent) -> color_eyre::Result<()> {
-        match key_event.code {
-            KeyCode::Esc => {
-                self.review_create_view.title_input.clear();
-                self.events.send(AppEvent::ReviewCreateClose);
-            }
-            KeyCode::Enter => {
-                self.events
-                    .send(AppEvent::ReviewCreateSubmit(ReviewCreateData {
-                        title: self.review_create_view.title_input.clone(),
-                    }));
-                self.review_create_view.title_input.clear();
-            }
-            KeyCode::Char(char) => {
-                self.review_create_view.title_input.push(char);
-            }
-            KeyCode::Backspace => {
-                self.review_create_view.title_input.pop();
-            }
-            _ => {}
-        }
-        Ok(())
-    }
-
-    /// Get the current view from the view stack.
-    pub fn current_view(&self) -> View {
-        self.view_stack.last().cloned().unwrap_or_default()
     }
 
     /// Push a view onto the view stack.
-    pub fn push_view(&mut self, view: View) {
+    pub fn push_view(&mut self, view: Box<dyn ViewHandler>) {
         self.view_stack.push(view);
     }
 
@@ -134,7 +87,7 @@ impl App {
     }
 
     pub fn review_create_open(&mut self) {
-        self.push_view(View::ReviewCreate);
+        self.push_view(Box::new(ReviewCreateView::default()));
     }
 
     pub fn review_create_close(&mut self) {
