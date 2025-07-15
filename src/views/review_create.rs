@@ -128,6 +128,7 @@ mod tests {
             events: crate::event::EventHandler::new_for_test(),
             database,
             reviews,
+            reviews_loading: false,
             view_stack: vec![],
         }
     }

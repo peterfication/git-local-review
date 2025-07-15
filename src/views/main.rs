@@ -42,17 +42,25 @@ impl ViewHandler for MainView {
                 .fg(Color::Cyan);
         header.render(chunks[0], buf);
 
-        let reviews: Vec<ListItem> = app
-            .reviews
-            .iter()
-            .map(|review| {
-                ListItem::new(format!(
-                    "{} ({})",
-                    review.title,
-                    review.created_at.format("%Y-%m-%d %H:%M")
-                ))
-            })
-            .collect();
+        let reviews: Vec<ListItem> = if app.reviews_loading {
+            vec![ListItem::new("Loading reviews...").style(Style::default().fg(Color::Yellow))]
+        } else if app.reviews.is_empty() {
+            vec![
+                ListItem::new("No reviews found - Press 'n' to create a new review")
+                    .style(Style::default().fg(Color::Yellow)),
+            ]
+        } else {
+            app.reviews
+                .iter()
+                .map(|review| {
+                    ListItem::new(format!(
+                        "{} ({})",
+                        review.title,
+                        review.created_at.format("%Y-%m-%d %H:%M")
+                    ))
+                })
+                .collect()
+        };
 
         let reviews_list = List::new(reviews)
             .block(Block::bordered().title("Reviews"))
@@ -90,6 +98,7 @@ mod tests {
             events: crate::event::EventHandler::new_for_test(),
             database,
             reviews,
+            reviews_loading: false,
             view_stack: vec![],
         }
     }

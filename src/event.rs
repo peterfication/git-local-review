@@ -31,10 +31,19 @@ pub enum Event {
 /// You can extend this enum with your own custom events.
 #[derive(Clone, Debug)]
 pub enum AppEvent {
+    /// Quit the application.
     Quit,
 
+    /// Trigger loading of reviews.
+    ReviewsLoad,
+    /// Load the reviews from the database
+    ReviewsLoading,
+
+    /// Open the review creation view.
     ReviewCreateOpen,
+    /// Close the review creation view.
     ReviewCreateClose,
+    /// Submit the review creation form.
     ReviewCreateSubmit(ReviewCreateData),
 }
 

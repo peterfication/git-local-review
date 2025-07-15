@@ -1,8 +1,7 @@
 use crate::database::Database;
-use crate::event::EventHandler;
+use crate::event::{AppEvent, EventHandler};
 use crate::event_handler::EventProcessor;
 use crate::models::review::Review;
-use crate::services::ReviewService;
 use crate::views::{ViewHandler, main::MainView};
 use ratatui::{DefaultTerminal, crossterm::event::KeyEvent};
 
@@ -16,6 +15,8 @@ pub struct App {
     pub database: Database,
     /// Reviews list.
     pub reviews: Vec<Review>,
+    /// Are reviews currently being loaded?
+    pub reviews_loading: bool,
     /// Current view stack.
     pub view_stack: Vec<Box<dyn ViewHandler>>,
 }
@@ -30,19 +31,22 @@ impl App {
     /// Constructs a new instance of [`App`].
     pub async fn new() -> color_eyre::Result<Self> {
         let database = Database::new().await?;
-        let reviews = ReviewService::list_reviews(&database).await?;
 
         Ok(Self {
             running: true,
             events: EventHandler::new(),
             database,
-            reviews,
+            reviews: Vec::new(),
+            reviews_loading: false,
             view_stack: vec![Box::new(MainView)],
         })
     }
 
     /// Run the application's main loop.
     pub async fn run(mut self, mut terminal: DefaultTerminal) -> color_eyre::Result<()> {
+        // Trigger initial reviews load
+        self.events.send(AppEvent::ReviewsLoad);
+
         while self.running {
             terminal.draw(|frame| frame.render_widget(&self, frame.area()))?;
             let event = self.events.next().await?;
@@ -92,6 +96,7 @@ impl App {
 mod tests {
     use super::*;
     use crate::event::{AppEvent, Event};
+    use crate::services::ReviewService;
     use crate::views::{ViewType, main::MainView, review_create::ReviewCreateView};
     use sqlx::SqlitePool;
 
@@ -111,6 +116,7 @@ mod tests {
             events: EventHandler::new_for_test(),
             database,
             reviews,
+            reviews_loading: false,
             view_stack: vec![Box::new(MainView)],
         }
     }
@@ -128,6 +134,7 @@ mod tests {
             events: EventHandler::new(),
             database,
             reviews,
+            reviews_loading: false,
             view_stack: vec![Box::new(MainView)],
         };
 
@@ -308,6 +315,7 @@ mod tests {
             events: EventHandler::new(),
             database: Database::from_pool(pool),
             reviews: vec![],
+            reviews_loading: false,
             view_stack: vec![Box::new(MainView)],
         };
 
