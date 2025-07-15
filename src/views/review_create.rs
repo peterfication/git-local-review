@@ -52,7 +52,7 @@ impl ViewHandler for ReviewCreateView {
     }
 
     fn render(&self, _app: &App, area: Rect, buf: &mut Buffer) {
-        let popup_area = centered_rect(60, 20, area);
+        let popup_area = centered_rect(60, 40, area);
 
         Clear.render(popup_area, buf);
 
@@ -114,6 +114,7 @@ mod tests {
     use crate::event::{AppEvent, Event};
     use crate::models::review::Review;
     use crate::services::ReviewsLoadingState;
+    use insta::assert_snapshot;
     use sqlx::SqlitePool;
 
     use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
@@ -305,5 +306,38 @@ mod tests {
 
         // Unknown keys should not change input
         assert_eq!(view.title_input, initial_input);
+    }
+
+    fn get_review_create_view_terminal_backend(
+        app: &App,
+        view: &ReviewCreateView,
+    ) -> ratatui::backend::TestBackend {
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 20)).unwrap();
+        terminal
+            .draw(|frame| {
+                // Render the view directly
+                view.render(app, frame.area(), frame.buffer_mut());
+            })
+            .unwrap();
+        terminal.backend().clone()
+    }
+
+    #[tokio::test]
+    async fn test_review_create_view_render_default() {
+        let app = create_test_app().await;
+        let view = ReviewCreateView::default();
+
+        assert_snapshot!(get_review_create_view_terminal_backend(&app, &view));
+    }
+
+    #[tokio::test]
+    async fn test_review_create_view_render_with_title() {
+        let app = create_test_app().await;
+        let view = ReviewCreateView {
+            title_input: "My New Review".to_string(),
+        };
+
+        assert_snapshot!(get_review_create_view_terminal_backend(&app, &view));
     }
 }
