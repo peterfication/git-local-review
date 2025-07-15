@@ -1,4 +1,4 @@
-use crate::services::review_service::ReviewCreateData;
+use crate::services::ReviewCreateData;
 use color_eyre::eyre::OptionExt;
 use futures::{FutureExt, StreamExt};
 use ratatui::crossterm::event::Event as CrosstermEvent;

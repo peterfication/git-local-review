@@ -113,7 +113,7 @@ mod tests {
     use crate::database::Database;
     use crate::event::{AppEvent, Event};
     use crate::models::review::Review;
-    use crate::services::review_service::ReviewsLoadingState;
+    use crate::services::ReviewsLoadingState;
     use sqlx::SqlitePool;
 
     use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};

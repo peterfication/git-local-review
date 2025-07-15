@@ -1,6 +1,6 @@
 use crate::app::App;
 use crate::event::{AppEvent, Event};
-use crate::services::review_service::{ReviewCreateData, ReviewService, ReviewsLoadingState};
+use crate::services::{ReviewCreateData, ReviewService, ReviewsLoadingState};
 use crate::views::review_create::ReviewCreateView;
 
 pub struct EventProcessor;

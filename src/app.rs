@@ -2,7 +2,7 @@ use crate::database::Database;
 use crate::event::{AppEvent, EventHandler};
 use crate::event_handler::EventProcessor;
 use crate::models::review::Review;
-use crate::services::review_service::ReviewsLoadingState;
+use crate::services::ReviewsLoadingState;
 use crate::views::{ViewHandler, main::MainView};
 use ratatui::{DefaultTerminal, crossterm::event::KeyEvent};
 
