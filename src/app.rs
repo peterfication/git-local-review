@@ -5,6 +5,19 @@ use crate::models::review::Review;
 use crate::views::{ViewHandler, main::MainView};
 use ratatui::{DefaultTerminal, crossterm::event::KeyEvent};
 
+/// State of reviews loading process
+#[derive(Debug, Clone, PartialEq)]
+pub enum ReviewsLoadingState {
+    /// Initial state - no loading has been attempted
+    Init,
+    /// Currently loading reviews from database
+    Loading,
+    /// Reviews have been successfully loaded
+    Loaded,
+    /// Error occurred during loading
+    Error(String),
+}
+
 /// Application.
 pub struct App {
     /// Is the application running?
@@ -15,8 +28,8 @@ pub struct App {
     pub database: Database,
     /// Reviews list.
     pub reviews: Vec<Review>,
-    /// Are reviews currently being loaded?
-    pub reviews_loading: bool,
+    /// Current state of reviews loading process
+    pub reviews_loading_state: ReviewsLoadingState,
     /// Current view stack.
     pub view_stack: Vec<Box<dyn ViewHandler>>,
 }
@@ -37,7 +50,7 @@ impl App {
             events: EventHandler::new(),
             database,
             reviews: Vec::new(),
-            reviews_loading: false,
+            reviews_loading_state: ReviewsLoadingState::Init,
             view_stack: vec![Box::new(MainView)],
         })
     }
@@ -116,7 +129,7 @@ mod tests {
             events: EventHandler::new_for_test(),
             database,
             reviews,
-            reviews_loading: false,
+            reviews_loading_state: ReviewsLoadingState::Loaded,
             view_stack: vec![Box::new(MainView)],
         }
     }
@@ -134,7 +147,7 @@ mod tests {
             events: EventHandler::new(),
             database,
             reviews,
-            reviews_loading: false,
+            reviews_loading_state: ReviewsLoadingState::Loaded,
             view_stack: vec![Box::new(MainView)],
         };
 
@@ -315,7 +328,7 @@ mod tests {
             events: EventHandler::new(),
             database: Database::from_pool(pool),
             reviews: vec![],
-            reviews_loading: false,
+            reviews_loading_state: ReviewsLoadingState::Loaded,
             view_stack: vec![Box::new(MainView)],
         };
 

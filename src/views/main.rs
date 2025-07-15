@@ -1,5 +1,5 @@
 use crate::{
-    app::App,
+    app::{App, ReviewsLoadingState},
     event::AppEvent,
     views::{ViewHandler, ViewType},
 };
@@ -42,24 +42,38 @@ impl ViewHandler for MainView {
                 .fg(Color::Cyan);
         header.render(chunks[0], buf);
 
-        let reviews: Vec<ListItem> = if app.reviews_loading {
-            vec![ListItem::new("Loading reviews...").style(Style::default().fg(Color::Yellow))]
-        } else if app.reviews.is_empty() {
-            vec![
-                ListItem::new("No reviews found - Press 'n' to create a new review")
-                    .style(Style::default().fg(Color::Yellow)),
-            ]
-        } else {
-            app.reviews
-                .iter()
-                .map(|review| {
-                    ListItem::new(format!(
-                        "{} ({})",
-                        review.title,
-                        review.created_at.format("%Y-%m-%d %H:%M")
-                    ))
-                })
-                .collect()
+        let reviews: Vec<ListItem> = match &app.reviews_loading_state {
+            ReviewsLoadingState::Init => {
+                vec![ListItem::new("Initializing...").style(Style::default().fg(Color::Gray))]
+            }
+            ReviewsLoadingState::Loading => {
+                vec![ListItem::new("Loading reviews...").style(Style::default().fg(Color::Yellow))]
+            }
+            ReviewsLoadingState::Loaded => {
+                if app.reviews.is_empty() {
+                    vec![
+                        ListItem::new("No reviews found - Press 'n' to create a new review")
+                            .style(Style::default().fg(Color::Yellow)),
+                    ]
+                } else {
+                    app.reviews
+                        .iter()
+                        .map(|review| {
+                            ListItem::new(format!(
+                                "{} ({})",
+                                review.title,
+                                review.created_at.format("%Y-%m-%d %H:%M")
+                            ))
+                        })
+                        .collect()
+                }
+            }
+            ReviewsLoadingState::Error(error) => {
+                vec![
+                    ListItem::new(format!("Error loading reviews: {error}"))
+                        .style(Style::default().fg(Color::Red)),
+                ]
+            }
         };
 
         let reviews_list = List::new(reviews)
@@ -98,7 +112,7 @@ mod tests {
             events: crate::event::EventHandler::new_for_test(),
             database,
             reviews,
-            reviews_loading: false,
+            reviews_loading_state: ReviewsLoadingState::Loaded,
             view_stack: vec![],
         }
     }

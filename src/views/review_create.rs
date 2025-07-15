@@ -128,7 +128,7 @@ mod tests {
             events: crate::event::EventHandler::new_for_test(),
             database,
             reviews,
-            reviews_loading: false,
+            reviews_loading_state: crate::app::ReviewsLoadingState::Loaded,
             view_stack: vec![],
         }
     }
