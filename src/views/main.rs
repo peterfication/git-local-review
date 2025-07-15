@@ -1,6 +1,7 @@
 use crate::{
-    app::{App, ReviewsLoadingState},
+    app::App,
     event::AppEvent,
+    services::review_service::ReviewsLoadingState,
     views::{ViewHandler, ViewType},
 };
 use ratatui::{

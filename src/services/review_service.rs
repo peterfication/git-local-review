@@ -5,6 +5,19 @@ pub struct ReviewCreateData {
     pub title: String,
 }
 
+/// State of reviews loading process
+#[derive(Debug, Clone, PartialEq)]
+pub enum ReviewsLoadingState {
+    /// Initial state - no loading has been attempted
+    Init,
+    /// Currently loading reviews from database
+    Loading,
+    /// Reviews have been successfully loaded
+    Loaded,
+    /// Error occurred during loading
+    Error(String),
+}
+
 pub struct ReviewService;
 
 impl ReviewService {

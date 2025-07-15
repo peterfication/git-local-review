@@ -2,21 +2,9 @@ use crate::database::Database;
 use crate::event::{AppEvent, EventHandler};
 use crate::event_handler::EventProcessor;
 use crate::models::review::Review;
+use crate::services::review_service::ReviewsLoadingState;
 use crate::views::{ViewHandler, main::MainView};
 use ratatui::{DefaultTerminal, crossterm::event::KeyEvent};
-
-/// State of reviews loading process
-#[derive(Debug, Clone, PartialEq)]
-pub enum ReviewsLoadingState {
-    /// Initial state - no loading has been attempted
-    Init,
-    /// Currently loading reviews from database
-    Loading,
-    /// Reviews have been successfully loaded
-    Loaded,
-    /// Error occurred during loading
-    Error(String),
-}
 
 /// Application.
 pub struct App {

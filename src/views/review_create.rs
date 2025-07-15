@@ -113,6 +113,7 @@ mod tests {
     use crate::database::Database;
     use crate::event::{AppEvent, Event};
     use crate::models::review::Review;
+    use crate::services::review_service::ReviewsLoadingState;
     use sqlx::SqlitePool;
 
     use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
@@ -129,7 +130,7 @@ mod tests {
             events: crate::event::EventHandler::new_for_test(),
             database,
             reviews,
-            reviews_loading_state: crate::app::ReviewsLoadingState::Loaded,
+            reviews_loading_state: ReviewsLoadingState::Loaded,
             view_stack: vec![],
         }
     }
