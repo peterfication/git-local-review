@@ -245,7 +245,7 @@ mod tests {
         assert!(!app.events.has_pending_events());
     }
 
-    // FIXME: Is this method necessary? Or does ratatui offer a better way for this?
+    // TODO: Use snapshot testing for rendering instead of buffer_to_string
     fn buffer_to_string(buffer: &Buffer) -> String {
         let mut content = String::new();
         for y in 0..buffer.area().height {
