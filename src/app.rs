@@ -91,7 +91,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::views::{main::MainView, review_create::ReviewCreateView};
+    use crate::views::{ViewType, main::MainView, review_create::ReviewCreateView};
     use sqlx::SqlitePool;
 
     use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
@@ -149,35 +149,51 @@ mod tests {
     async fn test_push_view() {
         let mut app = create_test_app().await;
         assert_eq!(app.view_stack.len(), 1);
+        assert_eq!(app.view_stack.last().unwrap().view_type(), ViewType::Main);
 
         app.push_view(Box::new(ReviewCreateView::default()));
 
         assert_eq!(app.view_stack.len(), 2);
+        assert_eq!(
+            app.view_stack.last().unwrap().view_type(),
+            ViewType::ReviewCreate
+        );
     }
 
     #[tokio::test]
     async fn test_pop_view() {
         let mut app = create_test_app().await;
 
-        // Add a second view
+        // Initially should have MainView
+        assert_eq!(app.view_stack.len(), 1);
+        assert_eq!(app.view_stack.last().unwrap().view_type(), ViewType::Main);
+
+        // Add a second view (ReviewCreateView)
         app.push_view(Box::new(ReviewCreateView::default()));
         assert_eq!(app.view_stack.len(), 2);
+        assert_eq!(
+            app.view_stack.last().unwrap().view_type(),
+            ViewType::ReviewCreate
+        );
 
-        // Pop it
+        // Pop it - should remove ReviewCreateView and leave MainView
         app.pop_view();
         assert_eq!(app.view_stack.len(), 1);
+        assert_eq!(app.view_stack.last().unwrap().view_type(), ViewType::Main);
     }
 
     #[tokio::test]
     async fn test_pop_view_keeps_at_least_one() {
         let mut app = create_test_app().await;
         assert_eq!(app.view_stack.len(), 1);
+        assert_eq!(app.view_stack.last().unwrap().view_type(), ViewType::Main);
 
         // Try to pop the last view
         app.pop_view();
 
-        // Should still have one view
+        // Should still have one view and it should still be MainView
         assert_eq!(app.view_stack.len(), 1);
+        assert_eq!(app.view_stack.last().unwrap().view_type(), ViewType::Main);
     }
 
     #[tokio::test]

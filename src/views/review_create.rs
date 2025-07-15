@@ -1,7 +1,7 @@
 use crate::{
     app::App,
     event::{AppEvent, ReviewCreateData},
-    views::ViewHandler,
+    views::{ViewHandler, ViewType},
 };
 use ratatui::{
     buffer::Buffer,
@@ -17,6 +17,10 @@ pub struct ReviewCreateView {
 }
 
 impl ViewHandler for ReviewCreateView {
+    fn view_type(&self) -> ViewType {
+        ViewType::ReviewCreate
+    }
+
     fn handle_key_events(&mut self, app: &mut App, key_event: KeyEvent) -> color_eyre::Result<()> {
         match key_event.code {
             KeyCode::Esc => {

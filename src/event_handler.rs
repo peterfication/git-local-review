@@ -43,7 +43,7 @@ impl EventProcessor {
 mod tests {
     use super::*;
     use crate::database::Database;
-    use crate::views::main::MainView;
+    use crate::views::{ViewType, main::MainView};
     use sqlx::SqlitePool;
 
     async fn create_test_app() -> App {
@@ -86,6 +86,10 @@ mod tests {
             .unwrap();
 
         assert_eq!(app.view_stack.len(), 2);
+        assert_eq!(
+            app.view_stack.last().unwrap().view_type(),
+            ViewType::ReviewCreate
+        );
     }
 
     #[tokio::test]
@@ -104,6 +108,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(app.view_stack.len(), 1);
+        assert_eq!(app.view_stack.last().unwrap().view_type(), ViewType::Main);
     }
 
     #[tokio::test]
@@ -131,6 +136,7 @@ mod tests {
 
         // Should have closed the view
         assert_eq!(app.view_stack.len(), 1);
+        assert_eq!(app.view_stack.last().unwrap().view_type(), ViewType::Main);
     }
 
     #[tokio::test]
@@ -161,6 +167,7 @@ mod tests {
 
         assert!(app.running);
         assert_eq!(app.view_stack.len(), 1);
+        assert_eq!(app.view_stack.last().unwrap().view_type(), ViewType::Main);
     }
 
     #[tokio::test]

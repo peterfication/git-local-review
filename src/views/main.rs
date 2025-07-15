@@ -1,4 +1,8 @@
-use crate::{app::App, event::AppEvent, views::ViewHandler};
+use crate::{
+    app::App,
+    event::AppEvent,
+    views::{ViewHandler, ViewType},
+};
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
@@ -10,6 +14,10 @@ use ratatui::{
 pub struct MainView;
 
 impl ViewHandler for MainView {
+    fn view_type(&self) -> ViewType {
+        ViewType::Main
+    }
+
     fn handle_key_events(&mut self, app: &mut App, key_event: KeyEvent) -> color_eyre::Result<()> {
         match key_event.code {
             KeyCode::Esc | KeyCode::Char('q') => app.events.send(AppEvent::Quit),
