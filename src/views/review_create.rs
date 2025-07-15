@@ -1,6 +1,7 @@
 use crate::{
     app::App,
-    event::{AppEvent, ReviewCreateData},
+    event::AppEvent,
+    services::review_service::ReviewCreateData,
     views::{ViewHandler, ViewType},
 };
 use ratatui::{

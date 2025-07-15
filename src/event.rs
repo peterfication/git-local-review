@@ -1,3 +1,4 @@
+use crate::services::review_service::ReviewCreateData;
 use color_eyre::eyre::OptionExt;
 use futures::{FutureExt, StreamExt};
 use ratatui::crossterm::event::Event as CrosstermEvent;
@@ -47,11 +48,6 @@ pub enum AppEvent {
     ReviewCreateClose,
     /// Submit the review creation form.
     ReviewCreateSubmit(ReviewCreateData),
-}
-
-#[derive(Clone, Debug)]
-pub struct ReviewCreateData {
-    pub title: String,
 }
 
 /// Terminal event handler.

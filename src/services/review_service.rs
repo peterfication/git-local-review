@@ -1,4 +1,9 @@
-use crate::{database::Database, event::ReviewCreateData, models::review::Review};
+use crate::{database::Database, models::review::Review};
+
+#[derive(Clone, Debug)]
+pub struct ReviewCreateData {
+    pub title: String,
+}
 
 pub struct ReviewService;
 

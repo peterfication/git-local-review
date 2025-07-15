@@ -1,6 +1,6 @@
 use crate::app::{App, ReviewsLoadingState};
-use crate::event::{AppEvent, Event, ReviewCreateData};
-use crate::services::ReviewService;
+use crate::event::{AppEvent, Event};
+use crate::services::{ReviewCreateData, ReviewService};
 use crate::views::review_create::ReviewCreateView;
 
 pub struct EventProcessor;
@@ -216,7 +216,7 @@ mod tests {
             .unwrap();
         assert_eq!(app.view_stack.len(), 2);
 
-        let data = ReviewCreateData {
+        let data = crate::services::review_service::ReviewCreateData {
             title: "Test Review".to_string(),
         };
 
@@ -238,7 +238,7 @@ mod tests {
         let mut app = create_test_app().await;
         assert_eq!(app.reviews.len(), 0);
 
-        let data = ReviewCreateData {
+        let data = crate::services::review_service::ReviewCreateData {
             title: "".to_string(),
         };
 
