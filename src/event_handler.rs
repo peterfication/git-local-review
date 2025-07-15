@@ -18,6 +18,7 @@ impl EventProcessor {
                 AppEvent::Quit => app.quit(),
                 AppEvent::ReviewsLoad => Self::reviews_load(app),
                 AppEvent::ReviewsLoading => Self::reviews_loading(app).await?,
+                AppEvent::ReviewsLoaded => Self::reviews_loaded(app),
                 AppEvent::ReviewCreateOpen => Self::review_create_open(app),
                 AppEvent::ReviewCreateClose => Self::review_create_close(app),
                 AppEvent::ReviewCreateSubmit(data) => Self::review_create_submit(app, data).await?,
@@ -37,8 +38,13 @@ impl EventProcessor {
         // Wait for a second for testing
         // tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         app.reviews = ReviewService::list_reviews(&app.database).await?;
-        app.reviews_loading = false;
+        app.events.send(AppEvent::ReviewsLoaded);
         Ok(())
+    }
+
+    /// Mark reviews as loaded and stop loading state
+    fn reviews_loaded(app: &mut App) {
+        app.reviews_loading = false;
     }
 
     /// Open the review creation view
@@ -119,10 +125,27 @@ mod tests {
             .await
             .unwrap();
 
-        // Mark reviews as not loading anymore
-        assert!(!app.reviews_loading);
         // Check that reviews have been loaded
         assert_eq!(app.reviews.len(), 1);
+        // Check that a ReviewsLoaded event has been sent
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        assert!(matches!(event, Event::App(AppEvent::ReviewsLoaded)));
+        // Loading state should still be true until ReviewsLoaded is processed
+        assert!(app.reviews_loading);
+    }
+
+    #[tokio::test]
+    async fn test_process_reviews_loaded_event() {
+        let mut app = create_test_app().await;
+        app.reviews_loading = true; // Simulate that reviews are loading
+
+        EventProcessor::process_event(&mut app, Event::App(AppEvent::ReviewsLoaded))
+            .await
+            .unwrap();
+
+        // Loading state should be false after ReviewsLoaded is processed
+        assert!(!app.reviews_loading);
     }
 
     #[tokio::test]

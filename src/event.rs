@@ -38,6 +38,8 @@ pub enum AppEvent {
     ReviewsLoad,
     /// Load the reviews from the database
     ReviewsLoading,
+    /// Reviews have been loaded from the database
+    ReviewsLoaded,
 
     /// Open the review creation view.
     ReviewCreateOpen,
