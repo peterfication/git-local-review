@@ -101,9 +101,10 @@ mod tests {
     use crate::database::Database;
     use crate::event::{AppEvent, Event};
     use crate::models::review::Review;
-    use sqlx::SqlitePool;
-
+    use crate::test_utils::get_terminal_backend;
+    use insta::assert_snapshot;
     use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
+    use sqlx::SqlitePool;
 
     async fn create_test_app_with_reviews() -> App {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
@@ -124,7 +125,7 @@ mod tests {
             database,
             reviews,
             reviews_loading_state: ReviewsLoadingState::Loaded,
-            view_stack: vec![],
+            view_stack: vec![Box::new(MainView)],
         }
     }
 
@@ -245,36 +246,13 @@ mod tests {
         assert!(!app.events.has_pending_events());
     }
 
-    // TODO: Use snapshot testing for rendering instead of buffer_to_string
-    fn buffer_to_string(buffer: &Buffer) -> String {
-        let mut content = String::new();
-        for y in 0..buffer.area().height {
-            for x in 0..buffer.area().width {
-                let position: ratatui::layout::Position = (x, y).into(); // Explicitly specify the type
-                if let Some(cell) = buffer.cell(position) {
-                    content.push(cell.symbol().chars().next().unwrap_or(' '));
-                } else {
-                    content.push(' '); // Fallback if the cell is None
-                }
-            }
-            content.push('\n');
-        }
-        content
-    }
-
     #[tokio::test]
     async fn test_main_view_render_reviews_loading_state_init() {
         let app = App {
             reviews_loading_state: ReviewsLoadingState::Init,
             ..create_test_app_with_reviews().await
         };
-        let view = MainView;
-        let mut buffer = Buffer::empty(Rect::new(0, 0, 50, 10));
-
-        view.render(&app, Rect::new(0, 0, 50, 10), &mut buffer);
-
-        let content = buffer_to_string(&buffer);
-        assert!(content.contains("Initializing..."));
+        assert_snapshot!(get_terminal_backend(app));
     }
 
     #[tokio::test]
@@ -283,26 +261,13 @@ mod tests {
             reviews_loading_state: ReviewsLoadingState::Loading,
             ..create_test_app_with_reviews().await
         };
-        let view = MainView;
-        let mut buffer = Buffer::empty(Rect::new(0, 0, 50, 10));
-
-        view.render(&app, Rect::new(0, 0, 50, 10), &mut buffer);
-
-        let content = buffer_to_string(&buffer);
-        assert!(content.contains("Loading reviews..."));
+        assert_snapshot!(get_terminal_backend(app));
     }
 
     #[tokio::test]
     async fn test_main_view_render_reviews_loading_state_loaded_with_reviews() {
         let app = create_test_app_with_reviews().await;
-        let view = MainView;
-        let mut buffer = Buffer::empty(Rect::new(0, 0, 50, 10));
-
-        view.render(&app, Rect::new(0, 0, 50, 10), &mut buffer);
-
-        let content = buffer_to_string(&buffer);
-        assert!(content.contains("Review 1"));
-        assert!(content.contains("Review 2"));
+        assert_snapshot!(get_terminal_backend(app));
     }
 
     #[tokio::test]
@@ -312,13 +277,7 @@ mod tests {
             reviews_loading_state: ReviewsLoadingState::Loaded,
             ..create_test_app_with_reviews().await
         };
-        let view = MainView;
-        let mut buffer = Buffer::empty(Rect::new(0, 0, 50, 10));
-
-        view.render(&app, Rect::new(0, 0, 50, 10), &mut buffer);
-
-        let content = buffer_to_string(&buffer);
-        assert!(content.contains("No reviews found"));
+        assert_snapshot!(get_terminal_backend(app));
     }
 
     #[tokio::test]
@@ -327,12 +286,6 @@ mod tests {
             reviews_loading_state: ReviewsLoadingState::Error("Test error".to_string()),
             ..create_test_app_with_reviews().await
         };
-        let view = MainView;
-        let mut buffer = Buffer::empty(Rect::new(0, 0, 50, 10));
-
-        view.render(&app, Rect::new(0, 0, 50, 10), &mut buffer);
-
-        let content = buffer_to_string(&buffer);
-        assert!(content.contains("Error loading reviews: Test error"));
+        assert_snapshot!(get_terminal_backend(app));
     }
 }
