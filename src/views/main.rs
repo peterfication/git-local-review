@@ -44,37 +44,10 @@ impl ViewHandler for MainView {
         header.render(chunks[0], buf);
 
         let reviews: Vec<ListItem> = match &app.reviews_loading_state {
-            ReviewsLoadingState::Init => {
-                vec![ListItem::new("Initializing...").style(Style::default().fg(Color::Gray))]
-            }
-            ReviewsLoadingState::Loading => {
-                vec![ListItem::new("Loading reviews...").style(Style::default().fg(Color::Yellow))]
-            }
-            ReviewsLoadingState::Loaded => {
-                if app.reviews.is_empty() {
-                    vec![
-                        ListItem::new("No reviews found - Press 'n' to create a new review")
-                            .style(Style::default().fg(Color::Yellow)),
-                    ]
-                } else {
-                    app.reviews
-                        .iter()
-                        .map(|review| {
-                            ListItem::new(format!(
-                                "{} ({})",
-                                review.title,
-                                review.created_at.format("%Y-%m-%d %H:%M")
-                            ))
-                        })
-                        .collect()
-                }
-            }
-            ReviewsLoadingState::Error(error) => {
-                vec![
-                    ListItem::new(format!("Error loading reviews: {error}"))
-                        .style(Style::default().fg(Color::Red)),
-                ]
-            }
+            ReviewsLoadingState::Init => self.render_reviews_init(),
+            ReviewsLoadingState::Loading => self.render_reviews_loading(),
+            ReviewsLoadingState::Loaded => self.render_reviews_loaded(&app.reviews),
+            ReviewsLoadingState::Error(error) => self.render_reviews_error(error),
         };
 
         let reviews_list = List::new(reviews)
@@ -82,6 +55,43 @@ impl ViewHandler for MainView {
             .style(Style::default().fg(Color::White));
 
         reviews_list.render(chunks[1], buf);
+    }
+}
+
+impl MainView {
+    fn render_reviews_init(&self) -> Vec<ListItem> {
+        vec![ListItem::new("Initializing...").style(Style::default().fg(Color::Gray))]
+    }
+
+    fn render_reviews_loading(&self) -> Vec<ListItem> {
+        vec![ListItem::new("Loading reviews...").style(Style::default().fg(Color::Yellow))]
+    }
+
+    fn render_reviews_loaded(&self, reviews: &[crate::models::review::Review]) -> Vec<ListItem> {
+        if reviews.is_empty() {
+            vec![
+                ListItem::new("No reviews found - Press 'n' to create a new review")
+                    .style(Style::default().fg(Color::Yellow)),
+            ]
+        } else {
+            reviews
+                .iter()
+                .map(|review| {
+                    ListItem::new(format!(
+                        "{} ({})",
+                        review.title,
+                        review.created_at.format("%Y-%m-%d %H:%M")
+                    ))
+                })
+                .collect()
+        }
+    }
+
+    fn render_reviews_error(&self, error: &str) -> Vec<ListItem> {
+        vec![
+            ListItem::new(format!("Error loading reviews: {error}"))
+                .style(Style::default().fg(Color::Red)),
+        ]
     }
 }
 
