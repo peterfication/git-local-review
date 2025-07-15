@@ -14,16 +14,21 @@ impl EventProcessor {
                 crossterm::event::Event::Key(key_event) => app.handle_key_events(key_event)?,
                 _ => {}
             },
-            Event::App(app_event) => match app_event {
-                AppEvent::Quit => app.quit(),
-                AppEvent::ReviewsLoad => Self::reviews_load(app).await?,
-                AppEvent::ReviewsLoading => Self::reviews_loading(app).await?,
-                AppEvent::ReviewsLoaded => Self::reviews_loaded(app),
-                AppEvent::ReviewsLoadingError(error) => Self::reviews_loading_error(app, error),
-                AppEvent::ReviewCreateOpen => Self::review_create_open(app),
-                AppEvent::ReviewCreateClose => Self::review_create_close(app),
-                AppEvent::ReviewCreateSubmit(data) => Self::review_create_submit(app, data).await?,
-            },
+            Event::App(app_event) => {
+                log::info!("Processing event: {app_event:#?}");
+                match app_event {
+                    AppEvent::Quit => app.quit(),
+                    AppEvent::ReviewsLoad => Self::reviews_load(app).await?,
+                    AppEvent::ReviewsLoading => Self::reviews_loading(app).await?,
+                    AppEvent::ReviewsLoaded => Self::reviews_loaded(app),
+                    AppEvent::ReviewsLoadingError(error) => Self::reviews_loading_error(app, error),
+                    AppEvent::ReviewCreateOpen => Self::review_create_open(app),
+                    AppEvent::ReviewCreateClose => Self::review_create_close(app),
+                    AppEvent::ReviewCreateSubmit(data) => {
+                        Self::review_create_submit(app, data).await?
+                    }
+                }
+            }
         }
         Ok(())
     }
