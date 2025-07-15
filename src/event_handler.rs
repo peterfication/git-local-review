@@ -1,6 +1,6 @@
 use crate::app::App;
-use crate::event::{AppEvent, Event, ReviewCreateData};
-use crate::services::ReviewService;
+use crate::event::{AppEvent, Event};
+use crate::services::{ReviewCreateData, ReviewService, ReviewsLoadingState};
 use crate::views::review_create::ReviewCreateView;
 
 pub struct EventProcessor;
@@ -16,6 +16,10 @@ impl EventProcessor {
             },
             Event::App(app_event) => match app_event {
                 AppEvent::Quit => app.quit(),
+                AppEvent::ReviewsLoad => Self::reviews_load(app).await?,
+                AppEvent::ReviewsLoading => Self::reviews_loading(app).await?,
+                AppEvent::ReviewsLoaded => Self::reviews_loaded(app),
+                AppEvent::ReviewsLoadingError(error) => Self::reviews_loading_error(app, error),
                 AppEvent::ReviewCreateOpen => Self::review_create_open(app),
                 AppEvent::ReviewCreateClose => Self::review_create_close(app),
                 AppEvent::ReviewCreateSubmit(data) => Self::review_create_submit(app, data).await?,
@@ -24,14 +28,53 @@ impl EventProcessor {
         Ok(())
     }
 
+    /// Load set the loading state and send an event to start loading reviews
+    async fn reviews_load(app: &mut App) -> color_eyre::Result<()> {
+        // Uncomment to wait for a second for manual testing
+        // tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        app.reviews_loading_state = ReviewsLoadingState::Loading;
+        app.events.send(AppEvent::ReviewsLoading);
+        Ok(())
+    }
+
+    /// Load reviews from the database asynchronously
+    async fn reviews_loading(app: &mut App) -> color_eyre::Result<()> {
+        // Uncomment to wait for a second for manual testing
+        // tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        match ReviewService::list_reviews(&app.database).await {
+            Ok(reviews) => {
+                app.reviews = reviews;
+                app.events.send(AppEvent::ReviewsLoaded);
+            }
+            Err(e) => {
+                app.events
+                    .send(AppEvent::ReviewsLoadingError(e.to_string()));
+            }
+        }
+        Ok(())
+    }
+
+    /// Mark reviews as loaded and stop loading state
+    fn reviews_loaded(app: &mut App) {
+        app.reviews_loading_state = ReviewsLoadingState::Loaded;
+    }
+
+    /// Handle reviews loading error
+    fn reviews_loading_error(app: &mut App, error: String) {
+        app.reviews_loading_state = ReviewsLoadingState::Error(error);
+    }
+
+    /// Open the review creation view
     fn review_create_open(app: &mut App) {
         app.push_view(Box::new(ReviewCreateView::default()));
     }
 
+    /// Close the review creation view
     fn review_create_close(app: &mut App) {
         app.pop_view();
     }
 
+    /// Submit the review creation form
     async fn review_create_submit(app: &mut App, data: ReviewCreateData) -> color_eyre::Result<()> {
         app.reviews = ReviewService::create_review(&app.database, data).await?;
         Self::review_create_close(app);
@@ -43,6 +86,7 @@ impl EventProcessor {
 mod tests {
     use super::*;
     use crate::database::Database;
+    use crate::models::review::Review;
     use crate::views::{ViewType, main::MainView};
     use sqlx::SqlitePool;
 
@@ -60,8 +104,85 @@ mod tests {
             events: crate::event::EventHandler::new_for_test(),
             database,
             reviews,
+            reviews_loading_state: ReviewsLoadingState::Init,
             view_stack: vec![Box::new(MainView)],
         }
+    }
+
+    #[tokio::test]
+    async fn test_process_reviews_load_event() {
+        let mut app = create_test_app().await;
+        assert_eq!(app.reviews.len(), 0);
+        assert_eq!(app.reviews_loading_state, ReviewsLoadingState::Init);
+
+        EventProcessor::process_event(&mut app, Event::App(AppEvent::ReviewsLoad))
+            .await
+            .unwrap();
+
+        // Mark reviews as loading
+        assert_eq!(app.reviews_loading_state, ReviewsLoadingState::Loading);
+        // Check that the ReviewsLoading event has been triggered
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        assert!(matches!(event, Event::App(AppEvent::ReviewsLoading)));
+    }
+
+    #[tokio::test]
+    async fn test_process_reviews_loading_event() {
+        let mut app = create_test_app().await;
+
+        // Create and save a test review to the database
+        let review = Review::new("Test Review".to_string());
+        review.save(app.database.pool()).await.unwrap();
+
+        assert_eq!(app.reviews.len(), 0);
+        app.reviews_loading_state = ReviewsLoadingState::Loading; // Simulate that reviews are loading
+
+        EventProcessor::process_event(&mut app, Event::App(AppEvent::ReviewsLoading))
+            .await
+            .unwrap();
+
+        // Check that reviews have been loaded
+        assert_eq!(app.reviews.len(), 1);
+        // Check that a ReviewsLoaded event has been sent
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        assert!(matches!(event, Event::App(AppEvent::ReviewsLoaded)));
+        // Loading state should still be Loading until ReviewsLoaded is processed
+        assert_eq!(app.reviews_loading_state, ReviewsLoadingState::Loading);
+    }
+
+    #[tokio::test]
+    async fn test_process_reviews_loaded_event() {
+        let mut app = create_test_app().await;
+        app.reviews_loading_state = ReviewsLoadingState::Loading; // Simulate that reviews are loading
+
+        EventProcessor::process_event(&mut app, Event::App(AppEvent::ReviewsLoaded))
+            .await
+            .unwrap();
+
+        // Loading state should be Loaded after ReviewsLoaded is processed
+        assert_eq!(app.reviews_loading_state, ReviewsLoadingState::Loaded);
+    }
+
+    #[tokio::test]
+    async fn test_process_reviews_loading_error_event() {
+        let mut app = create_test_app().await;
+        app.reviews_loading_state = ReviewsLoadingState::Loading; // Simulate that reviews are loading
+
+        let error_message = "Database connection failed".to_string();
+        EventProcessor::process_event(
+            &mut app,
+            Event::App(AppEvent::ReviewsLoadingError(error_message.clone())),
+        )
+        .await
+        .unwrap();
+
+        // Loading state should be Error after ReviewsLoadingError is processed
+        assert_eq!(
+            app.reviews_loading_state,
+            ReviewsLoadingState::Error(error_message)
+        );
     }
 
     #[tokio::test]
@@ -122,7 +243,7 @@ mod tests {
             .unwrap();
         assert_eq!(app.view_stack.len(), 2);
 
-        let data = ReviewCreateData {
+        let data = crate::services::review_service::ReviewCreateData {
             title: "Test Review".to_string(),
         };
 
@@ -144,7 +265,7 @@ mod tests {
         let mut app = create_test_app().await;
         assert_eq!(app.reviews.len(), 0);
 
-        let data = ReviewCreateData {
+        let data = crate::services::review_service::ReviewCreateData {
             title: "".to_string(),
         };
 

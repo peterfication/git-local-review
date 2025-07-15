@@ -1,3 +1,4 @@
+use crate::services::ReviewCreateData;
 use color_eyre::eyre::OptionExt;
 use futures::{FutureExt, StreamExt};
 use ratatui::crossterm::event::Event as CrosstermEvent;
@@ -31,16 +32,24 @@ pub enum Event {
 /// You can extend this enum with your own custom events.
 #[derive(Clone, Debug)]
 pub enum AppEvent {
+    /// Quit the application.
     Quit,
 
-    ReviewCreateOpen,
-    ReviewCreateClose,
-    ReviewCreateSubmit(ReviewCreateData),
-}
+    /// Trigger loading of reviews.
+    ReviewsLoad,
+    /// Load the reviews from the database
+    ReviewsLoading,
+    /// Reviews have been loaded from the database
+    ReviewsLoaded,
+    /// Error occurred while loading reviews
+    ReviewsLoadingError(String),
 
-#[derive(Clone, Debug)]
-pub struct ReviewCreateData {
-    pub title: String,
+    /// Open the review creation view.
+    ReviewCreateOpen,
+    /// Close the review creation view.
+    ReviewCreateClose,
+    /// Submit the review creation form.
+    ReviewCreateSubmit(ReviewCreateData),
 }
 
 /// Terminal event handler.
