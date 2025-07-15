@@ -11,3 +11,10 @@ pub fn get_terminal_backend(app: App) -> TestBackend {
         .unwrap();
     terminal.backend().clone()
 }
+
+#[cfg(test)]
+pub fn fixed_time() -> chrono::DateTime<chrono::Utc> {
+    chrono::DateTime::parse_from_rfc3339("2025-01-01T00:00:00Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc)
+}

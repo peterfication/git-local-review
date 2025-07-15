@@ -1,3 +1,4 @@
+use crate::time_provider::{SystemTimeProvider, TimeProvider};
 use chrono::{DateTime, Utc};
 use sqlx::{FromRow, SqlitePool};
 use uuid::Uuid;
@@ -12,7 +13,11 @@ pub struct Review {
 
 impl Review {
     pub fn new(title: String) -> Self {
-        let now = Utc::now();
+        Self::new_with_time_provider(title, &SystemTimeProvider)
+    }
+
+    pub fn new_with_time_provider(title: String, time_provider: &dyn TimeProvider) -> Self {
+        let now = time_provider.now();
         Self {
             id: Uuid::new_v4().to_string(),
             title,
@@ -70,6 +75,8 @@ impl Review {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::fixed_time;
+    use crate::time_provider::MockTimeProvider;
     use sqlx::SqlitePool;
 
     async fn create_test_pool() -> SqlitePool {
@@ -85,6 +92,24 @@ mod tests {
 
         assert_eq!(review.title, title);
         assert!(!review.id.is_empty());
+        assert_eq!(review.created_at, review.updated_at);
+
+        // ID should be a valid UUID
+        assert!(uuid::Uuid::parse_str(&review.id).is_ok());
+    }
+
+    #[test]
+    fn test_review_new_with_mock_time() {
+        let title = "Test Review".to_string();
+        let fixed_time = fixed_time();
+        let time_provider = MockTimeProvider::new(fixed_time);
+
+        let review = Review::new_with_time_provider(title.clone(), &time_provider);
+
+        assert_eq!(review.title, title);
+        assert!(!review.id.is_empty());
+        assert_eq!(review.created_at, fixed_time);
+        assert_eq!(review.updated_at, fixed_time);
         assert_eq!(review.created_at, review.updated_at);
 
         // ID should be a valid UUID
@@ -128,12 +153,17 @@ mod tests {
     async fn test_review_list_ordered_by_created_at_desc() {
         let pool = create_test_pool().await;
 
-        let review1 = Review::new("First Review".to_string());
-        let review2 = Review::new("Second Review".to_string());
+        let time1 = fixed_time();
+        let time2 = time1 + chrono::Duration::hours(1);
+
+        let time_provider1 = MockTimeProvider::new(time1);
+        let time_provider2 = MockTimeProvider::new(time2);
+
+        let review1 = Review::new_with_time_provider("First Review".to_string(), &time_provider1);
+        let review2 = Review::new_with_time_provider("Second Review".to_string(), &time_provider2);
 
         // Save in order
         review1.save(&pool).await.unwrap();
-        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await; // Ensure different timestamps
         review2.save(&pool).await.unwrap();
 
         let reviews = Review::list_all(&pool).await.unwrap();
@@ -142,6 +172,7 @@ mod tests {
         // Should be ordered by created_at DESC, so newest first
         assert_eq!(reviews[0].title, "Second Review");
         assert_eq!(reviews[1].title, "First Review");
+        assert!(reviews[0].created_at > reviews[1].created_at);
     }
 
     #[tokio::test]

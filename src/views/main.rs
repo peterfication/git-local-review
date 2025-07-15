@@ -101,7 +101,8 @@ mod tests {
     use crate::database::Database;
     use crate::event::{AppEvent, Event};
     use crate::models::review::Review;
-    use crate::test_utils::get_terminal_backend;
+    use crate::test_utils::{fixed_time, get_terminal_backend};
+    use crate::time_provider::MockTimeProvider;
     use insta::assert_snapshot;
     use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
     use sqlx::SqlitePool;
@@ -110,9 +111,15 @@ mod tests {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         Review::create_table(&pool).await.unwrap();
 
-        // Create some test reviews
-        let review1 = Review::new("Review 1".to_string());
-        let review2 = Review::new("Review 2".to_string());
+        // Create some test reviews with fixed timestamps
+        let time1 = fixed_time();
+        let time2 = time1 + chrono::Duration::hours(1);
+
+        let time_provider1 = MockTimeProvider::new(time1);
+        let time_provider2 = MockTimeProvider::new(time2);
+
+        let review1 = Review::new_with_time_provider("Review 1".to_string(), &time_provider1);
+        let review2 = Review::new_with_time_provider("Review 2".to_string(), &time_provider2);
         review1.save(&pool).await.unwrap();
         review2.save(&pool).await.unwrap();
 
