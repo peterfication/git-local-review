@@ -233,4 +233,95 @@ mod tests {
         assert_eq!(app.running, initial_running);
         assert!(!app.events.has_pending_events());
     }
+
+    // FIXME: Is this method necessary? Or does ratatui offer a better way for this?
+    fn buffer_to_string(buffer: &Buffer) -> String {
+        let mut content = String::new();
+        for y in 0..buffer.area().height {
+            for x in 0..buffer.area().width {
+                let position: ratatui::layout::Position = (x, y).into(); // Explicitly specify the type
+                if let Some(cell) = buffer.cell(position) {
+                    content.push(cell.symbol().chars().next().unwrap_or(' '));
+                } else {
+                    content.push(' '); // Fallback if the cell is None
+                }
+            }
+            content.push('\n');
+        }
+        content
+    }
+
+    #[tokio::test]
+    async fn test_main_view_render_reviews_loading_state_init() {
+        let app = App {
+            reviews_loading_state: ReviewsLoadingState::Init,
+            ..create_test_app_with_reviews().await
+        };
+        let view = MainView;
+        let mut buffer = Buffer::empty(Rect::new(0, 0, 50, 10));
+
+        view.render(&app, Rect::new(0, 0, 50, 10), &mut buffer);
+
+        let content = buffer_to_string(&buffer);
+        assert!(content.contains("Initializing..."));
+    }
+
+    #[tokio::test]
+    async fn test_main_view_render_reviews_loading_state_loading() {
+        let app = App {
+            reviews_loading_state: ReviewsLoadingState::Loading,
+            ..create_test_app_with_reviews().await
+        };
+        let view = MainView;
+        let mut buffer = Buffer::empty(Rect::new(0, 0, 50, 10));
+
+        view.render(&app, Rect::new(0, 0, 50, 10), &mut buffer);
+
+        let content = buffer_to_string(&buffer);
+        assert!(content.contains("Loading reviews..."));
+    }
+
+    #[tokio::test]
+    async fn test_main_view_render_reviews_loading_state_loaded_with_reviews() {
+        let app = create_test_app_with_reviews().await;
+        let view = MainView;
+        let mut buffer = Buffer::empty(Rect::new(0, 0, 50, 10));
+
+        view.render(&app, Rect::new(0, 0, 50, 10), &mut buffer);
+
+        let content = buffer_to_string(&buffer);
+        assert!(content.contains("Review 1"));
+        assert!(content.contains("Review 2"));
+    }
+
+    #[tokio::test]
+    async fn test_main_view_render_reviews_loading_state_loaded_no_reviews() {
+        let app = App {
+            reviews: vec![],
+            reviews_loading_state: ReviewsLoadingState::Loaded,
+            ..create_test_app_with_reviews().await
+        };
+        let view = MainView;
+        let mut buffer = Buffer::empty(Rect::new(0, 0, 50, 10));
+
+        view.render(&app, Rect::new(0, 0, 50, 10), &mut buffer);
+
+        let content = buffer_to_string(&buffer);
+        assert!(content.contains("No reviews found"));
+    }
+
+    #[tokio::test]
+    async fn test_main_view_render_reviews_loading_state_error() {
+        let app = App {
+            reviews_loading_state: ReviewsLoadingState::Error("Test error".to_string()),
+            ..create_test_app_with_reviews().await
+        };
+        let view = MainView;
+        let mut buffer = Buffer::empty(Rect::new(0, 0, 50, 10));
+
+        view.render(&app, Rect::new(0, 0, 50, 10), &mut buffer);
+
+        let content = buffer_to_string(&buffer);
+        assert!(content.contains("Error loading reviews: Test error"));
+    }
 }
