@@ -7,6 +7,9 @@ pub mod event_handler;
 pub mod logging;
 pub mod models;
 pub mod services;
+#[cfg(test)]
+pub mod test_utils;
+pub mod time_provider;
 pub mod ui;
 pub mod views;
 

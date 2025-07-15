@@ -20,6 +20,10 @@ lint:
 test:
   cargo test --locked
 
+# Review test snapshots
+test-snapshot-review:
+  cargo insta review
+
 # Generate documentation
 doc:
   cargo doc --no-deps --all-features

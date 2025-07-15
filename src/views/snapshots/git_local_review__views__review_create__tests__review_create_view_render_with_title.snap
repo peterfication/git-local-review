@@ -1,0 +1,24 @@
+---
+source: src/views/review_create.rs
+expression: render_app_to_terminal_backend(app)
+---
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                ╭Create New Review─────────────────────────────╮                "
+"                │Title:                                        │                "
+"                │┌────────────────────────────────────────────┐│                "
+"                ││My New Review                               ││                "
+"                │└────────────────────────────────────────────┘│                "
+"                │Press Enter to create, Esc to cancel          │                "
+"                │                                              │                "
+"                ╰──────────────────────────────────────────────╯                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
