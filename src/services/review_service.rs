@@ -26,3 +26,101 @@ impl ReviewService {
         Ok(reviews)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::SqlitePool;
+
+    async fn create_test_database() -> Database {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        Review::create_table(&pool).await.unwrap();
+        Database::from_pool(pool)
+    }
+
+    #[tokio::test]
+    async fn test_create_review_with_valid_title() {
+        let database = create_test_database().await;
+        let data = ReviewCreateData {
+            title: "Test Review".to_string(),
+        };
+
+        let reviews = ReviewService::create_review(&database, data).await.unwrap();
+
+        assert_eq!(reviews.len(), 1);
+        assert_eq!(reviews[0].title, "Test Review");
+    }
+
+    #[tokio::test]
+    async fn test_create_review_with_empty_title() {
+        let database = create_test_database().await;
+        let data = ReviewCreateData {
+            title: "".to_string(),
+        };
+
+        let reviews = ReviewService::create_review(&database, data).await.unwrap();
+
+        assert_eq!(reviews.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_create_review_with_whitespace_title() {
+        let database = create_test_database().await;
+        let data = ReviewCreateData {
+            title: "   ".to_string(),
+        };
+
+        let reviews = ReviewService::create_review(&database, data).await.unwrap();
+
+        assert_eq!(reviews.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_create_review_trims_whitespace() {
+        let database = create_test_database().await;
+        let data = ReviewCreateData {
+            title: "  Test Review  ".to_string(),
+        };
+
+        let reviews = ReviewService::create_review(&database, data).await.unwrap();
+
+        assert_eq!(reviews.len(), 1);
+        assert_eq!(reviews[0].title, "Test Review");
+    }
+
+    #[tokio::test]
+    async fn test_list_reviews_empty() {
+        let database = create_test_database().await;
+
+        let reviews = ReviewService::list_reviews(&database).await.unwrap();
+
+        assert_eq!(reviews.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_list_reviews_with_data() {
+        let database = create_test_database().await;
+
+        // Create some reviews
+        let data1 = ReviewCreateData {
+            title: "Review 1".to_string(),
+        };
+        let data2 = ReviewCreateData {
+            title: "Review 2".to_string(),
+        };
+
+        ReviewService::create_review(&database, data1)
+            .await
+            .unwrap();
+        ReviewService::create_review(&database, data2)
+            .await
+            .unwrap();
+
+        let reviews = ReviewService::list_reviews(&database).await.unwrap();
+
+        assert_eq!(reviews.len(), 2);
+        // Should be ordered by created_at DESC, so newest first
+        assert_eq!(reviews[0].title, "Review 2");
+        assert_eq!(reviews[1].title, "Review 1");
+    }
+}

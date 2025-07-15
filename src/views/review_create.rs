@@ -1,7 +1,7 @@
 use crate::{
     app::App,
     event::{AppEvent, ReviewCreateData},
-    views::ViewHandler,
+    views::{ViewHandler, ViewType},
 };
 use ratatui::{
     buffer::Buffer,
@@ -17,6 +17,10 @@ pub struct ReviewCreateView {
 }
 
 impl ViewHandler for ReviewCreateView {
+    fn view_type(&self) -> ViewType {
+        ViewType::ReviewCreate
+    }
+
     fn handle_key_events(&mut self, app: &mut App, key_event: KeyEvent) -> color_eyre::Result<()> {
         match key_event.code {
             KeyCode::Esc => {
@@ -39,6 +43,11 @@ impl ViewHandler for ReviewCreateView {
             _ => {}
         }
         Ok(())
+    }
+
+    #[cfg(test)]
+    fn debug_state(&self) -> String {
+        format!("ReviewCreateView(title_input: \"{}\")", self.title_input)
     }
 
     fn render(&self, _app: &App, area: Rect, buf: &mut Buffer) {
@@ -95,4 +104,203 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
             Constraint::Percentage((100 - percent_x) / 2),
         ])
         .split(popup_layout[1])[1]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::Database;
+    use crate::event::{AppEvent, Event};
+    use crate::models::review::Review;
+    use sqlx::SqlitePool;
+
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
+
+    async fn create_test_app() -> App {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        Review::create_table(&pool).await.unwrap();
+
+        let database = Database::from_pool(pool);
+        let reviews = vec![];
+
+        App {
+            running: true,
+            events: crate::event::EventHandler::new_for_test(),
+            database,
+            reviews,
+            view_stack: vec![],
+        }
+    }
+
+    #[test]
+    fn test_review_create_view_default() {
+        let view = ReviewCreateView::default();
+        assert_eq!(view.title_input, "");
+    }
+
+    #[tokio::test]
+    async fn test_review_create_view_handle_char_input() {
+        let mut app = create_test_app().await;
+        let mut view = ReviewCreateView::default();
+
+        let key_event = KeyEvent {
+            code: KeyCode::Char('a'),
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: KeyEventState::empty(),
+        };
+
+        view.handle_key_events(&mut app, key_event).unwrap();
+
+        assert_eq!(view.title_input, "a");
+    }
+
+    #[tokio::test]
+    async fn test_review_create_view_handle_multiple_chars() {
+        let mut app = create_test_app().await;
+        let mut view = ReviewCreateView::default();
+
+        let chars = ['H', 'e', 'l', 'l', 'o'];
+        for c in chars {
+            let key_event = KeyEvent {
+                code: KeyCode::Char(c),
+                modifiers: KeyModifiers::empty(),
+                kind: KeyEventKind::Press,
+                state: KeyEventState::empty(),
+            };
+            view.handle_key_events(&mut app, key_event).unwrap();
+        }
+
+        assert_eq!(view.title_input, "Hello");
+    }
+
+    #[tokio::test]
+    async fn test_review_create_view_handle_backspace() {
+        let mut app = create_test_app().await;
+        let mut view = ReviewCreateView {
+            title_input: "Hello".to_string(),
+        };
+
+        let key_event = KeyEvent {
+            code: KeyCode::Backspace,
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: KeyEventState::empty(),
+        };
+
+        view.handle_key_events(&mut app, key_event).unwrap();
+
+        assert_eq!(view.title_input, "Hell");
+    }
+
+    #[tokio::test]
+    async fn test_review_create_view_handle_backspace_empty() {
+        let mut app = create_test_app().await;
+        let mut view = ReviewCreateView::default();
+
+        let key_event = KeyEvent {
+            code: KeyCode::Backspace,
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: KeyEventState::empty(),
+        };
+
+        view.handle_key_events(&mut app, key_event).unwrap();
+
+        assert_eq!(view.title_input, "");
+    }
+
+    #[tokio::test]
+    async fn test_review_create_view_handle_esc() {
+        let mut app = create_test_app().await;
+        let mut view = ReviewCreateView {
+            title_input: "Some input".to_string(),
+        };
+        assert!(!app.events.has_pending_events());
+
+        let key_event = KeyEvent {
+            code: KeyCode::Esc,
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: KeyEventState::empty(),
+        };
+
+        view.handle_key_events(&mut app, key_event).unwrap();
+
+        // Title input should be cleared
+        assert_eq!(view.title_input, "");
+
+        // Verify that a ReviewCreateClose event was sent
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        assert!(matches!(event, Event::App(AppEvent::ReviewCreateClose)));
+    }
+
+    #[tokio::test]
+    async fn test_review_create_view_handle_enter() {
+        let mut app = create_test_app().await;
+        let mut view = ReviewCreateView {
+            title_input: "Test Review".to_string(),
+        };
+        assert!(!app.events.has_pending_events());
+
+        let key_event = KeyEvent {
+            code: KeyCode::Enter,
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: KeyEventState::empty(),
+        };
+
+        view.handle_key_events(&mut app, key_event).unwrap();
+
+        // Title input should be cleared after submit
+        assert_eq!(view.title_input, "");
+
+        // Verify that a ReviewCreateSubmit event was sent with the correct title
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        if let Event::App(AppEvent::ReviewCreateSubmit(data)) = event {
+            assert_eq!(data.title, "Test Review");
+        } else {
+            panic!("Expected ReviewCreateSubmit event");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_review_create_view_handle_enter_empty() {
+        let mut app = create_test_app().await;
+        let mut view = ReviewCreateView::default();
+
+        let key_event = KeyEvent {
+            code: KeyCode::Enter,
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: KeyEventState::empty(),
+        };
+
+        view.handle_key_events(&mut app, key_event).unwrap();
+
+        // Should still work with empty input
+        assert_eq!(view.title_input, "");
+    }
+
+    #[tokio::test]
+    async fn test_review_create_view_handle_unknown_key() {
+        let mut app = create_test_app().await;
+        let mut view = ReviewCreateView::default();
+        let initial_input = "Test".to_string();
+        view.title_input = initial_input.clone();
+
+        let key_event = KeyEvent {
+            code: KeyCode::F(1),
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: KeyEventState::empty(),
+        };
+
+        view.handle_key_events(&mut app, key_event).unwrap();
+
+        // Unknown keys should not change input
+        assert_eq!(view.title_input, initial_input);
+    }
 }
