@@ -101,7 +101,7 @@ mod tests {
     use crate::database::Database;
     use crate::event::{AppEvent, Event};
     use crate::models::review::Review;
-    use crate::test_utils::{fixed_time, get_terminal_backend};
+    use crate::test_utils::{fixed_time, render_app_to_terminal_backend};
     use crate::time_provider::MockTimeProvider;
     use insta::assert_snapshot;
     use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
@@ -259,7 +259,7 @@ mod tests {
             reviews_loading_state: ReviewsLoadingState::Init,
             ..create_test_app_with_reviews().await
         };
-        assert_snapshot!(get_terminal_backend(app));
+        assert_snapshot!(render_app_to_terminal_backend(app))
     }
 
     #[tokio::test]
@@ -268,13 +268,13 @@ mod tests {
             reviews_loading_state: ReviewsLoadingState::Loading,
             ..create_test_app_with_reviews().await
         };
-        assert_snapshot!(get_terminal_backend(app));
+        assert_snapshot!(render_app_to_terminal_backend(app))
     }
 
     #[tokio::test]
     async fn test_main_view_render_reviews_loading_state_loaded_with_reviews() {
         let app = create_test_app_with_reviews().await;
-        assert_snapshot!(get_terminal_backend(app));
+        assert_snapshot!(render_app_to_terminal_backend(app))
     }
 
     #[tokio::test]
@@ -284,7 +284,7 @@ mod tests {
             reviews_loading_state: ReviewsLoadingState::Loaded,
             ..create_test_app_with_reviews().await
         };
-        assert_snapshot!(get_terminal_backend(app));
+        assert_snapshot!(render_app_to_terminal_backend(app))
     }
 
     #[tokio::test]
@@ -293,6 +293,6 @@ mod tests {
             reviews_loading_state: ReviewsLoadingState::Error("Test error".to_string()),
             ..create_test_app_with_reviews().await
         };
-        assert_snapshot!(get_terminal_backend(app));
+        assert_snapshot!(render_app_to_terminal_backend(app))
     }
 }

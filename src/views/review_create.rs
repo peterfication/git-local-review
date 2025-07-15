@@ -114,6 +114,7 @@ mod tests {
     use crate::event::{AppEvent, Event};
     use crate::models::review::Review;
     use crate::services::ReviewsLoadingState;
+    use crate::test_utils::render_app_to_terminal_backend;
     use insta::assert_snapshot;
     use sqlx::SqlitePool;
 
@@ -308,36 +309,27 @@ mod tests {
         assert_eq!(view.title_input, initial_input);
     }
 
-    fn get_review_create_view_terminal_backend(
-        app: &App,
-        view: &ReviewCreateView,
-    ) -> ratatui::backend::TestBackend {
-        let mut terminal =
-            ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 20)).unwrap();
-        terminal
-            .draw(|frame| {
-                // Render the view directly
-                view.render(app, frame.area(), frame.buffer_mut());
-            })
-            .unwrap();
-        terminal.backend().clone()
-    }
-
     #[tokio::test]
     async fn test_review_create_view_render_default() {
-        let app = create_test_app().await;
         let view = ReviewCreateView::default();
+        let app = App {
+            view_stack: vec![Box::new(view)],
+            ..create_test_app().await
+        };
 
-        assert_snapshot!(get_review_create_view_terminal_backend(&app, &view));
+        assert_snapshot!(render_app_to_terminal_backend(app))
     }
 
     #[tokio::test]
     async fn test_review_create_view_render_with_title() {
-        let app = create_test_app().await;
         let view = ReviewCreateView {
             title_input: "My New Review".to_string(),
         };
+        let app = App {
+            view_stack: vec![Box::new(view)],
+            ..create_test_app().await
+        };
 
-        assert_snapshot!(get_review_create_view_terminal_backend(&app, &view));
+        assert_snapshot!(render_app_to_terminal_backend(app))
     }
 }

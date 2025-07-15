@@ -1,6 +1,6 @@
 ---
 source: src/views/review_create.rs
-expression: "get_review_create_view_terminal_backend(&app, &view)"
+expression: render_app_to_terminal_backend(app)
 ---
 "                                                                                "
 "                                                                                "

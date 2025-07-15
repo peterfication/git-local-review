@@ -1,6 +1,6 @@
 ---
 source: src/views/main.rs
-expression: get_terminal_backend(app)
+expression: render_app_to_terminal_backend(app)
 ---
 "┌git-local-review──────────────────────────────────────────────────────────────┐"
 "│Git Local Review - Press 'n' to create a new review, 'q' to quit              │"
