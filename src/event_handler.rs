@@ -19,6 +19,7 @@ impl EventProcessor {
                 AppEvent::ReviewsLoad => Self::reviews_load(app).await?,
                 AppEvent::ReviewsLoading => Self::reviews_loading(app).await?,
                 AppEvent::ReviewsLoaded => Self::reviews_loaded(app),
+                AppEvent::ReviewsLoadingError(error) => Self::reviews_loading_error(app, error),
                 AppEvent::ReviewCreateOpen => Self::review_create_open(app),
                 AppEvent::ReviewCreateClose => Self::review_create_close(app),
                 AppEvent::ReviewCreateSubmit(data) => Self::review_create_submit(app, data).await?,
@@ -46,7 +47,8 @@ impl EventProcessor {
                 app.events.send(AppEvent::ReviewsLoaded);
             }
             Err(e) => {
-                app.reviews_loading_state = ReviewsLoadingState::Error(e.to_string());
+                app.events
+                    .send(AppEvent::ReviewsLoadingError(e.to_string()));
             }
         }
         Ok(())
@@ -55,6 +57,11 @@ impl EventProcessor {
     /// Mark reviews as loaded and stop loading state
     fn reviews_loaded(app: &mut App) {
         app.reviews_loading_state = ReviewsLoadingState::Loaded;
+    }
+
+    /// Handle reviews loading error
+    fn reviews_loading_error(app: &mut App, error: String) {
+        app.reviews_loading_state = ReviewsLoadingState::Error(error);
     }
 
     /// Open the review creation view
@@ -156,6 +163,26 @@ mod tests {
 
         // Loading state should be Loaded after ReviewsLoaded is processed
         assert_eq!(app.reviews_loading_state, ReviewsLoadingState::Loaded);
+    }
+
+    #[tokio::test]
+    async fn test_process_reviews_loading_error_event() {
+        let mut app = create_test_app().await;
+        app.reviews_loading_state = ReviewsLoadingState::Loading; // Simulate that reviews are loading
+
+        let error_message = "Database connection failed".to_string();
+        EventProcessor::process_event(
+            &mut app,
+            Event::App(AppEvent::ReviewsLoadingError(error_message.clone())),
+        )
+        .await
+        .unwrap();
+
+        // Loading state should be Error after ReviewsLoadingError is processed
+        assert_eq!(
+            app.reviews_loading_state,
+            ReviewsLoadingState::Error(error_message)
+        );
     }
 
     #[tokio::test]

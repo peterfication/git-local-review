@@ -41,6 +41,8 @@ pub enum AppEvent {
     ReviewsLoading,
     /// Reviews have been loaded from the database
     ReviewsLoaded,
+    /// Error occurred while loading reviews
+    ReviewsLoadingError(String),
 
     /// Open the review creation view.
     ReviewCreateOpen,
