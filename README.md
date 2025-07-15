@@ -89,6 +89,10 @@ just doc      # Generate documentation
 just ci       # Run full CI pipeline (format, lint, test, build, doc)
 ```
 
-## 📄 License
+### Disclaimer regarding AI / Coding LLMs
+
+I'm still pretty new to Rust. This project is made possible through the usage of coding LLMs. However, the coding LLMs are tightly managed and directed and all generated code is reviewed thoroughly and adapted where needed.
+
+## License
 
 This project is licensed under the MIT license ([LICENSE](LICENSE) or [opensource.org/licenses/MIT](https://opensource.org/licenses/MIT))
