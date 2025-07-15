@@ -57,7 +57,7 @@ mod tests {
 
         App {
             running: true,
-            events: crate::event::EventHandler::new(),
+            events: crate::event::EventHandler::new_for_test(),
             database,
             reviews,
             view_stack: vec![Box::new(MainView)],

@@ -67,6 +67,14 @@ impl EventHandler {
         Self { sender, receiver }
     }
 
+    /// Constructs a new instance of [`EventHandler`] for testing without spawning the event task.
+    /// This allows tests to control event flow manually.
+    #[cfg(test)]
+    pub fn new_for_test() -> Self {
+        let (sender, receiver) = mpsc::unbounded_channel();
+        Self { sender, receiver }
+    }
+
     /// Receives an event from the sender.
     ///
     /// This function blocks until an event is received.
@@ -91,6 +99,21 @@ impl EventHandler {
         // Ignore the result as the reciever cannot be dropped while this struct still has a
         // reference to it
         let _ = self.sender.send(Event::App(app_event));
+    }
+
+    /// Check if there are any pending events in the queue.
+    /// This is useful for testing to verify that events have been sent.
+    #[cfg(test)]
+    pub fn has_pending_events(&self) -> bool {
+        !self.receiver.is_empty()
+    }
+
+    /// Try to receive an event without blocking.
+    /// Returns None if no events are available.
+    /// This is useful for testing to check what events have been sent.
+    #[cfg(test)]
+    pub fn try_recv(&mut self) -> Option<Event> {
+        self.receiver.try_recv().ok()
     }
 }
 

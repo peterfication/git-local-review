@@ -91,6 +91,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::event::{AppEvent, Event};
     use crate::views::{ViewType, main::MainView, review_create::ReviewCreateView};
     use sqlx::SqlitePool;
 
@@ -107,7 +108,7 @@ mod tests {
 
         App {
             running: true,
-            events: EventHandler::new(),
+            events: EventHandler::new_for_test(),
             database,
             reviews,
             view_stack: vec![Box::new(MainView)],
@@ -200,6 +201,8 @@ mod tests {
     async fn test_handle_key_events() {
         let mut app = create_test_app().await;
         assert!(app.running);
+        assert_eq!(app.view_stack.last().unwrap().view_type(), ViewType::Main);
+        assert!(!app.events.has_pending_events());
 
         let key_event = KeyEvent {
             code: KeyCode::Char('q'),
@@ -210,8 +213,11 @@ mod tests {
 
         app.handle_key_events(key_event).unwrap();
 
-        // MainView should have only sent an event, not processed it immediately
-        assert!(app.running);
+        // MainView should have received the key event and sent a Quit event
+        assert!(app.running); // App doesn't quit until event is processed by EventProcessor
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        assert!(matches!(event, Event::App(AppEvent::Quit)));
     }
 
     #[tokio::test]
@@ -221,6 +227,11 @@ mod tests {
         // Add a review create view to the stack
         app.push_view(Box::new(ReviewCreateView::default()));
         assert_eq!(app.view_stack.len(), 2);
+        assert_eq!(
+            app.view_stack.last().unwrap().view_type(),
+            ViewType::ReviewCreate
+        );
+        assert!(!app.events.has_pending_events());
 
         let key_event = KeyEvent {
             code: KeyCode::Esc,
@@ -231,9 +242,60 @@ mod tests {
 
         app.handle_key_events(key_event).unwrap();
 
+        // The ReviewCreateView (top of stack) should have received the key event and sent a ReviewCreateClose event
         // The view stack should remain the same since we only sent the event to the view
         // The actual view closing would happen through the event system
         assert_eq!(app.view_stack.len(), 2);
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        assert!(matches!(event, Event::App(AppEvent::ReviewCreateClose)));
+    }
+
+    #[tokio::test]
+    async fn test_handle_key_events_only_top_view_responds() {
+        let mut app = create_test_app().await;
+
+        // Create a ReviewCreateView with some initial content to track changes
+        let review_create_view = ReviewCreateView {
+            title_input: "test".to_string(),
+        };
+
+        // Add it to the stack
+        app.push_view(Box::new(review_create_view));
+        assert_eq!(app.view_stack.len(), 2);
+        assert_eq!(
+            app.view_stack.last().unwrap().view_type(),
+            ViewType::ReviewCreate
+        );
+        assert!(!app.events.has_pending_events());
+
+        // Verify initial state
+        assert_eq!(
+            app.view_stack.last().unwrap().debug_state(),
+            "ReviewCreateView(title_input: \"test\")"
+        );
+
+        // Send a character key that would trigger different behaviors in different views
+        // 'n' would trigger ReviewCreateOpen in MainView, but should be handled as text input by ReviewCreateView
+        let key_event = KeyEvent {
+            code: KeyCode::Char('n'),
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: KeyEventState::empty(),
+        };
+
+        app.handle_key_events(key_event).unwrap();
+
+        // Only the ReviewCreateView (top of stack) should have received the key event
+        // It should have processed 'n' as text input, changing the title_input
+        assert_eq!(app.view_stack.len(), 2);
+        assert!(!app.events.has_pending_events()); // No events sent for regular character input
+
+        // Verify that the ReviewCreateView's title_input has been updated to include 'n'
+        assert_eq!(
+            app.view_stack.last().unwrap().debug_state(),
+            "ReviewCreateView(title_input: \"testn\")"
+        );
     }
 
     #[tokio::test]

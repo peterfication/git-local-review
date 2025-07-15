@@ -45,6 +45,11 @@ impl ViewHandler for ReviewCreateView {
         Ok(())
     }
 
+    #[cfg(test)]
+    fn debug_state(&self) -> String {
+        format!("ReviewCreateView(title_input: \"{}\")", self.title_input)
+    }
+
     fn render(&self, _app: &App, area: Rect, buf: &mut Buffer) {
         let popup_area = centered_rect(60, 20, area);
 
@@ -105,6 +110,7 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 mod tests {
     use super::*;
     use crate::database::Database;
+    use crate::event::{AppEvent, Event};
     use crate::models::review::Review;
     use sqlx::SqlitePool;
 
@@ -119,7 +125,7 @@ mod tests {
 
         App {
             running: true,
-            events: crate::event::EventHandler::new(),
+            events: crate::event::EventHandler::new_for_test(),
             database,
             reviews,
             view_stack: vec![],
@@ -210,6 +216,7 @@ mod tests {
         let mut view = ReviewCreateView {
             title_input: "Some input".to_string(),
         };
+        assert!(!app.events.has_pending_events());
 
         let key_event = KeyEvent {
             code: KeyCode::Esc,
@@ -222,6 +229,11 @@ mod tests {
 
         // Title input should be cleared
         assert_eq!(view.title_input, "");
+
+        // Verify that a ReviewCreateClose event was sent
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        assert!(matches!(event, Event::App(AppEvent::ReviewCreateClose)));
     }
 
     #[tokio::test]
@@ -230,6 +242,7 @@ mod tests {
         let mut view = ReviewCreateView {
             title_input: "Test Review".to_string(),
         };
+        assert!(!app.events.has_pending_events());
 
         let key_event = KeyEvent {
             code: KeyCode::Enter,
@@ -242,6 +255,15 @@ mod tests {
 
         // Title input should be cleared after submit
         assert_eq!(view.title_input, "");
+
+        // Verify that a ReviewCreateSubmit event was sent with the correct title
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        if let Event::App(AppEvent::ReviewCreateSubmit(data)) = event {
+            assert_eq!(data.title, "Test Review");
+        } else {
+            panic!("Expected ReviewCreateSubmit event");
+        }
     }
 
     #[tokio::test]

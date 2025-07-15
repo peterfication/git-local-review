@@ -66,6 +66,7 @@ impl ViewHandler for MainView {
 mod tests {
     use super::*;
     use crate::database::Database;
+    use crate::event::{AppEvent, Event};
     use crate::models::review::Review;
     use sqlx::SqlitePool;
 
@@ -86,7 +87,7 @@ mod tests {
 
         App {
             running: true,
-            events: crate::event::EventHandler::new(),
+            events: crate::event::EventHandler::new_for_test(),
             database,
             reviews,
             view_stack: vec![],
@@ -98,6 +99,7 @@ mod tests {
         let mut app = create_test_app_with_reviews().await;
         let mut view = MainView;
         assert!(app.running);
+        assert!(!app.events.has_pending_events());
 
         let key_event = KeyEvent {
             code: KeyCode::Char('q'),
@@ -111,6 +113,11 @@ mod tests {
         // The view handler only sends events, it doesn't process them immediately
         // The app remains running until the event is processed by EventProcessor
         assert!(app.running);
+
+        // Verify that a Quit event was sent
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        assert!(matches!(event, Event::App(AppEvent::Quit)));
     }
 
     #[tokio::test]
@@ -118,6 +125,7 @@ mod tests {
         let mut app = create_test_app_with_reviews().await;
         let mut view = MainView;
         assert!(app.running);
+        assert!(!app.events.has_pending_events());
 
         let key_event = KeyEvent {
             code: KeyCode::Esc,
@@ -129,6 +137,11 @@ mod tests {
         view.handle_key_events(&mut app, key_event).unwrap();
 
         assert!(app.running);
+
+        // Verify that a Quit event was sent (Esc also triggers quit)
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        assert!(matches!(event, Event::App(AppEvent::Quit)));
     }
 
     #[tokio::test]
@@ -136,6 +149,7 @@ mod tests {
         let mut app = create_test_app_with_reviews().await;
         let mut view = MainView;
         assert!(app.running);
+        assert!(!app.events.has_pending_events());
 
         let key_event = KeyEvent {
             code: KeyCode::Char('c'),
@@ -147,13 +161,18 @@ mod tests {
         view.handle_key_events(&mut app, key_event).unwrap();
 
         assert!(app.running);
+
+        // Verify that a Quit event was sent (Ctrl+C also triggers quit)
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        assert!(matches!(event, Event::App(AppEvent::Quit)));
     }
 
     #[tokio::test]
     async fn test_main_view_handle_create_review_key() {
         let mut app = create_test_app_with_reviews().await;
         let mut view = MainView;
-        let _initial_views = app.view_stack.len();
+        assert!(!app.events.has_pending_events());
 
         let key_event = KeyEvent {
             code: KeyCode::Char('n'),
@@ -164,9 +183,10 @@ mod tests {
 
         view.handle_key_events(&mut app, key_event).unwrap();
 
-        // The view should have sent a ReviewCreateOpen event
-        // We can't directly test this without access to the event queue,
-        // but the key handler should not crash
+        // Verify that a ReviewCreateOpen event was sent
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        assert!(matches!(event, Event::App(AppEvent::ReviewCreateOpen)));
         assert!(app.running);
     }
 
@@ -175,6 +195,7 @@ mod tests {
         let mut app = create_test_app_with_reviews().await;
         let mut view = MainView;
         let initial_running = app.running;
+        assert!(!app.events.has_pending_events());
 
         let key_event = KeyEvent {
             code: KeyCode::Char('x'),
@@ -185,7 +206,8 @@ mod tests {
 
         view.handle_key_events(&mut app, key_event).unwrap();
 
-        // Unknown keys should not change app state
+        // Unknown keys should not change app state or send events
         assert_eq!(app.running, initial_running);
+        assert!(!app.events.has_pending_events());
     }
 }
