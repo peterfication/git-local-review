@@ -7,7 +7,7 @@ use ratatui::{Terminal, backend::TestBackend};
 /// Usage:
 /// assert_snapshot!(render_app_to_terminal_backend(app))
 pub fn render_app_to_terminal_backend(app: App) -> TestBackend {
-    let mut terminal = Terminal::new(TestBackend::new(80, 20)).unwrap();
+    let mut terminal = Terminal::new(TestBackend::new(160, 40)).unwrap();
     terminal
         .draw(|buffer| buffer.render_widget(&app, buffer.area()))
         .unwrap();
