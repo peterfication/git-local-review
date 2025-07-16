@@ -10,14 +10,18 @@ A Terminal User Interface (TUI) application for reviewing Git changes with local
 
 ## Key Bindings
 
-| View             | Key                    | Action                 |
-| ---------------- | ---------------------- | ---------------------- |
-| **Main**         | `n`                    | Create new review      |
-| **Main**         | `q` / `Esc` / `Ctrl+C` | Quit application       |
-| **ReviewCreate** | `<char>`               | Enter review title     |
-| **ReviewCreate** | `Enter`                | Submit review          |
-| **ReviewCreate** | `Esc`                  | Cancel and close popup |
-| **ReviewCreate** | `Backspace`            | Delete character       |
+| View                   | Key                                | Action                  |
+| ---------------------- | ---------------------------------- | ----------------------- |
+| **Main**               | `q` / `Esc` / `Ctrl+C`             | Quit application        |
+| **Main**               | `n`                                | Create new review       |
+| **Main**               | `Up` / `Down` / `k` / `j`          | Change review selection |
+| **Main**               | `d`                                | Delete selected review  |
+| **ReviewCreate**       | `<char>`                           | Enter review title      |
+| **ReviewCreate**       | `Enter`                            | Submit review           |
+| **ReviewCreate**       | `Esc`                              | Cancel and close popup  |
+| **ReviewCreate**       | `Backspace`                        | Delete character        |
+| **ConfirmationDialog** | `y` / `Y` / `Enter`                | Confirm                 |
+| **ConfirmationDialog** | `n` / `N` / `q` / `Esc` / `Ctrl+C` | Cancel                  |
 
 ## Installation
 

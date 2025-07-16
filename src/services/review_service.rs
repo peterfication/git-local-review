@@ -43,6 +43,23 @@ impl ReviewService {
         let reviews = Review::list_all(database.pool()).await.unwrap_or_default();
         Ok(reviews)
     }
+
+    /// Delete a review by ID and return the updated reviews list
+    pub async fn delete_review_by_id(
+        database: &Database,
+        review_id: &str,
+    ) -> color_eyre::Result<Vec<Review>> {
+        // Find the review by ID
+        let reviews = Review::list_all(database.pool()).await.unwrap_or_default();
+        if let Some(review_to_delete) = reviews.iter().find(|r| r.id == review_id) {
+            review_to_delete.delete(database.pool()).await?;
+            log::info!("Deleted review: {}", review_to_delete.title);
+        }
+
+        // Return updated reviews list
+        let reviews = Review::list_all(database.pool()).await.unwrap_or_default();
+        Ok(reviews)
+    }
 }
 
 #[cfg(test)]
@@ -140,5 +157,58 @@ mod tests {
         // Should be ordered by created_at DESC, so newest first
         assert_eq!(reviews[0].title, "Review 2");
         assert_eq!(reviews[1].title, "Review 1");
+    }
+
+    #[tokio::test]
+    async fn test_delete_review_by_id() {
+        let database = create_test_database().await;
+
+        // Create some reviews
+        let data1 = ReviewCreateData {
+            title: "Review 1".to_string(),
+        };
+        let data2 = ReviewCreateData {
+            title: "Review 2".to_string(),
+        };
+
+        ReviewService::create_review(&database, data1)
+            .await
+            .unwrap();
+        let reviews = ReviewService::create_review(&database, data2)
+            .await
+            .unwrap();
+
+        assert_eq!(reviews.len(), 2);
+
+        // Delete first review (which should be "Review 2" due to DESC ordering)
+        let review_id_to_delete = reviews[0].id.clone();
+        let updated_reviews = ReviewService::delete_review_by_id(&database, &review_id_to_delete)
+            .await
+            .unwrap();
+
+        assert_eq!(updated_reviews.len(), 1);
+        assert_eq!(updated_reviews[0].title, "Review 1");
+    }
+
+    #[tokio::test]
+    async fn test_delete_review_by_invalid_id() {
+        let database = create_test_database().await;
+
+        // Create one review
+        let data = ReviewCreateData {
+            title: "Review 1".to_string(),
+        };
+        let reviews = ReviewService::create_review(&database, data).await.unwrap();
+
+        assert_eq!(reviews.len(), 1);
+
+        // Try to delete with non-existent ID
+        let updated_reviews = ReviewService::delete_review_by_id(&database, "non-existent-id")
+            .await
+            .unwrap();
+
+        // Should still have 1 review since deletion didn't happen
+        assert_eq!(updated_reviews.len(), 1);
+        assert_eq!(updated_reviews[0].title, "Review 1");
     }
 }

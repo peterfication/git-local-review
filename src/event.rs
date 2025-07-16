@@ -50,6 +50,13 @@ pub enum AppEvent {
     ReviewCreateClose,
     /// Submit the review creation form.
     ReviewCreateSubmit(ReviewCreateData),
+
+    /// Open delete confirmation dialog for selected review.
+    ReviewDeleteConfirm(String),
+    /// Cancel review deletion.
+    ReviewDeleteCancel,
+    /// Delete the selected review.
+    ReviewDelete(String),
 }
 
 /// Terminal event handler.
