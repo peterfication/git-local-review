@@ -69,6 +69,19 @@ impl App {
         Ok(())
     }
 
+    /// Notify all views in the view stack about an app event.
+    /// Similar to handle_key_events, this ensures all views can respond to app events they care about.
+    pub fn handle_app_events(&mut self, event: &AppEvent) {
+        // We need to iterate through the view stack and handle each view separately
+        // to avoid borrowing issues
+        for i in 0..self.view_stack.len() {
+            // Extract the view temporarily to avoid borrowing conflicts
+            let mut view = self.view_stack.remove(i);
+            view.handle_app_events(self, event);
+            self.view_stack.insert(i, view);
+        }
+    }
+
     /// Push a view onto the view stack.
     pub fn push_view(&mut self, view: Box<dyn ViewHandler>) {
         self.view_stack.push(view);
@@ -323,5 +336,95 @@ mod tests {
         // Tick should not change anything
         app.tick();
         // Since tick() is a no-op, there's nothing to assert
+    }
+
+    #[tokio::test]
+    async fn test_handle_app_events() {
+        let mut app = create_test_app().await;
+
+        // Create a review to have data for testing
+        let review = Review::new("Test Review".to_string());
+        review.save(app.database.pool()).await.unwrap();
+        app.reviews = vec![review];
+
+        // Verify MainView initially has no selection
+        if let Some(main_view) = app.view_stack.get_mut(0) {
+            if let Some(main_view) = main_view.as_any_mut().downcast_mut::<MainView>() {
+                assert_eq!(main_view.selected_review_index(), None);
+            }
+        }
+
+        // Call handle_app_events with ReviewsLoaded event
+        app.handle_app_events(&AppEvent::ReviewsLoaded);
+
+        // Verify MainView now has the first review selected
+        if let Some(main_view) = app.view_stack.get_mut(0) {
+            if let Some(main_view) = main_view.as_any_mut().downcast_mut::<MainView>() {
+                assert_eq!(main_view.selected_review_index(), Some(0));
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_app_events_with_multiple_views() {
+        let mut app = create_test_app().await;
+
+        // Create a review to have data for testing
+        let review = Review::new("Test Review".to_string());
+        review.save(app.database.pool()).await.unwrap();
+        app.reviews = vec![review];
+
+        // Add a ReviewCreateView to the stack
+        app.push_view(Box::new(ReviewCreateView::default()));
+        assert_eq!(app.view_stack.len(), 2);
+
+        // Verify MainView initially has no selection
+        if let Some(main_view) = app.view_stack.get_mut(0) {
+            if let Some(main_view) = main_view.as_any_mut().downcast_mut::<MainView>() {
+                assert_eq!(main_view.selected_review_index(), None);
+            }
+        }
+
+        // Call handle_app_events with ReviewsLoaded event
+        app.handle_app_events(&AppEvent::ReviewsLoaded);
+
+        // Verify MainView now has the first review selected (all views should have received the event)
+        if let Some(main_view) = app.view_stack.get_mut(0) {
+            if let Some(main_view) = main_view.as_any_mut().downcast_mut::<MainView>() {
+                assert_eq!(main_view.selected_review_index(), Some(0));
+            }
+        }
+
+        // View stack should remain unchanged
+        assert_eq!(app.view_stack.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_handle_app_events_preserves_view_stack_order() {
+        let mut app = create_test_app().await;
+
+        // Add multiple views to the stack
+        app.push_view(Box::new(ReviewCreateView::default()));
+        let confirmation_dialog = crate::views::confirmation_dialog::ConfirmationDialogView::new(
+            "Test message".to_string(),
+            AppEvent::Quit,
+            AppEvent::ReviewCreateClose,
+        );
+        app.push_view(Box::new(confirmation_dialog));
+
+        // Verify initial order: MainView -> ReviewCreateView -> ConfirmationDialogView
+        assert_eq!(app.view_stack.len(), 3);
+        assert_eq!(app.view_stack[0].view_type(), ViewType::Main);
+        assert_eq!(app.view_stack[1].view_type(), ViewType::ReviewCreate);
+        assert_eq!(app.view_stack[2].view_type(), ViewType::ConfirmationDialog);
+
+        // Call handle_app_events
+        app.handle_app_events(&AppEvent::ReviewsLoaded);
+
+        // Verify view stack order is preserved
+        assert_eq!(app.view_stack.len(), 3);
+        assert_eq!(app.view_stack[0].view_type(), ViewType::Main);
+        assert_eq!(app.view_stack[1].view_type(), ViewType::ReviewCreate);
+        assert_eq!(app.view_stack[2].view_type(), ViewType::ConfirmationDialog);
     }
 }

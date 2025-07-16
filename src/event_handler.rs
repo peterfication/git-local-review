@@ -16,6 +16,7 @@ impl EventProcessor {
             },
             Event::App(app_event) => {
                 log::info!("Processing event: {app_event:#?}");
+                app.handle_app_events(&app_event);
                 match app_event {
                     AppEvent::Quit => app.quit(),
                     AppEvent::ReviewsLoad => Self::reviews_load(app).await?,

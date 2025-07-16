@@ -46,11 +46,6 @@ impl ViewHandler for ReviewCreateView {
         Ok(())
     }
 
-    #[cfg(test)]
-    fn debug_state(&self) -> String {
-        format!("ReviewCreateView(title_input: \"{}\")", self.title_input)
-    }
-
     fn render(&self, _app: &App, area: Rect, buf: &mut Buffer) {
         let popup_area = centered_rect(60, 40, area);
 
@@ -84,6 +79,16 @@ impl ViewHandler for ReviewCreateView {
         let help = Paragraph::new("Press Enter to create, Esc to cancel")
             .style(Style::default().fg(Color::Gray));
         help.render(chunks[2], buf);
+    }
+
+    #[cfg(test)]
+    fn debug_state(&self) -> String {
+        format!("ReviewCreateView(title_input: \"{}\")", self.title_input)
+    }
+
+    #[cfg(test)]
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 }
 
