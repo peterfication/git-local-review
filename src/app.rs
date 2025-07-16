@@ -39,7 +39,7 @@ impl App {
             database,
             reviews: Vec::new(),
             reviews_loading_state: ReviewsLoadingState::Init,
-            view_stack: vec![Box::new(MainView)],
+            view_stack: vec![Box::new(MainView::new())],
         })
     }
 
@@ -118,7 +118,7 @@ mod tests {
             database,
             reviews,
             reviews_loading_state: ReviewsLoadingState::Loaded,
-            view_stack: vec![Box::new(MainView)],
+            view_stack: vec![Box::new(MainView::new())],
         }
     }
 
@@ -136,7 +136,7 @@ mod tests {
             database,
             reviews,
             reviews_loading_state: ReviewsLoadingState::Loaded,
-            view_stack: vec![Box::new(MainView)],
+            view_stack: vec![Box::new(MainView::new())],
         };
 
         assert!(app.running);
@@ -317,7 +317,7 @@ mod tests {
             database: Database::from_pool(pool),
             reviews: vec![],
             reviews_loading_state: ReviewsLoadingState::Loaded,
-            view_stack: vec![Box::new(MainView)],
+            view_stack: vec![Box::new(MainView::new())],
         };
 
         // Tick should not change anything

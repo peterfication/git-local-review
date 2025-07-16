@@ -1,3 +1,4 @@
+pub mod confirmation_dialog;
 pub mod main;
 pub mod review_create;
 
@@ -8,6 +9,7 @@ use ratatui::{buffer::Buffer, crossterm::event::KeyEvent, layout::Rect};
 pub enum ViewType {
     Main,
     ReviewCreate,
+    ConfirmationDialog,
 }
 
 pub trait ViewHandler {

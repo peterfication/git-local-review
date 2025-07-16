@@ -70,6 +70,19 @@ impl Review {
         .await?;
         Ok(reviews)
     }
+
+    pub async fn delete(&self, pool: &SqlitePool) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"
+            DELETE FROM reviews
+            WHERE id = ?1
+            "#,
+        )
+        .bind(&self.id)
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -189,5 +202,25 @@ mod tests {
 
         // Second save with same ID should fail
         assert!(review2.save(&pool).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_review_delete() {
+        let pool = create_test_pool().await;
+        let review = Review::new("Test Review".to_string());
+
+        // Save the review
+        review.save(&pool).await.unwrap();
+
+        // Verify it exists
+        let reviews = Review::list_all(&pool).await.unwrap();
+        assert_eq!(reviews.len(), 1);
+
+        // Delete the review
+        review.delete(&pool).await.unwrap();
+
+        // Verify it's gone
+        let reviews = Review::list_all(&pool).await.unwrap();
+        assert_eq!(reviews.len(), 0);
     }
 }

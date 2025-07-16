@@ -1,7 +1,7 @@
 use crate::app::App;
 use crate::event::{AppEvent, Event};
 use crate::services::{ReviewCreateData, ReviewService, ReviewsLoadingState};
-use crate::views::review_create::ReviewCreateView;
+use crate::views::{confirmation_dialog::ConfirmationDialogView, review_create::ReviewCreateView};
 
 pub struct EventProcessor;
 
@@ -26,6 +26,13 @@ impl EventProcessor {
                     AppEvent::ReviewCreateClose => Self::review_create_close(app),
                     AppEvent::ReviewCreateSubmit(data) => {
                         Self::review_create_submit(app, data).await?
+                    }
+                    AppEvent::ReviewDeleteConfirm(review_id) => {
+                        Self::review_delete_confirm(app, review_id)
+                    }
+                    AppEvent::ReviewDeleteCancel => Self::review_delete_cancel(app),
+                    AppEvent::ReviewDelete(review_id) => {
+                        Self::review_delete(app, review_id).await?
                     }
                 }
             }
@@ -85,6 +92,31 @@ impl EventProcessor {
         Self::review_create_close(app);
         Ok(())
     }
+
+    /// Open delete confirmation dialog
+    fn review_delete_confirm(app: &mut App, review_id: String) {
+        if let Some(review) = app.reviews.iter().find(|r| r.id == review_id) {
+            let message = format!("Do you want to delete '{}'?", review.title);
+            let confirmation_dialog = ConfirmationDialogView::new(
+                message,
+                AppEvent::ReviewDelete(review_id),
+                AppEvent::ReviewDeleteCancel,
+            );
+            app.push_view(Box::new(confirmation_dialog));
+        }
+    }
+
+    /// Cancel review deletion
+    fn review_delete_cancel(app: &mut App) {
+        app.pop_view();
+    }
+
+    /// Delete the selected review
+    async fn review_delete(app: &mut App, review_id: String) -> color_eyre::Result<()> {
+        app.reviews = ReviewService::delete_review_by_id(&app.database, &review_id).await?;
+        app.pop_view();
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -110,7 +142,7 @@ mod tests {
             database,
             reviews,
             reviews_loading_state: ReviewsLoadingState::Init,
-            view_stack: vec![Box::new(MainView)],
+            view_stack: vec![Box::new(MainView::new())],
         }
     }
 
@@ -316,5 +348,136 @@ mod tests {
         // The key event should be handled by the view, which only sends events
         // The app should remain running until the event is processed
         assert!(app.running);
+    }
+
+    #[tokio::test]
+    async fn test_process_review_delete_confirm_event() {
+        let mut app = create_test_app().await;
+
+        // Create a review
+        let review = Review::new("Test Review".to_string());
+        review.save(app.database.pool()).await.unwrap();
+        let review_id = review.id.clone();
+        app.reviews = vec![review];
+
+        assert_eq!(app.view_stack.len(), 1); // Only MainView
+
+        EventProcessor::process_event(
+            &mut app,
+            Event::App(AppEvent::ReviewDeleteConfirm(review_id)),
+        )
+        .await
+        .unwrap();
+
+        // Should have added a confirmation dialog view
+        assert_eq!(app.view_stack.len(), 2);
+        assert_eq!(
+            app.view_stack.last().unwrap().view_type(),
+            ViewType::ConfirmationDialog
+        );
+    }
+
+    #[tokio::test]
+    async fn test_process_review_delete_confirm_event_no_selection() {
+        let mut app = create_test_app().await;
+
+        assert_eq!(app.view_stack.len(), 1); // Only MainView
+
+        EventProcessor::process_event(
+            &mut app,
+            Event::App(AppEvent::ReviewDeleteConfirm("non-existent-id".to_string())),
+        )
+        .await
+        .unwrap();
+
+        // Should not have added a confirmation dialog view
+        assert_eq!(app.view_stack.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_process_review_delete_cancel_event() {
+        let mut app = create_test_app().await;
+
+        // Simulate having a confirmation dialog open
+        let confirmation_dialog = crate::views::confirmation_dialog::ConfirmationDialogView::new(
+            "Test".to_string(),
+            AppEvent::ReviewDelete("test-id".to_string()),
+            AppEvent::ReviewDeleteCancel,
+        );
+        app.push_view(Box::new(confirmation_dialog));
+        assert_eq!(app.view_stack.len(), 2);
+
+        EventProcessor::process_event(&mut app, Event::App(AppEvent::ReviewDeleteCancel))
+            .await
+            .unwrap();
+
+        // Should have closed the confirmation dialog
+        assert_eq!(app.view_stack.len(), 1);
+        assert_eq!(app.view_stack.last().unwrap().view_type(), ViewType::Main);
+    }
+
+    #[tokio::test]
+    async fn test_process_review_delete_event() {
+        let mut app = create_test_app().await;
+
+        // Create two reviews
+        let review1 = Review::new("Review 1".to_string());
+        let review2 = Review::new("Review 2".to_string());
+        review1.save(app.database.pool()).await.unwrap();
+        review2.save(app.database.pool()).await.unwrap();
+
+        // Load reviews (they will be ordered by created_at DESC)
+        app.reviews = Review::list_all(app.database.pool()).await.unwrap();
+        let review_id_to_delete = app.reviews[0].id.clone();
+
+        // Simulate having a confirmation dialog open
+        let confirmation_dialog = crate::views::confirmation_dialog::ConfirmationDialogView::new(
+            "Test".to_string(),
+            AppEvent::ReviewDelete(review_id_to_delete.clone()),
+            AppEvent::ReviewDeleteCancel,
+        );
+        app.push_view(Box::new(confirmation_dialog));
+
+        assert_eq!(app.reviews.len(), 2);
+        assert_eq!(app.view_stack.len(), 2);
+
+        EventProcessor::process_event(
+            &mut app,
+            Event::App(AppEvent::ReviewDelete(review_id_to_delete.clone())),
+        )
+        .await
+        .unwrap();
+
+        // Should have deleted the selected review and closed the dialog
+        assert_eq!(app.reviews.len(), 1);
+        assert_eq!(app.view_stack.len(), 1);
+        assert_eq!(app.view_stack.last().unwrap().view_type(), ViewType::Main);
+
+        // Review should be deleted successfully
+        let reviews = Review::list_all(app.database.pool()).await.unwrap();
+        // Ensure the deleted review is not in the list
+        assert!(!reviews.iter().any(|r| r.id == review_id_to_delete));
+    }
+
+    #[tokio::test]
+    async fn test_process_review_delete_event_no_selection() {
+        let mut app = create_test_app().await;
+
+        // Create a review but don't select it
+        let review = Review::new("Test Review".to_string());
+        review.save(app.database.pool()).await.unwrap();
+        app.reviews = vec![review];
+
+        assert_eq!(app.reviews.len(), 1);
+
+        EventProcessor::process_event(
+            &mut app,
+            Event::App(AppEvent::ReviewDelete("test-id".to_string())),
+        )
+        .await
+        .unwrap();
+
+        // Should not have deleted anything since no selection
+        assert_eq!(app.reviews.len(), 1);
     }
 }
