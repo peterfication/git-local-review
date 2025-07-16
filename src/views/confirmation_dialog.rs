@@ -48,11 +48,6 @@ impl ViewHandler for ConfirmationDialogView {
         Ok(())
     }
 
-    #[cfg(test)]
-    fn debug_state(&self) -> String {
-        format!("ConfirmationDialogView(message: \"{}\")", self.message)
-    }
-
     fn render(&self, _app: &App, area: Rect, buf: &mut Buffer) {
         let popup_area = centered_rect(50, 7, area);
 
@@ -74,6 +69,16 @@ impl ViewHandler for ConfirmationDialogView {
         let message =
             Paragraph::new(self.message.as_str()).style(Style::default().fg(Color::White));
         message.render(chunks[0], buf);
+    }
+
+    #[cfg(test)]
+    fn debug_state(&self) -> String {
+        format!("ConfirmationDialogView(message: \"{}\")", self.message)
+    }
+
+    #[cfg(test)]
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 }
 
