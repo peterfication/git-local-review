@@ -1,6 +1,6 @@
 use crate::app::App;
 use crate::event::{AppEvent, Event};
-use crate::services::{ReviewCreateData, ReviewService};
+use crate::services::{ReviewCreateData, ReviewService, ServiceHandler};
 use crate::views::{confirmation_dialog::ConfirmationDialogView, review_create::ReviewCreateView};
 
 pub struct EventProcessor;
@@ -16,11 +16,16 @@ impl EventProcessor {
             },
             Event::App(app_event) => {
                 log::info!("Processing event: {app_event:#?}");
+
+                // First let services handle the event
+                Self::handle_services(app, &app_event).await?;
+
+                // Then let views handle the event
                 app.handle_app_events(&app_event);
+
+                // Finally handle app events globally
                 match app_event {
                     AppEvent::Quit => app.quit(),
-                    AppEvent::ReviewsLoad => Self::reviews_load(app).await?,
-                    AppEvent::ReviewsLoading => Self::reviews_loading(app).await?,
                     AppEvent::ReviewCreateOpen => Self::review_create_open(app),
                     AppEvent::ReviewCreateClose => Self::review_create_close(app),
                     AppEvent::ReviewCreateSubmit(data) => {
@@ -34,7 +39,7 @@ impl EventProcessor {
                         Self::review_delete(app, review_id).await?
                     }
                     _ => {
-                        // Other events might not be handled globally but only by certain views
+                        // Other events are handled by services or views
                     }
                 }
             }
@@ -42,26 +47,12 @@ impl EventProcessor {
         Ok(())
     }
 
-    /// Load set the loading state and send an event to start loading reviews
-    async fn reviews_load(app: &mut App) -> color_eyre::Result<()> {
-        // Uncomment to wait for a second for manual testing
-        // tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        app.events.send(AppEvent::ReviewsLoading);
-        Ok(())
-    }
+    /// Handle app events through services
+    async fn handle_services(app: &mut App, event: &AppEvent) -> color_eyre::Result<()> {
+        let services = vec![ReviewService::handle_app_event];
 
-    /// Load reviews from the database asynchronously
-    async fn reviews_loading(app: &mut App) -> color_eyre::Result<()> {
-        // Uncomment to wait for a second for manual testing
-        // tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        match ReviewService::list_reviews(&app.database).await {
-            Ok(reviews) => {
-                app.events.send(AppEvent::ReviewsLoaded(reviews));
-            }
-            Err(e) => {
-                app.events
-                    .send(AppEvent::ReviewsLoadingError(e.to_string()));
-            }
+        for handler in services {
+            handler(event, &app.database, &mut app.events).await?;
         }
         Ok(())
     }
@@ -134,27 +125,6 @@ mod tests {
             database,
             view_stack: vec![Box::new(MainView::new())],
         }
-    }
-
-    #[tokio::test]
-    async fn test_process_reviews_loading_event() {
-        let mut app = create_test_app().await;
-
-        // Create and save a test review to the database
-        let review = Review::new("Test Review".to_string());
-        review.save(app.database.pool()).await.unwrap();
-
-        // Simulate that reviews are loading by having MainView handle the ReviewsLoad event
-        app.handle_app_events(&AppEvent::ReviewsLoad);
-
-        EventProcessor::process_event(&mut app, Event::App(AppEvent::ReviewsLoading))
-            .await
-            .unwrap();
-
-        // Check that a ReviewsLoaded event has been sent
-        assert!(app.events.has_pending_events());
-        let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ReviewsLoaded(_))));
     }
 
     #[tokio::test]

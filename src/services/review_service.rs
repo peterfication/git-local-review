@@ -1,4 +1,9 @@
-use crate::{database::Database, models::review::Review};
+use super::ServiceHandler;
+use crate::{
+    database::Database,
+    event::{AppEvent, EventHandler},
+    models::review::Review,
+};
 
 #[derive(Clone, Debug)]
 pub struct ReviewCreateData {
@@ -18,9 +23,20 @@ pub enum ReviewsLoadingState {
     Error(String),
 }
 
-pub struct ReviewService;
+pub struct ReviewService {
+    // ReviewService can be stateless for now
+}
+
+impl Default for ReviewService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl ReviewService {
+    pub fn new() -> Self {
+        Self {}
+    }
     /// Create a new review and return the updated reviews list
     pub async fn create_review(
         database: &Database,
@@ -40,7 +56,7 @@ impl ReviewService {
 
     /// List all reviews
     pub async fn list_reviews(database: &Database) -> color_eyre::Result<Vec<Review>> {
-        let reviews = Review::list_all(database.pool()).await.unwrap_or_default();
+        let reviews = Review::list_all(database.pool()).await?;
         Ok(reviews)
     }
 
@@ -59,6 +75,36 @@ impl ReviewService {
         // Return updated reviews list
         let reviews = Review::list_all(database.pool()).await.unwrap_or_default();
         Ok(reviews)
+    }
+}
+
+impl ServiceHandler for ReviewService {
+    async fn handle_app_event(
+        event: &AppEvent,
+        database: &Database,
+        events: &mut EventHandler,
+    ) -> color_eyre::Result<()> {
+        match event {
+            AppEvent::ReviewsLoad => {
+                // Send loading event to start the actual loading process
+                events.send(AppEvent::ReviewsLoading);
+            }
+            AppEvent::ReviewsLoading => {
+                // Actually load reviews from database
+                match Self::list_reviews(database).await {
+                    Ok(reviews) => {
+                        events.send(AppEvent::ReviewsLoaded(reviews));
+                    }
+                    Err(e) => {
+                        events.send(AppEvent::ReviewsLoadingError(e.to_string()));
+                    }
+                }
+            }
+            _ => {
+                // Other events are not handled by ReviewService
+            }
+        }
+        Ok(())
     }
 }
 
@@ -210,5 +256,124 @@ mod tests {
         // Should still have 1 review since deletion didn't happen
         assert_eq!(updated_reviews.len(), 1);
         assert_eq!(updated_reviews[0].title, "Review 1");
+    }
+
+    #[tokio::test]
+    async fn test_handle_app_event_reviews_load() {
+        let database = create_test_database().await;
+        let mut events = crate::event::EventHandler::new_for_test();
+
+        ReviewService::handle_app_event(&AppEvent::ReviewsLoad, &database, &mut events)
+            .await
+            .unwrap();
+
+        // Should have sent a ReviewsLoading event
+        assert!(events.has_pending_events());
+        let event = events.try_recv().unwrap();
+        assert!(matches!(
+            event,
+            crate::event::Event::App(AppEvent::ReviewsLoading)
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_handle_app_event_reviews_loading_with_data() {
+        let database = create_test_database().await;
+        let mut events = crate::event::EventHandler::new_for_test();
+
+        // Create a test review
+        let review = Review::new("Test Review".to_string());
+        review.save(database.pool()).await.unwrap();
+
+        ReviewService::handle_app_event(&AppEvent::ReviewsLoading, &database, &mut events)
+            .await
+            .unwrap();
+
+        // Should have sent a ReviewsLoaded event with the review
+        assert!(events.has_pending_events());
+        let event = events.try_recv().unwrap();
+        if let crate::event::Event::App(AppEvent::ReviewsLoaded(reviews)) = event {
+            assert_eq!(reviews.len(), 1);
+            assert_eq!(reviews[0].title, "Test Review");
+        } else {
+            panic!("Expected ReviewsLoaded event with reviews");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_app_event_reviews_loading_empty() {
+        let database = create_test_database().await;
+        let mut events = crate::event::EventHandler::new_for_test();
+
+        ReviewService::handle_app_event(&AppEvent::ReviewsLoading, &database, &mut events)
+            .await
+            .unwrap();
+
+        // Should have sent a ReviewsLoaded event with empty list
+        assert!(events.has_pending_events());
+        let event = events.try_recv().unwrap();
+        if let crate::event::Event::App(AppEvent::ReviewsLoaded(reviews)) = event {
+            assert_eq!(reviews.len(), 0);
+        } else {
+            panic!("Expected ReviewsLoaded event with empty reviews");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_app_event_other_events() {
+        let database = create_test_database().await;
+        let mut events = crate::event::EventHandler::new_for_test();
+
+        // Test that other events are ignored
+        ReviewService::handle_app_event(&AppEvent::Quit, &database, &mut events)
+            .await
+            .unwrap();
+
+        // Should not have sent any events
+        assert!(!events.has_pending_events());
+    }
+
+    #[tokio::test]
+    async fn test_handle_app_event_review_create_submit() {
+        let database = create_test_database().await;
+        let mut events = crate::event::EventHandler::new_for_test();
+
+        let data = ReviewCreateData {
+            title: "Created Review".to_string(),
+        };
+
+        // ReviewCreateSubmit should be ignored by ReviewService since it's handled elsewhere
+        ReviewService::handle_app_event(
+            &AppEvent::ReviewCreateSubmit(data),
+            &database,
+            &mut events,
+        )
+        .await
+        .unwrap();
+
+        // Should not have sent any events (this event is handled by EventProcessor directly)
+        assert!(!events.has_pending_events());
+    }
+
+    #[tokio::test]
+    async fn test_handle_app_event_reviews_loading_database_error() {
+        // Create a database without the reviews table to simulate error
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        // Note: We deliberately don't create the table to cause an error
+        let database = Database::from_pool(pool);
+
+        let mut events = crate::event::EventHandler::new_for_test();
+
+        ReviewService::handle_app_event(&AppEvent::ReviewsLoading, &database, &mut events)
+            .await
+            .unwrap();
+
+        // Should have sent a ReviewsLoadingError event due to missing table
+        assert!(events.has_pending_events());
+        let event = events.try_recv().unwrap();
+        assert!(matches!(
+            event,
+            crate::event::Event::App(AppEvent::ReviewsLoadingError(_))
+        ));
     }
 }
