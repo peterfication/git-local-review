@@ -90,6 +90,11 @@ impl ViewHandler for ReviewCreateView {
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
+
+    #[cfg(test)]
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
@@ -118,7 +123,6 @@ mod tests {
     use crate::database::Database;
     use crate::event::{AppEvent, Event};
     use crate::models::review::Review;
-    use crate::services::ReviewsLoadingState;
     use crate::test_utils::render_app_to_terminal_backend;
     use insta::assert_snapshot;
     use sqlx::SqlitePool;
@@ -135,7 +139,6 @@ mod tests {
             running: true,
             events: crate::event::EventHandler::new_for_test(),
             database,
-            reviews_loading_state: ReviewsLoadingState::Loaded,
             view_stack: vec![],
         }
     }

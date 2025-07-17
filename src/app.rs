@@ -1,7 +1,6 @@
 use crate::database::Database;
 use crate::event::{AppEvent, EventHandler};
 use crate::event_handler::EventProcessor;
-use crate::services::ReviewsLoadingState;
 use crate::views::{ViewHandler, main::MainView};
 use ratatui::{DefaultTerminal, crossterm::event::KeyEvent};
 
@@ -13,8 +12,6 @@ pub struct App {
     pub events: EventHandler,
     /// Database connection.
     pub database: Database,
-    /// Current state of reviews loading process
-    pub reviews_loading_state: ReviewsLoadingState,
     /// Current view stack.
     pub view_stack: Vec<Box<dyn ViewHandler>>,
 }
@@ -34,7 +31,6 @@ impl App {
             running: true,
             events: EventHandler::new(),
             database,
-            reviews_loading_state: ReviewsLoadingState::Init,
             view_stack: vec![Box::new(MainView::new())],
         })
     }
@@ -122,7 +118,6 @@ mod tests {
             running: true,
             events: EventHandler::new_for_test(),
             database,
-            reviews_loading_state: ReviewsLoadingState::Loaded,
             view_stack: vec![Box::new(MainView::new())],
         }
     }
@@ -138,7 +133,6 @@ mod tests {
             running: true,
             events: EventHandler::new(),
             database,
-            reviews_loading_state: ReviewsLoadingState::Loaded,
             view_stack: vec![Box::new(MainView::new())],
         };
 
@@ -317,7 +311,6 @@ mod tests {
             running: true,
             events: EventHandler::new(),
             database: Database::from_pool(pool),
-            reviews_loading_state: ReviewsLoadingState::Loaded,
             view_stack: vec![Box::new(MainView::new())],
         };
 

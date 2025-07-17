@@ -32,4 +32,8 @@ pub trait ViewHandler {
     /// Downcast to Any for type-specific operations (only used for testing)
     #[cfg(test)]
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
+
+    /// Downcast to Any for type-specific operations (only used for testing)
+    #[cfg(test)]
+    fn as_any(&self) -> &dyn std::any::Any;
 }

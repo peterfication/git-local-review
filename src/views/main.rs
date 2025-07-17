@@ -16,6 +16,7 @@ use ratatui::{
 pub struct MainView {
     selected_review_index: Option<usize>,
     reviews: Vec<Review>,
+    reviews_loading_state: ReviewsLoadingState,
 }
 
 impl Default for MainView {
@@ -44,7 +45,7 @@ impl ViewHandler for MainView {
         Ok(())
     }
 
-    fn render(&self, app: &App, area: Rect, buf: &mut Buffer) {
+    fn render(&self, _app: &App, area: Rect, buf: &mut Buffer) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(3), Constraint::Min(0)])
@@ -56,7 +57,7 @@ impl ViewHandler for MainView {
                 .fg(Color::Cyan);
         header.render(chunks[0], buf);
 
-        let reviews: Vec<ListItem> = match &app.reviews_loading_state {
+        let reviews: Vec<ListItem> = match &self.reviews_loading_state {
             ReviewsLoadingState::Init => self.render_reviews_init(),
             ReviewsLoadingState::Loading => self.render_reviews_loading(),
             ReviewsLoadingState::Loaded => self.render_reviews_loaded(),
@@ -72,9 +73,16 @@ impl ViewHandler for MainView {
 
     fn handle_app_events(&mut self, _app: &App, event: &AppEvent) {
         match event {
+            AppEvent::ReviewsLoad => {
+                self.reviews_loading_state = ReviewsLoadingState::Loading;
+            }
             AppEvent::ReviewsLoaded(reviews) => {
                 self.reviews = reviews.clone();
+                self.reviews_loading_state = ReviewsLoadingState::Loaded;
                 self.update_selection_after_reviews_change();
+            }
+            AppEvent::ReviewsLoadingError(error) => {
+                self.reviews_loading_state = ReviewsLoadingState::Error(error.clone());
             }
             _ => {
                 // Ignore other events
@@ -86,6 +94,11 @@ impl ViewHandler for MainView {
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
+
+    #[cfg(test)]
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 impl MainView {
@@ -93,6 +106,7 @@ impl MainView {
         Self {
             selected_review_index: None,
             reviews: Vec::new(),
+            reviews_loading_state: ReviewsLoadingState::Init,
         }
     }
 
@@ -206,6 +220,12 @@ impl MainView {
     pub fn selected_review_index(&self) -> Option<usize> {
         self.selected_review_index
     }
+
+    /// Get the reviews loading state (for testing)
+    #[cfg(test)]
+    pub fn reviews_loading_state(&self) -> &ReviewsLoadingState {
+        &self.reviews_loading_state
+    }
 }
 
 #[cfg(test)]
@@ -243,7 +263,6 @@ mod tests {
             running: true,
             events: crate::event::EventHandler::new_for_test(),
             database,
-            reviews_loading_state: ReviewsLoadingState::Loaded,
             view_stack: vec![Box::new(MainView::new())],
         }
     }
@@ -464,19 +483,21 @@ mod tests {
 
     #[tokio::test]
     async fn test_main_view_render_reviews_loading_state_init() {
-        let app = App {
-            reviews_loading_state: ReviewsLoadingState::Init,
-            ..create_test_app_with_reviews().await
-        };
+        let mut app = create_test_app_with_reviews().await;
+        // Create a MainView with Init state
+        let mut main_view = MainView::new();
+        main_view.reviews_loading_state = ReviewsLoadingState::Init;
+        app.view_stack = vec![Box::new(main_view)];
         assert_snapshot!(render_app_to_terminal_backend(app))
     }
 
     #[tokio::test]
     async fn test_main_view_render_reviews_loading_state_loading() {
-        let app = App {
-            reviews_loading_state: ReviewsLoadingState::Loading,
-            ..create_test_app_with_reviews().await
-        };
+        let mut app = create_test_app_with_reviews().await;
+        // Create a MainView with Loading state
+        let mut main_view = MainView::new();
+        main_view.reviews_loading_state = ReviewsLoadingState::Loading;
+        app.view_stack = vec![Box::new(main_view)];
         assert_snapshot!(render_app_to_terminal_backend(app))
     }
 
@@ -490,19 +511,21 @@ mod tests {
 
     #[tokio::test]
     async fn test_main_view_render_reviews_loading_state_loaded_no_reviews() {
-        let app = App {
-            reviews_loading_state: ReviewsLoadingState::Loaded,
-            ..create_test_app_with_reviews().await
-        };
+        let mut app = create_test_app_with_reviews().await;
+        // Create a MainView with Loaded state but no reviews
+        let mut main_view = MainView::new();
+        main_view.reviews_loading_state = ReviewsLoadingState::Loaded;
+        app.view_stack = vec![Box::new(main_view)];
         assert_snapshot!(render_app_to_terminal_backend(app))
     }
 
     #[tokio::test]
     async fn test_main_view_render_reviews_loading_state_error() {
-        let app = App {
-            reviews_loading_state: ReviewsLoadingState::Error("Test error".to_string()),
-            ..create_test_app_with_reviews().await
-        };
+        let mut app = create_test_app_with_reviews().await;
+        // Create a MainView with Error state
+        let mut main_view = MainView::new();
+        main_view.reviews_loading_state = ReviewsLoadingState::Error("Test error".to_string());
+        app.view_stack = vec![Box::new(main_view)];
         assert_snapshot!(render_app_to_terminal_backend(app))
     }
 
@@ -513,6 +536,7 @@ mod tests {
         let mut main_view = MainView::new();
         let reviews = Review::list_all(app.database.pool()).await.unwrap();
         main_view.reviews = reviews;
+        main_view.reviews_loading_state = ReviewsLoadingState::Loaded;
         main_view.selected_review_index = Some(0);
         app.view_stack = vec![Box::new(main_view)];
 
