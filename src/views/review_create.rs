@@ -130,13 +130,11 @@ mod tests {
         Review::create_table(&pool).await.unwrap();
 
         let database = Database::from_pool(pool);
-        let reviews = vec![];
 
         App {
             running: true,
             events: crate::event::EventHandler::new_for_test(),
             database,
-            reviews,
             reviews_loading_state: ReviewsLoadingState::Loaded,
             view_stack: vec![],
         }

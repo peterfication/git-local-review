@@ -15,6 +15,7 @@ use ratatui::{
 
 pub struct MainView {
     selected_review_index: Option<usize>,
+    reviews: Vec<Review>,
 }
 
 impl Default for MainView {
@@ -35,8 +36,8 @@ impl ViewHandler for MainView {
                 app.events.send(AppEvent::Quit)
             }
             KeyCode::Char('n') => self.create_review(app),
-            KeyCode::Char('j') | KeyCode::Down => self.select_next_review(&app.reviews),
-            KeyCode::Char('k') | KeyCode::Up => self.select_previous_review(&app.reviews),
+            KeyCode::Char('j') | KeyCode::Down => self.select_next_review(),
+            KeyCode::Char('k') | KeyCode::Up => self.select_previous_review(),
             KeyCode::Char('d') => self.delete_selected_review(app),
             _ => {}
         }
@@ -58,7 +59,7 @@ impl ViewHandler for MainView {
         let reviews: Vec<ListItem> = match &app.reviews_loading_state {
             ReviewsLoadingState::Init => self.render_reviews_init(),
             ReviewsLoadingState::Loading => self.render_reviews_loading(),
-            ReviewsLoadingState::Loaded => self.render_reviews_loaded(&app.reviews),
+            ReviewsLoadingState::Loaded => self.render_reviews_loaded(),
             ReviewsLoadingState::Error(error) => self.render_reviews_error(error),
         };
 
@@ -69,16 +70,11 @@ impl ViewHandler for MainView {
         reviews_list.render(chunks[1], buf);
     }
 
-    fn handle_app_events(&mut self, app: &App, event: &AppEvent) {
+    fn handle_app_events(&mut self, _app: &App, event: &AppEvent) {
         match event {
-            AppEvent::ReviewsLoaded => {
-                self.update_selection_after_reviews_change(&app.reviews);
-            }
-            AppEvent::ReviewDelete(_) => {
-                self.update_selection_after_reviews_change(&app.reviews);
-            }
-            AppEvent::ReviewCreateSubmit(_) => {
-                self.update_selection_after_reviews_change(&app.reviews);
+            AppEvent::ReviewsLoaded(reviews) => {
+                self.reviews = reviews.clone();
+                self.update_selection_after_reviews_change();
             }
             _ => {
                 // Ignore other events
@@ -96,28 +92,23 @@ impl MainView {
     pub fn new() -> Self {
         Self {
             selected_review_index: None,
+            reviews: Vec::new(),
         }
     }
 
     /// Update selection after reviews list changes (e.g., after deletion)
-    pub fn update_selection_after_reviews_change(&mut self, reviews: &[Review]) {
-        if reviews.is_empty() {
+    pub fn update_selection_after_reviews_change(&mut self) {
+        if self.reviews.is_empty() {
             self.selected_review_index = None;
         } else if let Some(index) = self.selected_review_index {
-            if index >= reviews.len() {
+            if index >= self.reviews.len() {
                 // If selected index is out of bounds, select the last item
-                self.selected_review_index = Some(reviews.len() - 1);
+                self.selected_review_index = Some(self.reviews.len() - 1);
             }
         } else {
             // If no selection and we have reviews, select first
             self.selected_review_index = Some(0);
         }
-    }
-
-    /// Get the selected review index (for testing)
-    #[cfg(test)]
-    pub fn selected_review_index(&self) -> Option<usize> {
-        self.selected_review_index
     }
 
     /// Open the review creation view
@@ -126,8 +117,8 @@ impl MainView {
     }
 
     /// Move selection up (decrease index)
-    pub fn select_previous_review(&mut self, reviews: &[crate::models::review::Review]) {
-        if reviews.is_empty() {
+    pub fn select_previous_review(&mut self) {
+        if self.reviews.is_empty() {
             return;
         }
 
@@ -139,14 +130,14 @@ impl MainView {
     }
 
     /// Move selection down (increase index)
-    pub fn select_next_review(&mut self, reviews: &[crate::models::review::Review]) {
-        if reviews.is_empty() {
+    pub fn select_next_review(&mut self) {
+        if self.reviews.is_empty() {
             return;
         }
 
         match self.selected_review_index {
             None => self.selected_review_index = Some(0),
-            Some(index) if index >= reviews.len() - 1 => {} // Already at bottom
+            Some(index) if index >= self.reviews.len() - 1 => {} // Already at bottom
             Some(index) => self.selected_review_index = Some(index + 1),
         }
     }
@@ -154,8 +145,8 @@ impl MainView {
     /// Delete the currently selected review
     pub fn delete_selected_review(&self, app: &mut App) {
         if let Some(index) = self.selected_review_index {
-            if index < app.reviews.len() {
-                let review_id = app.reviews[index].id.clone();
+            if index < self.reviews.len() {
+                let review_id = self.reviews[index].id.clone();
                 app.events.send(AppEvent::ReviewDeleteConfirm(review_id));
             }
         }
@@ -169,14 +160,14 @@ impl MainView {
         vec![ListItem::new("Loading reviews...").style(Style::default().fg(Color::Yellow))]
     }
 
-    fn render_reviews_loaded(&self, reviews: &[Review]) -> Vec<ListItem> {
-        if reviews.is_empty() {
+    fn render_reviews_loaded(&self) -> Vec<ListItem> {
+        if self.reviews.is_empty() {
             vec![
                 ListItem::new("No reviews found - Press 'n' to create a new review")
                     .style(Style::default().fg(Color::Yellow)),
             ]
         } else {
-            reviews
+            self.reviews
                 .iter()
                 .enumerate()
                 .map(|(index, review)| {
@@ -208,6 +199,12 @@ impl MainView {
             ListItem::new(format!("Error loading reviews: {error}"))
                 .style(Style::default().fg(Color::Red)),
         ]
+    }
+
+    /// Get the selected review index (for testing)
+    #[cfg(test)]
+    pub fn selected_review_index(&self) -> Option<usize> {
+        self.selected_review_index
     }
 }
 
@@ -241,13 +238,11 @@ mod tests {
         review2.save(&pool).await.unwrap();
 
         let database = Database::from_pool(pool);
-        let reviews = Review::list_all(database.pool()).await.unwrap();
 
         App {
             running: true,
             events: crate::event::EventHandler::new_for_test(),
             database,
-            reviews,
             reviews_loading_state: ReviewsLoadingState::Loaded,
             view_stack: vec![Box::new(MainView::new())],
         }
@@ -375,6 +370,10 @@ mod tests {
         let mut app = create_test_app_with_reviews().await;
         let mut view = MainView::new();
 
+        // Populate the view with reviews first
+        let reviews = Review::list_all(app.database.pool()).await.unwrap();
+        view.reviews = reviews;
+
         let key_event = KeyEvent {
             code: KeyCode::Char('j'),
             modifiers: KeyModifiers::empty(),
@@ -392,6 +391,10 @@ mod tests {
     async fn test_main_view_handle_navigation_k_key() {
         let mut app = create_test_app_with_reviews().await;
         let mut view = MainView::new();
+
+        // Populate the view with reviews first
+        let reviews = Review::list_all(app.database.pool()).await.unwrap();
+        view.reviews = reviews;
 
         // Start with second review selected
         view.selected_review_index = Some(1);
@@ -414,6 +417,10 @@ mod tests {
         let mut app = create_test_app_with_reviews().await;
         let mut view = MainView::new();
 
+        // Populate the view with reviews first
+        let reviews = Review::list_all(app.database.pool()).await.unwrap();
+        view.reviews = reviews;
+
         // Start with first review selected
         view.selected_review_index = Some(0);
 
@@ -434,6 +441,10 @@ mod tests {
     async fn test_main_view_handle_navigation_up_key() {
         let mut app = create_test_app_with_reviews().await;
         let mut view = MainView::new();
+
+        // Populate the view with reviews first
+        let reviews = Review::list_all(app.database.pool()).await.unwrap();
+        view.reviews = reviews;
 
         // Start with second review selected
         view.selected_review_index = Some(1);
@@ -471,14 +482,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_main_view_render_reviews_loading_state_loaded_with_reviews() {
-        let app = create_test_app_with_reviews().await;
+        let mut app = create_test_app_with_reviews().await;
+        let reviews = Review::list_all(app.database.pool()).await.unwrap();
+        app.handle_app_events(&AppEvent::ReviewsLoaded(reviews));
         assert_snapshot!(render_app_to_terminal_backend(app))
     }
 
     #[tokio::test]
     async fn test_main_view_render_reviews_loading_state_loaded_no_reviews() {
         let app = App {
-            reviews: vec![],
             reviews_loading_state: ReviewsLoadingState::Loaded,
             ..create_test_app_with_reviews().await
         };
@@ -499,6 +511,8 @@ mod tests {
         let mut app = create_test_app_with_reviews().await;
         // Create a MainView with first review selected
         let mut main_view = MainView::new();
+        let reviews = Review::list_all(app.database.pool()).await.unwrap();
+        main_view.reviews = reviews;
         main_view.selected_review_index = Some(0);
         app.view_stack = vec![Box::new(main_view)];
 
@@ -509,6 +523,10 @@ mod tests {
     async fn test_main_view_handle_delete_key_with_selection() {
         let mut app = create_test_app_with_reviews().await;
         let mut view = MainView::new();
+
+        // Populate the view with reviews first
+        let reviews = Review::list_all(app.database.pool()).await.unwrap();
+        view.reviews = reviews;
 
         // Select first review
         view.selected_review_index = Some(0);
@@ -560,7 +578,7 @@ mod tests {
         let mut view = MainView::new();
 
         // Empty reviews list
-        app.reviews = vec![];
+        view.reviews = vec![];
         view.selected_review_index = Some(0); // Invalid selection
         assert!(!app.events.has_pending_events());
 
@@ -579,46 +597,45 @@ mod tests {
 
     #[tokio::test]
     async fn test_main_view_handle_app_events_reviews_loaded() {
-        let mut app = create_test_app_with_reviews().await;
+        let app = create_test_app_with_reviews().await;
         let mut view = MainView::new();
 
         view.selected_review_index = None;
 
         let review = Review::new("Test Review".to_string());
         review.save(app.database.pool()).await.unwrap();
-        app.reviews = vec![review];
+        let reviews = vec![review];
 
-        view.handle_app_events(&app, &AppEvent::ReviewsLoaded);
+        view.handle_app_events(&app, &AppEvent::ReviewsLoaded(reviews));
 
         assert_eq!(view.selected_review_index, Some(0));
     }
 
     #[tokio::test]
     async fn test_main_view_handle_app_events_review_delete() {
-        let mut app = create_test_app_with_reviews().await;
+        let app = create_test_app_with_reviews().await;
         let mut view = MainView::new();
 
         view.selected_review_index = None;
 
         let review = Review::new("Test Review".to_string());
         review.save(app.database.pool()).await.unwrap();
-        app.reviews = vec![review];
 
         view.handle_app_events(&app, &AppEvent::ReviewDelete("some_id".to_string()));
 
-        assert_eq!(view.selected_review_index, Some(0));
+        // Selection should not change until ReviewsLoaded is received
+        assert_eq!(view.selected_review_index, None);
     }
 
     #[tokio::test]
     async fn test_main_view_handle_app_events_review_create_submit() {
-        let mut app = create_test_app_with_reviews().await;
+        let app = create_test_app_with_reviews().await;
         let mut view = MainView::new();
 
         view.selected_review_index = None;
 
         let review = Review::new("Test Review".to_string());
         review.save(app.database.pool()).await.unwrap();
-        app.reviews = vec![review];
 
         view.handle_app_events(
             &app,
@@ -627,7 +644,8 @@ mod tests {
             }),
         );
 
-        assert_eq!(view.selected_review_index, Some(0));
+        // Selection should not change until ReviewsLoaded is received
+        assert_eq!(view.selected_review_index, None);
     }
 
     #[tokio::test]
@@ -635,8 +653,8 @@ mod tests {
         let mut view = MainView::new();
         view.selected_review_index = Some(0);
 
-        let reviews = vec![];
-        view.update_selection_after_reviews_change(&reviews);
+        view.reviews = vec![];
+        view.update_selection_after_reviews_change();
 
         // Should clear selection for empty reviews
         assert_eq!(view.selected_review_index, None);
@@ -645,14 +663,13 @@ mod tests {
     #[tokio::test]
     async fn test_main_view_update_selection_after_reviews_change_out_of_bounds() {
         let mut view = MainView::new();
-        let app = create_test_app_with_reviews().await;
 
         // Set selection to last item (index 1)
         view.selected_review_index = Some(1);
 
-        // Create a smaller reviews list (only 1 item)
-        let reviews = vec![app.reviews[0].clone()];
-        view.update_selection_after_reviews_change(&reviews);
+        // Create a review and a smaller reviews list (only 1 item)
+        view.reviews = vec![Review::new("Test Review".to_string())];
+        view.update_selection_after_reviews_change();
 
         // Should adjust selection to last valid index (0)
         assert_eq!(view.selected_review_index, Some(0));
@@ -661,12 +678,13 @@ mod tests {
     #[tokio::test]
     async fn test_main_view_update_selection_after_reviews_change_valid_selection() {
         let mut view = MainView::new();
-        let app = create_test_app_with_reviews().await;
 
         // Set selection to first item
         view.selected_review_index = Some(0);
 
-        view.update_selection_after_reviews_change(&app.reviews);
+        // Create a reviews list for testing
+        view.reviews = vec![Review::new("Test Review".to_string())];
+        view.update_selection_after_reviews_change();
 
         // Should preserve valid selection
         assert_eq!(view.selected_review_index, Some(0));
@@ -675,12 +693,13 @@ mod tests {
     #[tokio::test]
     async fn test_main_view_update_selection_after_reviews_change_no_selection() {
         let mut view = MainView::new();
-        let app = create_test_app_with_reviews().await;
 
         // No selection initially
         assert_eq!(view.selected_review_index, None);
 
-        view.update_selection_after_reviews_change(&app.reviews);
+        // Create a reviews list for testing
+        view.reviews = vec![Review::new("Test Review".to_string())];
+        view.update_selection_after_reviews_change();
 
         // Should select first review
         assert_eq!(view.selected_review_index, Some(0));

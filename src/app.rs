@@ -1,7 +1,6 @@
 use crate::database::Database;
 use crate::event::{AppEvent, EventHandler};
 use crate::event_handler::EventProcessor;
-use crate::models::review::Review;
 use crate::services::ReviewsLoadingState;
 use crate::views::{ViewHandler, main::MainView};
 use ratatui::{DefaultTerminal, crossterm::event::KeyEvent};
@@ -14,8 +13,6 @@ pub struct App {
     pub events: EventHandler,
     /// Database connection.
     pub database: Database,
-    /// Reviews list.
-    pub reviews: Vec<Review>,
     /// Current state of reviews loading process
     pub reviews_loading_state: ReviewsLoadingState,
     /// Current view stack.
@@ -37,7 +34,6 @@ impl App {
             running: true,
             events: EventHandler::new(),
             database,
-            reviews: Vec::new(),
             reviews_loading_state: ReviewsLoadingState::Init,
             view_stack: vec![Box::new(MainView::new())],
         })
@@ -110,7 +106,7 @@ impl App {
 mod tests {
     use super::*;
     use crate::event::{AppEvent, Event};
-    use crate::services::ReviewService;
+    use crate::models::review::Review;
     use crate::views::{ViewType, main::MainView, review_create::ReviewCreateView};
     use sqlx::SqlitePool;
 
@@ -118,18 +114,14 @@ mod tests {
 
     async fn create_test_app() -> App {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        crate::models::review::Review::create_table(&pool)
-            .await
-            .unwrap();
+        Review::create_table(&pool).await.unwrap();
 
         let database = Database::from_pool(pool);
-        let reviews = vec![];
 
         App {
             running: true,
             events: EventHandler::new_for_test(),
             database,
-            reviews,
             reviews_loading_state: ReviewsLoadingState::Loaded,
             view_stack: vec![Box::new(MainView::new())],
         }
@@ -141,19 +133,16 @@ mod tests {
         Review::create_table(&pool).await.unwrap();
 
         let database = Database::from_pool(pool);
-        let reviews = ReviewService::list_reviews(&database).await.unwrap();
 
         let app = App {
             running: true,
             events: EventHandler::new(),
             database,
-            reviews,
             reviews_loading_state: ReviewsLoadingState::Loaded,
             view_stack: vec![Box::new(MainView::new())],
         };
 
         assert!(app.running);
-        assert_eq!(app.reviews.len(), 0);
         assert_eq!(app.view_stack.len(), 1);
     }
 
@@ -328,7 +317,6 @@ mod tests {
             running: true,
             events: EventHandler::new(),
             database: Database::from_pool(pool),
-            reviews: vec![],
             reviews_loading_state: ReviewsLoadingState::Loaded,
             view_stack: vec![Box::new(MainView::new())],
         };
@@ -345,7 +333,7 @@ mod tests {
         // Create a review to have data for testing
         let review = Review::new("Test Review".to_string());
         review.save(app.database.pool()).await.unwrap();
-        app.reviews = vec![review];
+        let reviews = vec![review];
 
         // Verify MainView initially has no selection
         if let Some(main_view) = app.view_stack.get_mut(0) {
@@ -355,7 +343,7 @@ mod tests {
         }
 
         // Call handle_app_events with ReviewsLoaded event
-        app.handle_app_events(&AppEvent::ReviewsLoaded);
+        app.handle_app_events(&AppEvent::ReviewsLoaded(reviews));
 
         // Verify MainView now has the first review selected
         if let Some(main_view) = app.view_stack.get_mut(0) {
@@ -372,7 +360,7 @@ mod tests {
         // Create a review to have data for testing
         let review = Review::new("Test Review".to_string());
         review.save(app.database.pool()).await.unwrap();
-        app.reviews = vec![review];
+        let reviews = vec![review];
 
         // Add a ReviewCreateView to the stack
         app.push_view(Box::new(ReviewCreateView::default()));
@@ -386,7 +374,7 @@ mod tests {
         }
 
         // Call handle_app_events with ReviewsLoaded event
-        app.handle_app_events(&AppEvent::ReviewsLoaded);
+        app.handle_app_events(&AppEvent::ReviewsLoaded(reviews));
 
         // Verify MainView now has the first review selected (all views should have received the event)
         if let Some(main_view) = app.view_stack.get_mut(0) {
@@ -419,7 +407,7 @@ mod tests {
         assert_eq!(app.view_stack[2].view_type(), ViewType::ConfirmationDialog);
 
         // Call handle_app_events
-        app.handle_app_events(&AppEvent::ReviewsLoaded);
+        app.handle_app_events(&AppEvent::ReviewsLoaded(vec![]));
 
         // Verify view stack order is preserved
         assert_eq!(app.view_stack.len(), 3);

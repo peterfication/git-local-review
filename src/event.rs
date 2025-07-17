@@ -1,4 +1,4 @@
-use crate::services::ReviewCreateData;
+use crate::{models::review::Review, services::ReviewCreateData};
 use color_eyre::eyre::OptionExt;
 use futures::{FutureExt, StreamExt};
 use ratatui::crossterm::event::Event as CrosstermEvent;
@@ -40,7 +40,7 @@ pub enum AppEvent {
     /// Load the reviews from the database
     ReviewsLoading,
     /// Reviews have been loaded from the database
-    ReviewsLoaded,
+    ReviewsLoaded(Vec<Review>),
     /// Error occurred while loading reviews
     ReviewsLoadingError(String),
 

@@ -21,7 +21,7 @@ impl EventProcessor {
                     AppEvent::Quit => app.quit(),
                     AppEvent::ReviewsLoad => Self::reviews_load(app).await?,
                     AppEvent::ReviewsLoading => Self::reviews_loading(app).await?,
-                    AppEvent::ReviewsLoaded => Self::reviews_loaded(app),
+                    AppEvent::ReviewsLoaded(_reviews) => Self::reviews_loaded(app),
                     AppEvent::ReviewsLoadingError(error) => Self::reviews_loading_error(app, error),
                     AppEvent::ReviewCreateOpen => Self::review_create_open(app),
                     AppEvent::ReviewCreateClose => Self::review_create_close(app),
@@ -56,8 +56,7 @@ impl EventProcessor {
         // tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         match ReviewService::list_reviews(&app.database).await {
             Ok(reviews) => {
-                app.reviews = reviews;
-                app.events.send(AppEvent::ReviewsLoaded);
+                app.events.send(AppEvent::ReviewsLoaded(reviews));
             }
             Err(e) => {
                 app.events
@@ -89,22 +88,24 @@ impl EventProcessor {
 
     /// Submit the review creation form
     async fn review_create_submit(app: &mut App, data: ReviewCreateData) -> color_eyre::Result<()> {
-        app.reviews = ReviewService::create_review(&app.database, data).await?;
+        let reviews = ReviewService::create_review(&app.database, data).await?;
+        app.events.send(AppEvent::ReviewsLoaded(reviews));
         Self::review_create_close(app);
         Ok(())
     }
 
     /// Open delete confirmation dialog
     fn review_delete_confirm(app: &mut App, review_id: String) {
-        if let Some(review) = app.reviews.iter().find(|r| r.id == review_id) {
-            let message = format!("Do you want to delete '{}'?", review.title);
-            let confirmation_dialog = ConfirmationDialogView::new(
-                message,
-                AppEvent::ReviewDelete(review_id),
-                AppEvent::ReviewDeleteCancel,
-            );
-            app.push_view(Box::new(confirmation_dialog));
-        }
+        // Create a generic confirmation dialog without the specific review title
+        // since we don't have access to the reviews in the App anymore
+        // TODO: Load the title from the review_service / database
+        let message = "Do you want to delete the selected review?".to_string();
+        let confirmation_dialog = ConfirmationDialogView::new(
+            message,
+            AppEvent::ReviewDelete(review_id),
+            AppEvent::ReviewDeleteCancel,
+        );
+        app.push_view(Box::new(confirmation_dialog));
     }
 
     /// Cancel review deletion
@@ -114,7 +115,8 @@ impl EventProcessor {
 
     /// Delete the selected review
     async fn review_delete(app: &mut App, review_id: String) -> color_eyre::Result<()> {
-        app.reviews = ReviewService::delete_review_by_id(&app.database, &review_id).await?;
+        let reviews = ReviewService::delete_review_by_id(&app.database, &review_id).await?;
+        app.events.send(AppEvent::ReviewsLoaded(reviews));
         app.pop_view();
         Ok(())
     }
@@ -135,13 +137,11 @@ mod tests {
             .unwrap();
 
         let database = Database::from_pool(pool);
-        let reviews = vec![];
 
         App {
             running: true,
             events: crate::event::EventHandler::new_for_test(),
             database,
-            reviews,
             reviews_loading_state: ReviewsLoadingState::Init,
             view_stack: vec![Box::new(MainView::new())],
         }
@@ -150,7 +150,6 @@ mod tests {
     #[tokio::test]
     async fn test_process_reviews_load_event() {
         let mut app = create_test_app().await;
-        assert_eq!(app.reviews.len(), 0);
         assert_eq!(app.reviews_loading_state, ReviewsLoadingState::Init);
 
         EventProcessor::process_event(&mut app, Event::App(AppEvent::ReviewsLoad))
@@ -173,19 +172,16 @@ mod tests {
         let review = Review::new("Test Review".to_string());
         review.save(app.database.pool()).await.unwrap();
 
-        assert_eq!(app.reviews.len(), 0);
         app.reviews_loading_state = ReviewsLoadingState::Loading; // Simulate that reviews are loading
 
         EventProcessor::process_event(&mut app, Event::App(AppEvent::ReviewsLoading))
             .await
             .unwrap();
 
-        // Check that reviews have been loaded
-        assert_eq!(app.reviews.len(), 1);
         // Check that a ReviewsLoaded event has been sent
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ReviewsLoaded)));
+        assert!(matches!(event, Event::App(AppEvent::ReviewsLoaded(_))));
         // Loading state should still be Loading until ReviewsLoaded is processed
         assert_eq!(app.reviews_loading_state, ReviewsLoadingState::Loading);
     }
@@ -195,7 +191,7 @@ mod tests {
         let mut app = create_test_app().await;
         app.reviews_loading_state = ReviewsLoadingState::Loading; // Simulate that reviews are loading
 
-        EventProcessor::process_event(&mut app, Event::App(AppEvent::ReviewsLoaded))
+        EventProcessor::process_event(&mut app, Event::App(AppEvent::ReviewsLoaded(Vec::new())))
             .await
             .unwrap();
 
@@ -273,7 +269,6 @@ mod tests {
     #[tokio::test]
     async fn test_process_review_create_submit_event() {
         let mut app = create_test_app().await;
-        assert_eq!(app.reviews.len(), 0);
 
         // Open review create view first
         EventProcessor::process_event(&mut app, Event::App(AppEvent::ReviewCreateOpen))
@@ -289,9 +284,15 @@ mod tests {
             .await
             .unwrap();
 
-        // Should have created a review
-        assert_eq!(app.reviews.len(), 1);
-        assert_eq!(app.reviews[0].title, "Test Review");
+        // Should have sent a ReviewsLoaded event
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        if let Event::App(AppEvent::ReviewsLoaded(reviews)) = event {
+            assert_eq!(reviews.len(), 1);
+            assert_eq!(reviews[0].title, "Test Review");
+        } else {
+            panic!("Expected ReviewsLoaded event");
+        }
 
         // Should have closed the view
         assert_eq!(app.view_stack.len(), 1);
@@ -301,7 +302,6 @@ mod tests {
     #[tokio::test]
     async fn test_process_review_create_submit_empty_title() {
         let mut app = create_test_app().await;
-        assert_eq!(app.reviews.len(), 0);
 
         let data = crate::services::review_service::ReviewCreateData {
             title: "".to_string(),
@@ -311,8 +311,14 @@ mod tests {
             .await
             .unwrap();
 
-        // Should not have created a review
-        assert_eq!(app.reviews.len(), 0);
+        // Should have sent a ReviewsLoaded event with empty list
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        if let Event::App(AppEvent::ReviewsLoaded(reviews)) = event {
+            assert_eq!(reviews.len(), 0);
+        } else {
+            panic!("Expected ReviewsLoaded event");
+        }
     }
 
     #[tokio::test]
@@ -359,7 +365,6 @@ mod tests {
         let review = Review::new("Test Review".to_string());
         review.save(app.database.pool()).await.unwrap();
         let review_id = review.id.clone();
-        app.reviews = vec![review];
 
         assert_eq!(app.view_stack.len(), 1); // Only MainView
 
@@ -391,8 +396,9 @@ mod tests {
         .await
         .unwrap();
 
-        // Should not have added a confirmation dialog view
-        assert_eq!(app.view_stack.len(), 1);
+        // Should have added a confirmation dialog view even for non-existent ID
+        // The delete operation will handle non-existent reviews
+        assert_eq!(app.view_stack.len(), 2);
     }
 
     #[tokio::test]
@@ -428,8 +434,8 @@ mod tests {
         review2.save(app.database.pool()).await.unwrap();
 
         // Load reviews (they will be ordered by created_at DESC)
-        app.reviews = Review::list_all(app.database.pool()).await.unwrap();
-        let review_id_to_delete = app.reviews[0].id.clone();
+        let reviews = Review::list_all(app.database.pool()).await.unwrap();
+        let review_id_to_delete = reviews[0].id.clone();
 
         // Simulate having a confirmation dialog open
         let confirmation_dialog = crate::views::confirmation_dialog::ConfirmationDialogView::new(
@@ -439,7 +445,6 @@ mod tests {
         );
         app.push_view(Box::new(confirmation_dialog));
 
-        assert_eq!(app.reviews.len(), 2);
         assert_eq!(app.view_stack.len(), 2);
 
         EventProcessor::process_event(
@@ -449,8 +454,14 @@ mod tests {
         .await
         .unwrap();
 
-        // Should have deleted the selected review and closed the dialog
-        assert_eq!(app.reviews.len(), 1);
+        // Should have sent a ReviewsLoaded event and closed the dialog
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        if let Event::App(AppEvent::ReviewsLoaded(reviews)) = event {
+            assert_eq!(reviews.len(), 1);
+        } else {
+            panic!("Expected ReviewsLoaded event");
+        }
         assert_eq!(app.view_stack.len(), 1);
         assert_eq!(app.view_stack.last().unwrap().view_type(), ViewType::Main);
 
@@ -467,9 +478,6 @@ mod tests {
         // Create a review but don't select it
         let review = Review::new("Test Review".to_string());
         review.save(app.database.pool()).await.unwrap();
-        app.reviews = vec![review];
-
-        assert_eq!(app.reviews.len(), 1);
 
         EventProcessor::process_event(
             &mut app,
@@ -478,7 +486,13 @@ mod tests {
         .await
         .unwrap();
 
-        // Should not have deleted anything since no selection
-        assert_eq!(app.reviews.len(), 1);
+        // Should have sent a ReviewsLoaded event (since delete always sends event)
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        if let Event::App(AppEvent::ReviewsLoaded(reviews)) = event {
+            assert_eq!(reviews.len(), 1); // Should still have 1 review since ID didn't match
+        } else {
+            panic!("Expected ReviewsLoaded event");
+        }
     }
 }
