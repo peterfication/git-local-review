@@ -18,7 +18,7 @@ lint:
 
 # Run tests
 test:
-  cargo test --locked
+  cargo nextest run
 
 # Review test snapshots
 test-snapshot-review:
