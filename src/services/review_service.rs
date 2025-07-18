@@ -1,8 +1,9 @@
 use super::ServiceHandler;
+
 use crate::{
     database::Database,
     event::{AppEvent, EventHandler},
-    models::review::Review,
+    models::Review,
 };
 
 #[derive(Clone, Debug)]

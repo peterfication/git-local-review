@@ -1,7 +1,9 @@
-use crate::app::App;
-use crate::event::{AppEvent, Event};
-use crate::services::{ReviewService, ServiceHandler};
-use crate::views::{confirmation_dialog::ConfirmationDialogView, review_create::ReviewCreateView};
+use crate::{
+    app::App,
+    event::{AppEvent, Event},
+    services::{ReviewService, ServiceHandler},
+    views::{ConfirmationDialogView, ReviewCreateView},
+};
 
 pub struct EventProcessor;
 
@@ -76,7 +78,7 @@ mod tests {
     use super::*;
     use crate::database::Database;
     use crate::models::review::Review;
-    use crate::views::{ViewType, main::MainView};
+    use crate::views::{MainView, ViewType};
     use sqlx::SqlitePool;
 
     async fn create_test_app() -> App {
