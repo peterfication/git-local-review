@@ -1,9 +1,14 @@
-pub mod confirmation_dialog;
-pub mod main;
-pub mod review_create;
+use ratatui::{buffer::Buffer, crossterm::event::KeyEvent, layout::Rect};
 
 use crate::{app::App, event::AppEvent};
-use ratatui::{buffer::Buffer, crossterm::event::KeyEvent, layout::Rect};
+
+pub mod confirmation_dialog;
+pub mod main_view;
+pub mod review_create_view;
+
+pub use confirmation_dialog::ConfirmationDialogView;
+pub use main_view::MainView;
+pub use review_create_view::ReviewCreateView;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViewType {

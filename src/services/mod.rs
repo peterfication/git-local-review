@@ -1,7 +1,7 @@
-pub mod review_service;
-
 use crate::database::Database;
 use crate::event::{AppEvent, EventHandler};
+
+pub mod review_service;
 
 pub use review_service::ReviewCreateData;
 pub use review_service::ReviewService;

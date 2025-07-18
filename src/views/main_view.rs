@@ -1,16 +1,17 @@
-use crate::{
-    app::App,
-    event::AppEvent,
-    models::review::Review,
-    services::review_service::ReviewsLoadingState,
-    views::{ViewHandler, ViewType},
-};
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style, Stylize},
     widgets::{Block, List, ListItem, Paragraph, Widget},
+};
+
+use crate::{
+    app::App,
+    event::AppEvent,
+    models::Review,
+    services::ReviewsLoadingState,
+    views::{ViewHandler, ViewType},
 };
 
 pub struct MainView {

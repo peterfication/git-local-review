@@ -1,8 +1,11 @@
-use crate::database::Database;
-use crate::event::{AppEvent, EventHandler};
-use crate::event_handler::EventProcessor;
-use crate::views::{ViewHandler, main::MainView};
 use ratatui::{DefaultTerminal, crossterm::event::KeyEvent};
+
+use crate::{
+    database::Database,
+    event::{AppEvent, EventHandler},
+    event_handler::EventProcessor,
+    views::{MainView, ViewHandler},
+};
 
 /// Application.
 pub struct App {
@@ -103,7 +106,7 @@ mod tests {
     use super::*;
     use crate::event::{AppEvent, Event};
     use crate::models::review::Review;
-    use crate::views::{ViewType, main::MainView, review_create::ReviewCreateView};
+    use crate::views::{MainView, ReviewCreateView, ViewType};
     use sqlx::SqlitePool;
 
     use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};

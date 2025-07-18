@@ -1,15 +1,16 @@
-use crate::{
-    app::App,
-    event::AppEvent,
-    services::review_service::ReviewCreateData,
-    views::{ViewHandler, ViewType},
-};
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{KeyCode, KeyEvent},
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     widgets::{Block, BorderType, Clear, Paragraph, Widget},
+};
+
+use crate::{
+    app::App,
+    event::AppEvent,
+    services::ReviewCreateData,
+    views::{ViewHandler, ViewType},
 };
 
 #[derive(Default)]

@@ -1,9 +1,10 @@
-use crate::{models::review::Review, services::ReviewCreateData};
 use color_eyre::eyre::OptionExt;
 use futures::{FutureExt, StreamExt};
 use ratatui::crossterm::event::Event as CrosstermEvent;
 use std::time::Duration;
 use tokio::sync::mpsc;
+
+use crate::{models::Review, services::ReviewCreateData};
 
 /// The frequency at which tick events are emitted.
 const TICK_FPS: f64 = 30.0;

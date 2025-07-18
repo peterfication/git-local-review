@@ -1,5 +1,6 @@
-use crate::models::review::Review;
 use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
+
+use crate::models::Review;
 
 pub struct Database {
     pool: SqlitePool,

@@ -1,14 +1,15 @@
-use crate::{
-    app::App,
-    event::AppEvent,
-    views::{ViewHandler, ViewType},
-};
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     widgets::{Block, BorderType, Clear, Paragraph, Widget},
+};
+
+use crate::{
+    app::App,
+    event::AppEvent,
+    views::{ViewHandler, ViewType},
 };
 
 pub struct ConfirmationDialogView {
