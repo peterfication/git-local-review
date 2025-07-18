@@ -22,7 +22,7 @@ pub trait ViewHandler {
     fn render(&self, app: &App, area: Rect, buf: &mut Buffer);
     fn handle_key_events(&mut self, app: &mut App, key_event: KeyEvent) -> color_eyre::Result<()>;
     /// Handle app events that this view is interested in
-    fn handle_app_events(&mut self, app: &App, event: &AppEvent) {
+    fn handle_app_events(&mut self, app: &mut App, event: &AppEvent) {
         // Default implementation does nothing
         let _ = (app, event);
     }

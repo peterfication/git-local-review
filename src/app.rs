@@ -104,12 +104,14 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::event::{AppEvent, Event};
-    use crate::models::review::Review;
-    use crate::views::{MainView, ReviewCreateView, ViewType};
-    use sqlx::SqlitePool;
-
+    use crate::{
+        event::{AppEvent, Event},
+        models::Review,
+        services::ReviewsLoadingState,
+        views::{MainView, ReviewCreateView, ViewType},
+    };
     use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
+    use sqlx::SqlitePool;
 
     async fn create_test_app() -> App {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
@@ -338,8 +340,10 @@ mod tests {
             }
         }
 
-        // Call handle_app_events with ReviewsLoaded event
-        app.handle_app_events(&AppEvent::ReviewsLoaded(reviews));
+        // Call handle_app_events with ReviewsLoadingState event
+        app.handle_app_events(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(
+            reviews,
+        )));
 
         // Verify MainView now has the first review selected
         if let Some(main_view) = app.view_stack.get_mut(0) {
@@ -369,8 +373,10 @@ mod tests {
             }
         }
 
-        // Call handle_app_events with ReviewsLoaded event
-        app.handle_app_events(&AppEvent::ReviewsLoaded(reviews));
+        // Call handle_app_events with ReviewsLoadingState::Loaded event
+        app.handle_app_events(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(
+            reviews,
+        )));
 
         // Verify MainView now has the first review selected (all views should have received the event)
         if let Some(main_view) = app.view_stack.get_mut(0) {
@@ -403,7 +409,9 @@ mod tests {
         assert_eq!(app.view_stack[2].view_type(), ViewType::ConfirmationDialog);
 
         // Call handle_app_events
-        app.handle_app_events(&AppEvent::ReviewsLoaded(vec![]));
+        app.handle_app_events(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(
+            vec![],
+        )));
 
         // Verify view stack order is preserved
         assert_eq!(app.view_stack.len(), 3);

@@ -4,7 +4,10 @@ use ratatui::crossterm::event::Event as CrosstermEvent;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
-use crate::{models::Review, services::ReviewCreateData};
+use crate::{
+    models::Review,
+    services::{ReviewCreateData, ReviewsLoadingState},
+};
 
 /// The frequency at which tick events are emitted.
 const TICK_FPS: f64 = 30.0;
@@ -42,10 +45,16 @@ pub enum AppEvent {
     ReviewsLoad,
     /// Load the reviews from the database
     ReviewsLoading,
-    /// Reviews have been loaded from the database
-    ReviewsLoaded(Vec<Review>),
-    /// Error occurred while loading reviews
-    ReviewsLoadingError(String),
+    /// Propagates the current loading state of reviews.
+    ReviewsLoadingState(ReviewsLoadingState),
+    /// Inform that a review has been created.
+    ReviewCreated(Review),
+    /// Error occurred while creating a review.
+    ReviewCreatedError(String),
+    /// Inform that a review has been deleted.
+    ReviewDeleted,
+    /// Error occurred while deleting a review.
+    ReviewDeletedError(String),
 
     /// Open the review creation view.
     ReviewCreateOpen,

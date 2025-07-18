@@ -44,6 +44,18 @@ impl ViewHandler for ReviewCreateView {
         Ok(())
     }
 
+    fn handle_app_events(&mut self, app: &mut App, event: &AppEvent) {
+        match event {
+            AppEvent::ReviewCreated(_review) => {
+                app.events.send(AppEvent::ViewClose);
+            }
+            AppEvent::ReviewCreatedError(_error) => {
+                app.events.send(AppEvent::ViewClose);
+            }
+            _ => {}
+        }
+    }
+
     fn render(&self, _app: &App, area: Rect, buf: &mut Buffer) {
         let popup_area = centered_rect(60, 40, area);
 
