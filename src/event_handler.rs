@@ -32,9 +32,6 @@ impl EventProcessor {
                         Self::review_delete_confirm(app, review_id)
                     }
                     AppEvent::ReviewDeleteCancel => Self::review_delete_cancel(app),
-                    AppEvent::ReviewDelete(review_id) => {
-                        Self::review_delete(app, review_id).await?
-                    }
                     _ => {
                         // Other events are handled by services or views
                     }
@@ -81,14 +78,6 @@ impl EventProcessor {
     /// Cancel review deletion
     fn review_delete_cancel(app: &mut App) {
         app.pop_view();
-    }
-
-    /// Delete the selected review
-    async fn review_delete(app: &mut App, review_id: String) -> color_eyre::Result<()> {
-        let reviews = ReviewService::delete_review_by_id(&app.database, &review_id).await?;
-        app.events.send(AppEvent::ReviewsLoaded(reviews));
-        app.pop_view();
-        Ok(())
     }
 }
 
@@ -263,78 +252,5 @@ mod tests {
         // Should have closed the confirmation dialog
         assert_eq!(app.view_stack.len(), 1);
         assert_eq!(app.view_stack.last().unwrap().view_type(), ViewType::Main);
-    }
-
-    #[tokio::test]
-    async fn test_process_review_delete_event() {
-        let mut app = create_test_app().await;
-
-        // Create two reviews
-        let review1 = Review::new("Review 1".to_string());
-        let review2 = Review::new("Review 2".to_string());
-        review1.save(app.database.pool()).await.unwrap();
-        review2.save(app.database.pool()).await.unwrap();
-
-        // Load reviews (they will be ordered by created_at DESC)
-        let reviews = Review::list_all(app.database.pool()).await.unwrap();
-        let review_id_to_delete = reviews[0].id.clone();
-
-        // Simulate having a confirmation dialog open
-        let confirmation_dialog = crate::views::confirmation_dialog::ConfirmationDialogView::new(
-            "Test".to_string(),
-            AppEvent::ReviewDelete(review_id_to_delete.clone()),
-            AppEvent::ReviewDeleteCancel,
-        );
-        app.push_view(Box::new(confirmation_dialog));
-
-        assert_eq!(app.view_stack.len(), 2);
-
-        EventProcessor::process_event(
-            &mut app,
-            Event::App(AppEvent::ReviewDelete(review_id_to_delete.clone())),
-        )
-        .await
-        .unwrap();
-
-        // Should have sent a ReviewsLoaded event and closed the dialog
-        assert!(app.events.has_pending_events());
-        let event = app.events.try_recv().unwrap();
-        if let Event::App(AppEvent::ReviewsLoaded(reviews)) = event {
-            assert_eq!(reviews.len(), 1);
-        } else {
-            panic!("Expected ReviewsLoaded event");
-        }
-        assert_eq!(app.view_stack.len(), 1);
-        assert_eq!(app.view_stack.last().unwrap().view_type(), ViewType::Main);
-
-        // Review should be deleted successfully
-        let reviews = Review::list_all(app.database.pool()).await.unwrap();
-        // Ensure the deleted review is not in the list
-        assert!(!reviews.iter().any(|r| r.id == review_id_to_delete));
-    }
-
-    #[tokio::test]
-    async fn test_process_review_delete_event_no_selection() {
-        let mut app = create_test_app().await;
-
-        // Create a review but don't select it
-        let review = Review::new("Test Review".to_string());
-        review.save(app.database.pool()).await.unwrap();
-
-        EventProcessor::process_event(
-            &mut app,
-            Event::App(AppEvent::ReviewDelete("test-id".to_string())),
-        )
-        .await
-        .unwrap();
-
-        // Should have sent a ReviewsLoaded event (since delete always sends event)
-        assert!(app.events.has_pending_events());
-        let event = app.events.try_recv().unwrap();
-        if let Event::App(AppEvent::ReviewsLoaded(reviews)) = event {
-            assert_eq!(reviews.len(), 1); // Should still have 1 review since ID didn't match
-        } else {
-            panic!("Expected ReviewsLoaded event");
-        }
     }
 }

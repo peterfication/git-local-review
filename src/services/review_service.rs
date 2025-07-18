@@ -115,6 +115,21 @@ impl ServiceHandler for ReviewService {
                     }
                 }
             }
+            AppEvent::ReviewDelete(review_id) => {
+                // Handle review deletion
+                match Self::delete_review_by_id(database, review_id).await {
+                    Ok(reviews) => {
+                        events.send(AppEvent::ReviewsLoaded(reviews));
+                        // Close the confirmation dialog by popping the view
+                        events.send(AppEvent::ReviewDeleteCancel);
+                    }
+                    Err(e) => {
+                        log::error!("Failed to delete review: {e}");
+                        // Even on error, we should close the dialog
+                        events.send(AppEvent::ReviewDeleteCancel);
+                    }
+                }
+            }
             _ => {
                 // Other events are not handled by ReviewService
             }
@@ -412,6 +427,92 @@ mod tests {
         // Second event should be ReviewCreateClose
         let event2 = events.try_recv().unwrap();
         assert!(matches!(event2, Event::App(AppEvent::ReviewCreateClose)));
+
+        // No more events should be pending
+        assert!(!events.has_pending_events());
+    }
+
+    #[tokio::test]
+    async fn test_handle_app_event_review_delete() {
+        let database = create_test_database().await;
+        let mut events = EventHandler::new_for_test();
+
+        // Create two reviews
+        let review1 = Review::new("Review 1".to_string());
+        let review2 = Review::new("Review 2".to_string());
+        review1.save(database.pool()).await.unwrap();
+        review2.save(database.pool()).await.unwrap();
+
+        // Load reviews to get IDs (they will be ordered by created_at DESC)
+        let reviews = Review::list_all(database.pool()).await.unwrap();
+        let review_id_to_delete = reviews[0].id.clone();
+
+        // Test review deletion
+        ReviewService::handle_app_event(
+            &AppEvent::ReviewDelete(review_id_to_delete.clone()),
+            &database,
+            &mut events,
+        )
+        .await
+        .unwrap();
+
+        // Should have sent ReviewsLoaded and ReviewDeleteCancel events
+        assert!(events.has_pending_events());
+
+        // First event should be ReviewsLoaded with one less review
+        let event1 = events.try_recv().unwrap();
+        if let Event::App(AppEvent::ReviewsLoaded(reviews)) = event1 {
+            assert_eq!(reviews.len(), 1);
+            assert_eq!(reviews[0].title, "Review 1");
+        } else {
+            panic!("Expected ReviewsLoaded event, got: {event1:?}");
+        }
+
+        // Second event should be ReviewDeleteCancel (to close the dialog)
+        let event2 = events.try_recv().unwrap();
+        assert!(matches!(event2, Event::App(AppEvent::ReviewDeleteCancel)));
+
+        // No more events should be pending
+        assert!(!events.has_pending_events());
+
+        // Review should be deleted from database
+        let reviews = Review::list_all(database.pool()).await.unwrap();
+        assert!(!reviews.iter().any(|r| r.id == review_id_to_delete));
+    }
+
+    #[tokio::test]
+    async fn test_handle_app_event_review_delete_non_existing_id() {
+        let database = create_test_database().await;
+        let mut events = EventHandler::new_for_test();
+
+        // Create a review but try to delete with non-existent ID
+        let review = Review::new("Test Review".to_string());
+        review.save(database.pool()).await.unwrap();
+
+        // Test deletion with non-existent ID
+        ReviewService::handle_app_event(
+            &AppEvent::ReviewDelete("non-existent-id".to_string()),
+            &database,
+            &mut events,
+        )
+        .await
+        .unwrap();
+
+        // Should have sent ReviewsLoaded and ReviewDeleteCancel events
+        assert!(events.has_pending_events());
+
+        // First event should be ReviewsLoaded with original review still there
+        let event1 = events.try_recv().unwrap();
+        if let Event::App(AppEvent::ReviewsLoaded(reviews)) = event1 {
+            assert_eq!(reviews.len(), 1);
+            assert_eq!(reviews[0].title, "Test Review");
+        } else {
+            panic!("Expected ReviewsLoaded event, got: {event1:?}");
+        }
+
+        // Second event should be ReviewDeleteCancel (to close the dialog)
+        let event2 = events.try_recv().unwrap();
+        assert!(matches!(event2, Event::App(AppEvent::ReviewDeleteCancel)));
 
         // No more events should be pending
         assert!(!events.has_pending_events());
