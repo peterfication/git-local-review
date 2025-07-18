@@ -138,7 +138,7 @@ mod tests {
         let view = ConfirmationDialogView::new(
             "Do you want to delete this review?".to_string(),
             AppEvent::Quit,
-            AppEvent::ReviewCreateClose,
+            AppEvent::ViewClose,
         );
         assert_eq!(view.message, "Do you want to delete this review?");
     }
@@ -149,7 +149,7 @@ mod tests {
         let mut view = ConfirmationDialogView::new(
             "Test message".to_string(),
             AppEvent::Quit,
-            AppEvent::ReviewCreateClose,
+            AppEvent::ViewClose,
         );
         assert!(!app.events.has_pending_events());
 
@@ -173,7 +173,7 @@ mod tests {
         let mut view = ConfirmationDialogView::new(
             "Test message".to_string(),
             AppEvent::Quit,
-            AppEvent::ReviewCreateClose,
+            AppEvent::ViewClose,
         );
         assert!(!app.events.has_pending_events());
 
@@ -197,7 +197,7 @@ mod tests {
         let mut view = ConfirmationDialogView::new(
             "Test message".to_string(),
             AppEvent::Quit,
-            AppEvent::ReviewCreateClose,
+            AppEvent::ViewClose,
         );
         assert!(!app.events.has_pending_events());
 
@@ -221,7 +221,7 @@ mod tests {
         let mut view = ConfirmationDialogView::new(
             "Test message".to_string(),
             AppEvent::Quit,
-            AppEvent::ReviewCreateClose,
+            AppEvent::ViewClose,
         );
         assert!(!app.events.has_pending_events());
 
@@ -236,7 +236,7 @@ mod tests {
 
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ReviewCreateClose)));
+        assert!(matches!(event, Event::App(AppEvent::ViewClose)));
     }
 
     #[tokio::test]
@@ -245,7 +245,7 @@ mod tests {
         let mut view = ConfirmationDialogView::new(
             "Test message".to_string(),
             AppEvent::Quit,
-            AppEvent::ReviewCreateClose,
+            AppEvent::ViewClose,
         );
         assert!(!app.events.has_pending_events());
 
@@ -260,7 +260,7 @@ mod tests {
 
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ReviewCreateClose)));
+        assert!(matches!(event, Event::App(AppEvent::ViewClose)));
     }
 
     #[tokio::test]
@@ -269,7 +269,7 @@ mod tests {
         let mut view = ConfirmationDialogView::new(
             "Test message".to_string(),
             AppEvent::Quit,
-            AppEvent::ReviewCreateClose,
+            AppEvent::ViewClose,
         );
         assert!(!app.events.has_pending_events());
 
@@ -284,7 +284,7 @@ mod tests {
 
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ReviewCreateClose)));
+        assert!(matches!(event, Event::App(AppEvent::ViewClose)));
     }
 
     #[tokio::test]
@@ -293,7 +293,7 @@ mod tests {
         let mut view = ConfirmationDialogView::new(
             "Test message".to_string(),
             AppEvent::Quit,
-            AppEvent::ReviewCreateClose,
+            AppEvent::ViewClose,
         );
         assert!(!app.events.has_pending_events());
 
@@ -308,7 +308,7 @@ mod tests {
 
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ReviewCreateClose)));
+        assert!(matches!(event, Event::App(AppEvent::ViewClose)));
     }
 
     #[tokio::test]
@@ -317,7 +317,7 @@ mod tests {
         let mut view = ConfirmationDialogView::new(
             "Test message".to_string(),
             AppEvent::Quit,
-            AppEvent::ReviewCreateClose,
+            AppEvent::ViewClose,
         );
         assert!(!app.events.has_pending_events());
 
@@ -332,7 +332,7 @@ mod tests {
 
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ReviewCreateClose)));
+        assert!(matches!(event, Event::App(AppEvent::ViewClose)));
     }
 
     #[tokio::test]
@@ -341,7 +341,7 @@ mod tests {
         let mut view = ConfirmationDialogView::new(
             "Test message".to_string(),
             AppEvent::Quit,
-            AppEvent::ReviewCreateClose,
+            AppEvent::ViewClose,
         );
         assert!(!app.events.has_pending_events());
 
@@ -363,7 +363,7 @@ mod tests {
         let view = ConfirmationDialogView::new(
             "Do you want to delete this review?".to_string(),
             AppEvent::Quit,
-            AppEvent::ReviewCreateClose,
+            AppEvent::ViewClose,
         );
         let app = App {
             view_stack: vec![Box::new(view)],

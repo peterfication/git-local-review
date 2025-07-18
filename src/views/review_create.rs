@@ -24,10 +24,7 @@ impl ViewHandler for ReviewCreateView {
 
     fn handle_key_events(&mut self, app: &mut App, key_event: KeyEvent) -> color_eyre::Result<()> {
         match key_event.code {
-            KeyCode::Esc => {
-                self.title_input.clear();
-                app.events.send(AppEvent::ReviewCreateClose);
-            }
+            KeyCode::Esc => self.close_view(app),
             KeyCode::Enter => {
                 app.events
                     .send(AppEvent::ReviewCreateSubmit(ReviewCreateData {
@@ -94,6 +91,13 @@ impl ViewHandler for ReviewCreateView {
     #[cfg(test)]
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+}
+
+impl ReviewCreateView {
+    fn close_view(&mut self, app: &mut App) {
+        self.title_input.clear();
+        app.events.send(AppEvent::ViewClose);
     }
 }
 
@@ -244,7 +248,7 @@ mod tests {
         // Verify that a ReviewCreateClose event was sent
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ReviewCreateClose)));
+        assert!(matches!(event, Event::App(AppEvent::ViewClose)));
     }
 
     #[tokio::test]

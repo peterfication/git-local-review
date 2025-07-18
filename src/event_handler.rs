@@ -26,8 +26,8 @@ impl EventProcessor {
                 // Finally handle app events globally
                 match app_event {
                     AppEvent::Quit => app.quit(),
+                    AppEvent::ViewClose => app.pop_view(),
                     AppEvent::ReviewCreateOpen => Self::review_create_open(app),
-                    AppEvent::ReviewCreateClose => Self::review_create_close(app),
                     AppEvent::ReviewDeleteConfirm(review_id) => {
                         Self::review_delete_confirm(app, review_id)
                     }
@@ -54,11 +54,6 @@ impl EventProcessor {
     /// Open the review creation view
     fn review_create_open(app: &mut App) {
         app.push_view(Box::new(ReviewCreateView::default()));
-    }
-
-    /// Close the review creation view
-    fn review_create_close(app: &mut App) {
-        app.pop_view();
     }
 
     /// Open delete confirmation dialog
@@ -134,7 +129,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_process_review_create_close_event() {
+    async fn test_process_view_close_event() {
         let mut app = create_test_app().await;
 
         // First open a review create view
@@ -144,7 +139,7 @@ mod tests {
         assert_eq!(app.view_stack.len(), 2);
 
         // Then close it
-        EventProcessor::process_event(&mut app, Event::App(AppEvent::ReviewCreateClose))
+        EventProcessor::process_event(&mut app, Event::App(AppEvent::ViewClose))
             .await
             .unwrap();
 

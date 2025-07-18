@@ -105,13 +105,13 @@ impl ServiceHandler for ReviewService {
                 match Self::create_review(database, data.clone()).await {
                     Ok(reviews) => {
                         events.send(AppEvent::ReviewsLoaded(reviews));
-                        events.send(AppEvent::ReviewCreateClose);
+                        events.send(AppEvent::ViewClose);
                     }
                     Err(e) => {
                         log::error!("Failed to create review: {e}");
                         // For now, we'll still close the dialog even on error
                         // In the future, we might want to show an error message
-                        events.send(AppEvent::ReviewCreateClose);
+                        events.send(AppEvent::ViewClose);
                     }
                 }
             }
@@ -378,7 +378,7 @@ mod tests {
         .await
         .unwrap();
 
-        // Should have sent ReviewsLoaded and ReviewCreateClose events
+        // Should have sent ReviewsLoaded and ViewClose events
         assert!(events.has_pending_events());
 
         // First event should be ReviewsLoaded with the new review
@@ -390,9 +390,9 @@ mod tests {
             panic!("Expected ReviewsLoaded event, got: {event1:?}");
         }
 
-        // Second event should be ReviewCreateClose
+        // Second event should be ViewClose
         let event2 = events.try_recv().unwrap();
-        assert!(matches!(event2, Event::App(AppEvent::ReviewCreateClose)));
+        assert!(matches!(event2, Event::App(AppEvent::ViewClose)));
     }
 
     #[tokio::test]
@@ -413,7 +413,7 @@ mod tests {
         .await
         .unwrap();
 
-        // Should have sent ReviewsLoaded and ReviewCreateClose events
+        // Should have sent ReviewsLoaded and ViewClose events
         assert!(events.has_pending_events());
 
         // First event should be ReviewsLoaded with empty list (no review created)
@@ -424,9 +424,9 @@ mod tests {
             panic!("Expected ReviewsLoaded event, got: {event1:?}");
         }
 
-        // Second event should be ReviewCreateClose
+        // Second event should be ViewClose
         let event2 = events.try_recv().unwrap();
-        assert!(matches!(event2, Event::App(AppEvent::ReviewCreateClose)));
+        assert!(matches!(event2, Event::App(AppEvent::ViewClose)));
 
         // No more events should be pending
         assert!(!events.has_pending_events());

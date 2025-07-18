@@ -34,6 +34,8 @@ pub enum Event {
 pub enum AppEvent {
     /// Quit the application.
     Quit,
+    /// Close the current view.
+    ViewClose,
 
     /// Trigger loading of reviews.
     ReviewsLoad,
@@ -46,8 +48,6 @@ pub enum AppEvent {
 
     /// Open the review creation view.
     ReviewCreateOpen,
-    /// Close the review creation view.
-    ReviewCreateClose,
     /// Submit the review creation form.
     ReviewCreateSubmit(ReviewCreateData),
 

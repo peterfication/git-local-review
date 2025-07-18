@@ -246,13 +246,13 @@ mod tests {
 
         app.handle_key_events(key_event).unwrap();
 
-        // The ReviewCreateView (top of stack) should have received the key event and sent a ReviewCreateClose event
-        // The view stack should remain the same since we only sent the event to the view
-        // The actual view closing would happen through the event system
+        // The ReviewCreateView (top of stack) should have received the key event and sent a
+        // ViewClose event The view stack should remain the same since we only sent the event
+        // to the view The actual view closing would happen through the event system
         assert_eq!(app.view_stack.len(), 2);
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ReviewCreateClose)));
+        assert!(matches!(event, Event::App(AppEvent::ViewClose)));
     }
 
     #[tokio::test]
@@ -389,7 +389,7 @@ mod tests {
         let confirmation_dialog = crate::views::confirmation_dialog::ConfirmationDialogView::new(
             "Test message".to_string(),
             AppEvent::Quit,
-            AppEvent::ReviewCreateClose,
+            AppEvent::ViewClose,
         );
         app.push_view(Box::new(confirmation_dialog));
 
