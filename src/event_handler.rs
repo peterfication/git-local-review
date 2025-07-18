@@ -1,6 +1,6 @@
 use crate::app::App;
 use crate::event::{AppEvent, Event};
-use crate::services::{ReviewCreateData, ReviewService, ServiceHandler};
+use crate::services::{ReviewService, ServiceHandler};
 use crate::views::{confirmation_dialog::ConfirmationDialogView, review_create::ReviewCreateView};
 
 pub struct EventProcessor;
@@ -28,9 +28,6 @@ impl EventProcessor {
                     AppEvent::Quit => app.quit(),
                     AppEvent::ReviewCreateOpen => Self::review_create_open(app),
                     AppEvent::ReviewCreateClose => Self::review_create_close(app),
-                    AppEvent::ReviewCreateSubmit(data) => {
-                        Self::review_create_submit(app, data).await?
-                    }
                     AppEvent::ReviewDeleteConfirm(review_id) => {
                         Self::review_delete_confirm(app, review_id)
                     }
@@ -65,14 +62,6 @@ impl EventProcessor {
     /// Close the review creation view
     fn review_create_close(app: &mut App) {
         app.pop_view();
-    }
-
-    /// Submit the review creation form
-    async fn review_create_submit(app: &mut App, data: ReviewCreateData) -> color_eyre::Result<()> {
-        let reviews = ReviewService::create_review(&app.database, data).await?;
-        app.events.send(AppEvent::ReviewsLoaded(reviews));
-        Self::review_create_close(app);
-        Ok(())
     }
 
     /// Open delete confirmation dialog
@@ -172,61 +161,6 @@ mod tests {
 
         assert_eq!(app.view_stack.len(), 1);
         assert_eq!(app.view_stack.last().unwrap().view_type(), ViewType::Main);
-    }
-
-    #[tokio::test]
-    async fn test_process_review_create_submit_event() {
-        let mut app = create_test_app().await;
-
-        // Open review create view first
-        EventProcessor::process_event(&mut app, Event::App(AppEvent::ReviewCreateOpen))
-            .await
-            .unwrap();
-        assert_eq!(app.view_stack.len(), 2);
-
-        let data = crate::services::review_service::ReviewCreateData {
-            title: "Test Review".to_string(),
-        };
-
-        EventProcessor::process_event(&mut app, Event::App(AppEvent::ReviewCreateSubmit(data)))
-            .await
-            .unwrap();
-
-        // Should have sent a ReviewsLoaded event
-        assert!(app.events.has_pending_events());
-        let event = app.events.try_recv().unwrap();
-        if let Event::App(AppEvent::ReviewsLoaded(reviews)) = event {
-            assert_eq!(reviews.len(), 1);
-            assert_eq!(reviews[0].title, "Test Review");
-        } else {
-            panic!("Expected ReviewsLoaded event");
-        }
-
-        // Should have closed the view
-        assert_eq!(app.view_stack.len(), 1);
-        assert_eq!(app.view_stack.last().unwrap().view_type(), ViewType::Main);
-    }
-
-    #[tokio::test]
-    async fn test_process_review_create_submit_empty_title() {
-        let mut app = create_test_app().await;
-
-        let data = crate::services::review_service::ReviewCreateData {
-            title: "".to_string(),
-        };
-
-        EventProcessor::process_event(&mut app, Event::App(AppEvent::ReviewCreateSubmit(data)))
-            .await
-            .unwrap();
-
-        // Should have sent a ReviewsLoaded event with empty list
-        assert!(app.events.has_pending_events());
-        let event = app.events.try_recv().unwrap();
-        if let Event::App(AppEvent::ReviewsLoaded(reviews)) = event {
-            assert_eq!(reviews.len(), 0);
-        } else {
-            panic!("Expected ReviewsLoaded event");
-        }
     }
 
     #[tokio::test]
