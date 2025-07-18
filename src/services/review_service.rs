@@ -76,6 +76,59 @@ impl ReviewService {
         let reviews = Review::list_all(database.pool()).await.unwrap_or_default();
         Ok(reviews)
     }
+
+    /// Send loading event to start the actual loading process
+    fn handle_reviews_load(events: &mut EventHandler) {
+        events.send(AppEvent::ReviewsLoading);
+    }
+
+    /// Actually load reviews from database
+    async fn handle_reviews_loaded(database: &Database, events: &mut EventHandler) {
+        match Self::list_reviews(database).await {
+            Ok(reviews) => {
+                events.send(AppEvent::ReviewsLoaded(reviews));
+            }
+            Err(e) => {
+                events.send(AppEvent::ReviewsLoadingError(e.to_string()));
+            }
+        }
+    }
+
+    /// Handle review creation submission
+    async fn handle_review_create_submit(
+        data: &ReviewCreateData,
+        database: &Database,
+        events: &mut EventHandler,
+    ) {
+        match Self::create_review(database, data.clone()).await {
+            Ok(reviews) => {
+                events.send(AppEvent::ReviewsLoaded(reviews));
+                events.send(AppEvent::ViewClose);
+            }
+            Err(e) => {
+                log::error!("Failed to create review: {e}");
+                // For now, we'll still close the dialog even on error
+                // In the future, we might want to show an error message
+                events.send(AppEvent::ViewClose);
+            }
+        }
+    }
+
+    /// Handle review deletion
+    async fn handle_review_delete(review_id: &str, database: &Database, events: &mut EventHandler) {
+        match Self::delete_review_by_id(database, review_id).await {
+            Ok(reviews) => {
+                events.send(AppEvent::ReviewsLoaded(reviews));
+                // Close the confirmation dialog by popping the view
+                events.send(AppEvent::ViewClose);
+            }
+            Err(e) => {
+                log::error!("Failed to delete review: {e}");
+                // Even on error, we should close the dialog
+                events.send(AppEvent::ViewClose);
+            }
+        }
+    }
 }
 
 impl ServiceHandler for ReviewService {
@@ -85,50 +138,13 @@ impl ServiceHandler for ReviewService {
         events: &mut EventHandler,
     ) -> color_eyre::Result<()> {
         match event {
-            AppEvent::ReviewsLoad => {
-                // Send loading event to start the actual loading process
-                events.send(AppEvent::ReviewsLoading);
-            }
-            AppEvent::ReviewsLoading => {
-                // Actually load reviews from database
-                match Self::list_reviews(database).await {
-                    Ok(reviews) => {
-                        events.send(AppEvent::ReviewsLoaded(reviews));
-                    }
-                    Err(e) => {
-                        events.send(AppEvent::ReviewsLoadingError(e.to_string()));
-                    }
-                }
-            }
+            AppEvent::ReviewsLoad => Self::handle_reviews_load(events),
+            AppEvent::ReviewsLoading => Self::handle_reviews_loaded(database, events).await,
             AppEvent::ReviewCreateSubmit(data) => {
-                // Handle review creation submission
-                match Self::create_review(database, data.clone()).await {
-                    Ok(reviews) => {
-                        events.send(AppEvent::ReviewsLoaded(reviews));
-                        events.send(AppEvent::ViewClose);
-                    }
-                    Err(e) => {
-                        log::error!("Failed to create review: {e}");
-                        // For now, we'll still close the dialog even on error
-                        // In the future, we might want to show an error message
-                        events.send(AppEvent::ViewClose);
-                    }
-                }
+                Self::handle_review_create_submit(data, database, events).await
             }
             AppEvent::ReviewDelete(review_id) => {
-                // Handle review deletion
-                match Self::delete_review_by_id(database, review_id).await {
-                    Ok(reviews) => {
-                        events.send(AppEvent::ReviewsLoaded(reviews));
-                        // Close the confirmation dialog by popping the view
-                        events.send(AppEvent::ViewClose);
-                    }
-                    Err(e) => {
-                        log::error!("Failed to delete review: {e}");
-                        // Even on error, we should close the dialog
-                        events.send(AppEvent::ViewClose);
-                    }
-                }
+                Self::handle_review_delete(review_id, database, events).await
             }
             _ => {
                 // Other events are not handled by ReviewService
