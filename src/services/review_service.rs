@@ -38,21 +38,22 @@ impl ReviewService {
     pub fn new() -> Self {
         Self {}
     }
-    /// Create a new review and return the updated reviews list
+    /// Create a new review and trigger reviews reload
     pub async fn create_review(
         database: &Database,
         data: ReviewCreateData,
-    ) -> color_eyre::Result<Vec<Review>> {
+        events: &mut EventHandler,
+    ) -> color_eyre::Result<()> {
         if !data.title.trim().is_empty() {
             let review = Review::new(data.title.trim().to_string());
             review.save(database.pool()).await?;
             log::info!("Created review: {}", review.title);
         }
 
-        // Return updated reviews list
-        let reviews = Review::list_all(database.pool()).await.unwrap_or_default();
+        // Trigger reviews reload
+        events.send(AppEvent::ReviewsLoad);
 
-        Ok(reviews)
+        Ok(())
     }
 
     /// List all reviews
@@ -64,11 +65,12 @@ impl ReviewService {
         Ok(reviews)
     }
 
-    /// Delete a review by ID and return the updated reviews list
+    /// Delete a review by ID and trigger reviews reload
     pub async fn delete_review_by_id(
         database: &Database,
         review_id: &str,
-    ) -> color_eyre::Result<Vec<Review>> {
+        events: &mut EventHandler,
+    ) -> color_eyre::Result<()> {
         // Find the review by ID
         let reviews = Review::list_all(database.pool()).await.unwrap_or_default();
         if let Some(review_to_delete) = reviews.iter().find(|r| r.id == review_id) {
@@ -76,9 +78,10 @@ impl ReviewService {
             log::info!("Deleted review: {}", review_to_delete.title);
         }
 
-        // Return updated reviews list
-        let reviews = Review::list_all(database.pool()).await.unwrap_or_default();
-        Ok(reviews)
+        // Trigger reviews reload
+        events.send(AppEvent::ReviewsLoad);
+
+        Ok(())
     }
 
     /// Send loading event to start the actual loading process
@@ -104,9 +107,8 @@ impl ReviewService {
         database: &Database,
         events: &mut EventHandler,
     ) {
-        match Self::create_review(database, data.clone()).await {
-            Ok(reviews) => {
-                events.send(AppEvent::ReviewsLoaded(reviews));
+        match Self::create_review(database, data.clone(), events).await {
+            Ok(()) => {
                 events.send(AppEvent::ViewClose);
             }
             Err(e) => {
@@ -120,9 +122,8 @@ impl ReviewService {
 
     /// Handle review deletion
     async fn handle_review_delete(review_id: &str, database: &Database, events: &mut EventHandler) {
-        match Self::delete_review_by_id(database, review_id).await {
-            Ok(reviews) => {
-                events.send(AppEvent::ReviewsLoaded(reviews));
+        match Self::delete_review_by_id(database, review_id, events).await {
+            Ok(()) => {
                 // Close the confirmation dialog by popping the view
                 events.send(AppEvent::ViewClose);
             }
@@ -175,12 +176,20 @@ mod tests {
     #[tokio::test]
     async fn test_create_review_with_valid_title() {
         let database = create_test_database().await;
+        let mut events = EventHandler::new_for_test();
         let data = ReviewCreateData {
             title: "Test Review".to_string(),
         };
 
-        let reviews = ReviewService::create_review(&database, data).await.unwrap();
+        ReviewService::create_review(&database, data, &mut events).await.unwrap();
 
+        // Should have triggered ReviewsLoad event
+        assert!(events.has_pending_events());
+        let event = events.try_recv().unwrap();
+        assert!(matches!(event, Event::App(AppEvent::ReviewsLoad)));
+
+        // Verify the review was actually created
+        let reviews = Review::list_all(database.pool()).await.unwrap();
         assert_eq!(reviews.len(), 1);
         assert_eq!(reviews[0].title, "Test Review");
     }
@@ -188,36 +197,60 @@ mod tests {
     #[tokio::test]
     async fn test_create_review_with_empty_title() {
         let database = create_test_database().await;
+        let mut events = EventHandler::new_for_test();
         let data = ReviewCreateData {
             title: "".to_string(),
         };
 
-        let reviews = ReviewService::create_review(&database, data).await.unwrap();
+        ReviewService::create_review(&database, data, &mut events).await.unwrap();
 
+        // Should have triggered ReviewsLoad event
+        assert!(events.has_pending_events());
+        let event = events.try_recv().unwrap();
+        assert!(matches!(event, Event::App(AppEvent::ReviewsLoad)));
+
+        // Verify no review was created
+        let reviews = Review::list_all(database.pool()).await.unwrap();
         assert_eq!(reviews.len(), 0);
     }
 
     #[tokio::test]
     async fn test_create_review_with_whitespace_title() {
         let database = create_test_database().await;
+        let mut events = EventHandler::new_for_test();
         let data = ReviewCreateData {
             title: "   ".to_string(),
         };
 
-        let reviews = ReviewService::create_review(&database, data).await.unwrap();
+        ReviewService::create_review(&database, data, &mut events).await.unwrap();
 
+        // Should have triggered ReviewsLoad event
+        assert!(events.has_pending_events());
+        let event = events.try_recv().unwrap();
+        assert!(matches!(event, Event::App(AppEvent::ReviewsLoad)));
+
+        // Verify no review was created
+        let reviews = Review::list_all(database.pool()).await.unwrap();
         assert_eq!(reviews.len(), 0);
     }
 
     #[tokio::test]
     async fn test_create_review_trims_whitespace() {
         let database = create_test_database().await;
+        let mut events = EventHandler::new_for_test();
         let data = ReviewCreateData {
             title: "  Test Review  ".to_string(),
         };
 
-        let reviews = ReviewService::create_review(&database, data).await.unwrap();
+        ReviewService::create_review(&database, data, &mut events).await.unwrap();
 
+        // Should have triggered ReviewsLoad event
+        assert!(events.has_pending_events());
+        let event = events.try_recv().unwrap();
+        assert!(matches!(event, Event::App(AppEvent::ReviewsLoad)));
+
+        // Verify the review was created with trimmed title
+        let reviews = Review::list_all(database.pool()).await.unwrap();
         assert_eq!(reviews.len(), 1);
         assert_eq!(reviews[0].title, "Test Review");
     }
@@ -236,6 +269,7 @@ mod tests {
         let database = create_test_database().await;
 
         // Create some reviews
+        let mut events = EventHandler::new_for_test();
         let data1 = ReviewCreateData {
             title: "Review 1".to_string(),
         };
@@ -243,10 +277,10 @@ mod tests {
             title: "Review 2".to_string(),
         };
 
-        ReviewService::create_review(&database, data1)
+        ReviewService::create_review(&database, data1, &mut events)
             .await
             .unwrap();
-        ReviewService::create_review(&database, data2)
+        ReviewService::create_review(&database, data2, &mut events)
             .await
             .unwrap();
 
@@ -263,6 +297,7 @@ mod tests {
         let database = create_test_database().await;
 
         // Create some reviews
+        let mut events = EventHandler::new_for_test();
         let data1 = ReviewCreateData {
             title: "Review 1".to_string(),
         };
@@ -270,21 +305,28 @@ mod tests {
             title: "Review 2".to_string(),
         };
 
-        ReviewService::create_review(&database, data1)
+        ReviewService::create_review(&database, data1, &mut events)
             .await
             .unwrap();
-        let reviews = ReviewService::create_review(&database, data2)
+        ReviewService::create_review(&database, data2, &mut events)
             .await
             .unwrap();
 
+        let reviews = Review::list_all(database.pool()).await.unwrap();
         assert_eq!(reviews.len(), 2);
 
         // Delete first review (which should be "Review 2" due to DESC ordering)
         let review_id_to_delete = reviews[0].id.clone();
-        let updated_reviews = ReviewService::delete_review_by_id(&database, &review_id_to_delete)
+        ReviewService::delete_review_by_id(&database, &review_id_to_delete, &mut events)
             .await
             .unwrap();
 
+        // Should have triggered ReviewsLoad event
+        let event = events.try_recv().unwrap();
+        assert!(matches!(event, Event::App(AppEvent::ReviewsLoad)));
+
+        // Verify the review was deleted
+        let updated_reviews = Review::list_all(database.pool()).await.unwrap();
         assert_eq!(updated_reviews.len(), 1);
         assert_eq!(updated_reviews[0].title, "Review 1");
     }
@@ -294,19 +336,26 @@ mod tests {
         let database = create_test_database().await;
 
         // Create one review
+        let mut events = EventHandler::new_for_test();
         let data = ReviewCreateData {
             title: "Review 1".to_string(),
         };
-        let reviews = ReviewService::create_review(&database, data).await.unwrap();
+        ReviewService::create_review(&database, data, &mut events).await.unwrap();
 
+        let reviews = Review::list_all(database.pool()).await.unwrap();
         assert_eq!(reviews.len(), 1);
 
         // Try to delete with non-existent ID
-        let updated_reviews = ReviewService::delete_review_by_id(&database, "non-existent-id")
+        ReviewService::delete_review_by_id(&database, "non-existent-id", &mut events)
             .await
             .unwrap();
 
+        // Should have triggered ReviewsLoad event
+        let event = events.try_recv().unwrap();
+        assert!(matches!(event, Event::App(AppEvent::ReviewsLoad)));
+
         // Should still have 1 review since deletion didn't happen
+        let updated_reviews = Review::list_all(database.pool()).await.unwrap();
         assert_eq!(updated_reviews.len(), 1);
         assert_eq!(updated_reviews[0].title, "Review 1");
     }
@@ -403,18 +452,18 @@ mod tests {
         // Should have sent ReviewsLoaded and ViewClose events
         assert!(events.has_pending_events());
 
-        // First event should be ReviewsLoaded with the new review
+        // First event should be ReviewsLoad (triggered by create_review)
         let event1 = events.try_recv().unwrap();
-        if let Event::App(AppEvent::ReviewsLoaded(reviews)) = event1 {
-            assert_eq!(reviews.len(), 1);
-            assert_eq!(reviews[0].title, "Created Review");
-        } else {
-            panic!("Expected ReviewsLoaded event, got: {event1:?}");
-        }
+        assert!(matches!(event1, Event::App(AppEvent::ReviewsLoad)));
 
         // Second event should be ViewClose
         let event2 = events.try_recv().unwrap();
         assert!(matches!(event2, Event::App(AppEvent::ViewClose)));
+
+        // Verify the review was created
+        let reviews = Review::list_all(database.pool()).await.unwrap();
+        assert_eq!(reviews.len(), 1);
+        assert_eq!(reviews[0].title, "Created Review");
     }
 
     #[tokio::test]
@@ -438,13 +487,9 @@ mod tests {
         // Should have sent ReviewsLoaded and ViewClose events
         assert!(events.has_pending_events());
 
-        // First event should be ReviewsLoaded with empty list (no review created)
+        // First event should be ReviewsLoad (triggered by create_review)
         let event1 = events.try_recv().unwrap();
-        if let Event::App(AppEvent::ReviewsLoaded(reviews)) = event1 {
-            assert_eq!(reviews.len(), 0);
-        } else {
-            panic!("Expected ReviewsLoaded event, got: {event1:?}");
-        }
+        assert!(matches!(event1, Event::App(AppEvent::ReviewsLoad)));
 
         // Second event should be ViewClose
         let event2 = events.try_recv().unwrap();
@@ -452,6 +497,10 @@ mod tests {
 
         // No more events should be pending
         assert!(!events.has_pending_events());
+
+        // Verify no review was created
+        let reviews = Review::list_all(database.pool()).await.unwrap();
+        assert_eq!(reviews.len(), 0);
     }
 
     #[tokio::test]
@@ -481,14 +530,9 @@ mod tests {
         // Should have sent ReviewsLoaded and ViewClose events
         assert!(events.has_pending_events());
 
-        // First event should be ReviewsLoaded with one less review
+        // First event should be ReviewsLoad (triggered by delete_review_by_id)
         let event1 = events.try_recv().unwrap();
-        if let Event::App(AppEvent::ReviewsLoaded(reviews)) = event1 {
-            assert_eq!(reviews.len(), 1);
-            assert_eq!(reviews[0].title, "Review 1");
-        } else {
-            panic!("Expected ReviewsLoaded event, got: {event1:?}");
-        }
+        assert!(matches!(event1, Event::App(AppEvent::ReviewsLoad)));
 
         // Second event should be ViewClose (to close the dialog)
         let event2 = events.try_recv().unwrap();
@@ -500,6 +544,8 @@ mod tests {
         // Review should be deleted from database
         let reviews = Review::list_all(database.pool()).await.unwrap();
         assert!(!reviews.iter().any(|r| r.id == review_id_to_delete));
+        assert_eq!(reviews.len(), 1);
+        assert_eq!(reviews[0].title, "Review 1");
     }
 
     #[tokio::test]
@@ -523,14 +569,9 @@ mod tests {
         // Should have sent ReviewsLoaded and ViewClose events
         assert!(events.has_pending_events());
 
-        // First event should be ReviewsLoaded with original review still there
+        // First event should be ReviewsLoad (triggered by delete_review_by_id)
         let event1 = events.try_recv().unwrap();
-        if let Event::App(AppEvent::ReviewsLoaded(reviews)) = event1 {
-            assert_eq!(reviews.len(), 1);
-            assert_eq!(reviews[0].title, "Test Review");
-        } else {
-            panic!("Expected ReviewsLoaded event, got: {event1:?}");
-        }
+        assert!(matches!(event1, Event::App(AppEvent::ReviewsLoad)));
 
         // Second event should be ViewClose (to close the dialog)
         let event2 = events.try_recv().unwrap();
@@ -538,6 +579,11 @@ mod tests {
 
         // No more events should be pending
         assert!(!events.has_pending_events());
+
+        // Original review should still be there
+        let reviews = Review::list_all(database.pool()).await.unwrap();
+        assert_eq!(reviews.len(), 1);
+        assert_eq!(reviews[0].title, "Test Review");
     }
 
     #[tokio::test]
