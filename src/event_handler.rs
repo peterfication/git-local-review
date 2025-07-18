@@ -27,11 +27,11 @@ impl EventProcessor {
                 match app_event {
                     AppEvent::Quit => app.quit(),
                     AppEvent::ViewClose => app.pop_view(),
+                    // Events that open views
                     AppEvent::ReviewCreateOpen => Self::review_create_open(app),
                     AppEvent::ReviewDeleteConfirm(review_id) => {
                         Self::review_delete_confirm(app, review_id)
                     }
-                    AppEvent::ReviewDeleteCancel => Self::review_delete_cancel(app),
                     _ => {
                         // Other events are handled by services or views
                     }
@@ -65,14 +65,9 @@ impl EventProcessor {
         let confirmation_dialog = ConfirmationDialogView::new(
             message,
             AppEvent::ReviewDelete(review_id),
-            AppEvent::ReviewDeleteCancel,
+            AppEvent::ViewClose,
         );
         app.push_view(Box::new(confirmation_dialog));
-    }
-
-    /// Cancel review deletion
-    fn review_delete_cancel(app: &mut App) {
-        app.pop_view();
     }
 }
 
@@ -235,12 +230,12 @@ mod tests {
         let confirmation_dialog = crate::views::confirmation_dialog::ConfirmationDialogView::new(
             "Test".to_string(),
             AppEvent::ReviewDelete("test-id".to_string()),
-            AppEvent::ReviewDeleteCancel,
+            AppEvent::ViewClose,
         );
         app.push_view(Box::new(confirmation_dialog));
         assert_eq!(app.view_stack.len(), 2);
 
-        EventProcessor::process_event(&mut app, Event::App(AppEvent::ReviewDeleteCancel))
+        EventProcessor::process_event(&mut app, Event::App(AppEvent::ViewClose))
             .await
             .unwrap();
 

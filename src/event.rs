@@ -53,8 +53,6 @@ pub enum AppEvent {
 
     /// Open delete confirmation dialog for selected review.
     ReviewDeleteConfirm(String),
-    /// Cancel review deletion.
-    ReviewDeleteCancel,
     /// Delete the selected review.
     ReviewDelete(String),
 }

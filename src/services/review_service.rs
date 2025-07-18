@@ -121,12 +121,12 @@ impl ServiceHandler for ReviewService {
                     Ok(reviews) => {
                         events.send(AppEvent::ReviewsLoaded(reviews));
                         // Close the confirmation dialog by popping the view
-                        events.send(AppEvent::ReviewDeleteCancel);
+                        events.send(AppEvent::ViewClose);
                     }
                     Err(e) => {
                         log::error!("Failed to delete review: {e}");
                         // Even on error, we should close the dialog
-                        events.send(AppEvent::ReviewDeleteCancel);
+                        events.send(AppEvent::ViewClose);
                     }
                 }
             }
@@ -456,7 +456,7 @@ mod tests {
         .await
         .unwrap();
 
-        // Should have sent ReviewsLoaded and ReviewDeleteCancel events
+        // Should have sent ReviewsLoaded and ViewClose events
         assert!(events.has_pending_events());
 
         // First event should be ReviewsLoaded with one less review
@@ -468,9 +468,9 @@ mod tests {
             panic!("Expected ReviewsLoaded event, got: {event1:?}");
         }
 
-        // Second event should be ReviewDeleteCancel (to close the dialog)
+        // Second event should be ViewClose (to close the dialog)
         let event2 = events.try_recv().unwrap();
-        assert!(matches!(event2, Event::App(AppEvent::ReviewDeleteCancel)));
+        assert!(matches!(event2, Event::App(AppEvent::ViewClose)));
 
         // No more events should be pending
         assert!(!events.has_pending_events());
@@ -498,7 +498,7 @@ mod tests {
         .await
         .unwrap();
 
-        // Should have sent ReviewsLoaded and ReviewDeleteCancel events
+        // Should have sent ReviewsLoaded and ViewClose events
         assert!(events.has_pending_events());
 
         // First event should be ReviewsLoaded with original review still there
@@ -510,9 +510,9 @@ mod tests {
             panic!("Expected ReviewsLoaded event, got: {event1:?}");
         }
 
-        // Second event should be ReviewDeleteCancel (to close the dialog)
+        // Second event should be ViewClose (to close the dialog)
         let event2 = events.try_recv().unwrap();
-        assert!(matches!(event2, Event::App(AppEvent::ReviewDeleteCancel)));
+        assert!(matches!(event2, Event::App(AppEvent::ViewClose)));
 
         // No more events should be pending
         assert!(!events.has_pending_events());
