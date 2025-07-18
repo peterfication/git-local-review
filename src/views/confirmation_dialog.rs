@@ -37,12 +37,15 @@ impl ViewHandler for ConfirmationDialogView {
         match key_event.code {
             KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
                 app.events.send(self.on_confirm_event.clone());
+                app.events.send(AppEvent::ViewClose);
             }
             KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Char('q') | KeyCode::Esc => {
                 app.events.send(self.on_cancel_event.clone());
+                app.events.send(AppEvent::ViewClose);
             }
             KeyCode::Char('c' | 'C') if key_event.modifiers == KeyModifiers::CONTROL => {
                 app.events.send(self.on_cancel_event.clone());
+                app.events.send(AppEvent::ViewClose);
             }
             _ => {}
         }

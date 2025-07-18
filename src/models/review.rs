@@ -12,6 +12,12 @@ pub struct Review {
     pub updated_at: DateTime<Utc>,
 }
 
+impl PartialEq for Review {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
 impl Review {
     pub fn new(title: String) -> Self {
         Self::new_with_time_provider(title, &SystemTimeProvider)
@@ -259,5 +265,71 @@ mod tests {
         // Verify it's gone
         let reviews = Review::list_all(&pool).await.unwrap();
         assert_eq!(reviews.len(), 0);
+    }
+
+    #[test]
+    fn test_review_eq_same_id() {
+        let time1 = fixed_time();
+        let time2 = time1 + chrono::Duration::hours(1);
+
+        let time_provider1 = MockTimeProvider::new(time1);
+        let time_provider2 = MockTimeProvider::new(time2);
+
+        let review1 = Review::new_with_time_provider("Title 1".to_string(), &time_provider1);
+        let mut review2 = Review::new_with_time_provider("Title 2".to_string(), &time_provider2);
+
+        // Make review2 have the same ID as review1
+        review2.id = review1.id.clone();
+
+        // Should be equal despite different titles and timestamps
+        assert_eq!(review1, review2);
+    }
+
+    #[test]
+    fn test_review_eq_different_id() {
+        let fixed_time = fixed_time();
+        let time_provider = MockTimeProvider::new(fixed_time);
+
+        let review1 = Review::new_with_time_provider("Same Title".to_string(), &time_provider);
+        let review2 = Review::new_with_time_provider("Same Title".to_string(), &time_provider);
+
+        // Should not be equal despite same title and timestamps because IDs are different
+        assert_ne!(review1, review2);
+    }
+
+    #[test]
+    fn test_review_eq_self() {
+        let review = Review::new("Test Review".to_string());
+
+        // Should be equal to itself
+        assert_eq!(review, review);
+    }
+
+    #[test]
+    fn test_review_eq_clone() {
+        let review1 = Review::new("Test Review".to_string());
+        let review2 = review1.clone();
+
+        // Clone should be equal to original
+        assert_eq!(review1, review2);
+    }
+
+    #[test]
+    fn test_review_eq_ignores_other_fields() {
+        let time1 = fixed_time();
+        let time2 = time1 + chrono::Duration::days(30);
+
+        let time_provider1 = MockTimeProvider::new(time1);
+
+        let review1 = Review::new_with_time_provider("Original Title".to_string(), &time_provider1);
+        let review2 = Review {
+            id: review1.id.clone(),                          // Same ID
+            title: "Completely Different Title".to_string(), // Different title
+            created_at: time2,                               // Different created_at
+            updated_at: time2,                               // Different updated_at
+        };
+
+        // Should be equal because only ID matters for equality
+        assert_eq!(review1, review2);
     }
 }

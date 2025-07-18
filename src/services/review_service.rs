@@ -19,7 +19,7 @@ pub enum ReviewsLoadingState {
     /// Currently loading reviews from database
     Loading,
     /// Reviews have been successfully loaded
-    Loaded,
+    Loaded(Vec<Review>),
     /// Error occurred during loading
     Error(String),
 }
@@ -95,16 +95,21 @@ impl ReviewService {
     /// Send loading event to start the actual loading process
     fn handle_reviews_load(events: &mut EventHandler) {
         events.send(AppEvent::ReviewsLoading);
+        events.send(AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loading));
     }
 
     /// Actually load reviews from database
     async fn handle_reviews_loading(database: &Database, events: &mut EventHandler) {
         match Self::list_reviews(database).await {
             Ok(reviews) => {
-                events.send(AppEvent::ReviewsLoaded(reviews));
+                events.send(AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(
+                    reviews,
+                )));
             }
-            Err(e) => {
-                events.send(AppEvent::ReviewsLoadingError(e.to_string()));
+            Err(error) => {
+                events.send(AppEvent::ReviewsLoadingState(ReviewsLoadingState::Error(
+                    error.to_string(),
+                )));
             }
         }
     }
@@ -116,14 +121,14 @@ impl ReviewService {
         events: &mut EventHandler,
     ) {
         match Self::create_review(database, data.clone(), events).await {
-            Ok(_) => {
-                events.send(AppEvent::ViewClose);
+            Ok(review) => {
+                events.send(AppEvent::ReviewCreated(review));
             }
             Err(error) => {
                 log::error!("Failed to create review: {error}");
                 // For now, we'll still close the dialog even on error
                 // In the future, we might want to show an error message
-                events.send(AppEvent::ViewClose);
+                events.send(AppEvent::ReviewCreatedError(error.to_string()));
             }
         }
     }
@@ -132,13 +137,11 @@ impl ReviewService {
     async fn handle_review_delete(review_id: &str, database: &Database, events: &mut EventHandler) {
         match Self::delete_review_by_id(database, review_id, events).await {
             Ok(()) => {
-                // Close the confirmation dialog by popping the view
-                events.send(AppEvent::ViewClose);
+                events.send(AppEvent::ReviewDeleted);
             }
-            Err(e) => {
-                log::error!("Failed to delete review: {e}");
-                // Even on error, we should close the dialog
-                events.send(AppEvent::ViewClose);
+            Err(error) => {
+                log::error!("Failed to delete review: {error}");
+                events.send(AppEvent::ReviewDeletedError(error.to_string()));
             }
         }
     }
@@ -400,14 +403,16 @@ mod tests {
             .await
             .unwrap();
 
-        // Should have sent a ReviewsLoaded event with the review
+        // Should have sent a ReviewsLoadingState event with the review
         assert!(events.has_pending_events());
         let event = events.try_recv().unwrap();
-        if let Event::App(AppEvent::ReviewsLoaded(reviews)) = event {
+        if let Event::App(AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(reviews))) =
+            event
+        {
             assert_eq!(reviews.len(), 1);
             assert_eq!(reviews[0].title, "Test Review");
         } else {
-            panic!("Expected ReviewsLoaded event with reviews");
+            panic!("Expected ReviewsLoadingState event with reviews");
         }
     }
 
@@ -420,13 +425,15 @@ mod tests {
             .await
             .unwrap();
 
-        // Should have sent a ReviewsLoaded event with empty list
+        // Should have sent a ReviewsLoadingState event with empty list
         assert!(events.has_pending_events());
         let event = events.try_recv().unwrap();
-        if let Event::App(AppEvent::ReviewsLoaded(reviews)) = event {
+        if let Event::App(AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(reviews))) =
+            event
+        {
             assert_eq!(reviews.len(), 0);
         } else {
-            panic!("Expected ReviewsLoaded event with empty reviews");
+            panic!("Expected ReviewsLoadingState event with empty reviews");
         }
     }
 
@@ -461,16 +468,16 @@ mod tests {
         .await
         .unwrap();
 
-        // Should have sent ReviewsLoaded and ViewClose events
+        // Should have sent ReviewsLoadingState and ViewClose events
         assert!(events.has_pending_events());
 
         // First event should be ReviewsLoad (triggered by create_review)
         let event1 = events.try_recv().unwrap();
         assert!(matches!(event1, Event::App(AppEvent::ReviewsLoad)));
 
-        // Second event should be ViewClose
+        // Second event should be ReviewCreated
         let event2 = events.try_recv().unwrap();
-        assert!(matches!(event2, Event::App(AppEvent::ViewClose)));
+        assert!(matches!(event2, Event::App(AppEvent::ReviewCreated(_))));
 
         // Verify the review was created
         let reviews = Review::list_all(database.pool()).await.unwrap();
@@ -499,9 +506,9 @@ mod tests {
         // Should have sent ViewClose event only
         assert!(events.has_pending_events());
 
-        // First event should be ViewClose
-        let event1 = events.try_recv().unwrap();
-        assert!(matches!(event1, Event::App(AppEvent::ViewClose)));
+        // First event should be ReviewCreatedError
+        let event = events.try_recv().unwrap();
+        assert!(matches!(event, Event::App(AppEvent::ReviewCreatedError(_))));
 
         // No more events should be pending
         assert!(!events.has_pending_events());
@@ -535,16 +542,16 @@ mod tests {
         .await
         .unwrap();
 
-        // Should have sent ReviewsLoaded and ViewClose events
+        // Should have sent ReviewsLoadingState and ViewClose events
         assert!(events.has_pending_events());
 
         // First event should be ReviewsLoad (triggered by delete_review_by_id)
         let event1 = events.try_recv().unwrap();
         assert!(matches!(event1, Event::App(AppEvent::ReviewsLoad)));
 
-        // Second event should be ViewClose (to close the dialog)
+        // Second event should be ReviewDeleted
         let event2 = events.try_recv().unwrap();
-        assert!(matches!(event2, Event::App(AppEvent::ViewClose)));
+        assert!(matches!(event2, Event::App(AppEvent::ReviewDeleted)));
 
         // No more events should be pending
         assert!(!events.has_pending_events());
@@ -574,12 +581,12 @@ mod tests {
         .await
         .unwrap();
 
-        // Should have sent ReviewsLoaded and ViewClose events
+        // Should have sent ReviewsLoadingState and ViewClose events
         assert!(events.has_pending_events());
 
         // Event should be ViewClose (to close the dialog)
         let event1 = events.try_recv().unwrap();
-        assert!(matches!(event1, Event::App(AppEvent::ViewClose)));
+        assert!(matches!(event1, Event::App(AppEvent::ReviewDeleted)));
 
         // No more events should be pending
         assert!(!events.has_pending_events());
@@ -608,7 +615,7 @@ mod tests {
         let event = events.try_recv().unwrap();
         assert!(matches!(
             event,
-            Event::App(AppEvent::ReviewsLoadingError(_))
+            Event::App(AppEvent::ReviewsLoadingState(ReviewsLoadingState::Error(_)))
         ));
     }
 }
