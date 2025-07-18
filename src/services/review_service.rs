@@ -43,17 +43,19 @@ impl ReviewService {
         database: &Database,
         data: ReviewCreateData,
         events: &mut EventHandler,
-    ) -> color_eyre::Result<()> {
-        if !data.title.trim().is_empty() {
-            let review = Review::new(data.title.trim().to_string());
-            review.save(database.pool()).await?;
-            log::info!("Created review: {}", review.title);
+    ) -> color_eyre::Result<Review> {
+        if data.title.trim().is_empty() {
+            return Err(color_eyre::eyre::eyre!("Review title cannot be empty"));
         }
+
+        let review = Review::new(data.title.trim().to_string());
+        review.save(database.pool()).await?;
+        log::info!("Created review: {}", review.title);
 
         // Trigger reviews reload
         events.send(AppEvent::ReviewsLoad);
 
-        Ok(())
+        Ok(review)
     }
 
     /// List all reviews
@@ -71,17 +73,23 @@ impl ReviewService {
         review_id: &str,
         events: &mut EventHandler,
     ) -> color_eyre::Result<()> {
-        // Find the review by ID
-        let reviews = Review::list_all(database.pool()).await.unwrap_or_default();
-        if let Some(review_to_delete) = reviews.iter().find(|r| r.id == review_id) {
-            review_to_delete.delete(database.pool()).await?;
-            log::info!("Deleted review: {}", review_to_delete.title);
+        match Review::find_by_id(database.pool(), review_id).await {
+            Ok(Some(review)) => {
+                log::debug!("Found review to delete with ID {}", review.id);
+                review.delete(database.pool()).await?;
+                log::info!("Deleted review with ID {}", review.id);
+                events.send(AppEvent::ReviewsLoad);
+                Ok(())
+            }
+            Ok(None) => {
+                log::warn!("No review found with ID: {review_id}");
+                Ok(()) // No error, just nothing to delete
+            }
+            Err(error) => {
+                log::error!("Error finding review by ID: {error}");
+                Err(error.into())
+            }
         }
-
-        // Trigger reviews reload
-        events.send(AppEvent::ReviewsLoad);
-
-        Ok(())
     }
 
     /// Send loading event to start the actual loading process
@@ -108,11 +116,11 @@ impl ReviewService {
         events: &mut EventHandler,
     ) {
         match Self::create_review(database, data.clone(), events).await {
-            Ok(()) => {
+            Ok(_) => {
                 events.send(AppEvent::ViewClose);
             }
-            Err(e) => {
-                log::error!("Failed to create review: {e}");
+            Err(error) => {
+                log::error!("Failed to create review: {error}");
                 // For now, we'll still close the dialog even on error
                 // In the future, we might want to show an error message
                 events.send(AppEvent::ViewClose);
@@ -181,7 +189,9 @@ mod tests {
             title: "Test Review".to_string(),
         };
 
-        ReviewService::create_review(&database, data, &mut events).await.unwrap();
+        ReviewService::create_review(&database, data, &mut events)
+            .await
+            .unwrap();
 
         // Should have triggered ReviewsLoad event
         assert!(events.has_pending_events());
@@ -202,16 +212,15 @@ mod tests {
             title: "".to_string(),
         };
 
-        ReviewService::create_review(&database, data, &mut events).await.unwrap();
-
-        // Should have triggered ReviewsLoad event
-        assert!(events.has_pending_events());
-        let event = events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ReviewsLoad)));
-
-        // Verify no review was created
-        let reviews = Review::list_all(database.pool()).await.unwrap();
-        assert_eq!(reviews.len(), 0);
+        match ReviewService::create_review(&database, data, &mut events).await {
+            Ok(_) => panic!("Expected error for empty title"),
+            Err(e) => {
+                assert_eq!(e.to_string(), "Review title cannot be empty");
+                // Verify no review was created
+                let reviews = Review::list_all(database.pool()).await.unwrap();
+                assert_eq!(reviews.len(), 0);
+            }
+        }
     }
 
     #[tokio::test]
@@ -222,16 +231,15 @@ mod tests {
             title: "   ".to_string(),
         };
 
-        ReviewService::create_review(&database, data, &mut events).await.unwrap();
-
-        // Should have triggered ReviewsLoad event
-        assert!(events.has_pending_events());
-        let event = events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ReviewsLoad)));
-
-        // Verify no review was created
-        let reviews = Review::list_all(database.pool()).await.unwrap();
-        assert_eq!(reviews.len(), 0);
+        match ReviewService::create_review(&database, data, &mut events).await {
+            Ok(_) => panic!("Expected error for empty title"),
+            Err(e) => {
+                assert_eq!(e.to_string(), "Review title cannot be empty");
+                // Verify no review was created
+                let reviews = Review::list_all(database.pool()).await.unwrap();
+                assert_eq!(reviews.len(), 0);
+            }
+        }
     }
 
     #[tokio::test]
@@ -242,7 +250,9 @@ mod tests {
             title: "  Test Review  ".to_string(),
         };
 
-        ReviewService::create_review(&database, data, &mut events).await.unwrap();
+        ReviewService::create_review(&database, data, &mut events)
+            .await
+            .unwrap();
 
         // Should have triggered ReviewsLoad event
         assert!(events.has_pending_events());
@@ -340,7 +350,11 @@ mod tests {
         let data = ReviewCreateData {
             title: "Review 1".to_string(),
         };
-        ReviewService::create_review(&database, data, &mut events).await.unwrap();
+        ReviewService::create_review(&database, data, &mut events)
+            .await
+            .unwrap();
+        // Receive the event that was sent by create_review
+        let _event = events.try_recv().unwrap();
 
         let reviews = Review::list_all(database.pool()).await.unwrap();
         assert_eq!(reviews.len(), 1);
@@ -350,9 +364,7 @@ mod tests {
             .await
             .unwrap();
 
-        // Should have triggered ReviewsLoad event
-        let event = events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ReviewsLoad)));
+        assert!(!events.has_pending_events());
 
         // Should still have 1 review since deletion didn't happen
         let updated_reviews = Review::list_all(database.pool()).await.unwrap();
@@ -484,16 +496,12 @@ mod tests {
         .await
         .unwrap();
 
-        // Should have sent ReviewsLoaded and ViewClose events
+        // Should have sent ViewClose event only
         assert!(events.has_pending_events());
 
-        // First event should be ReviewsLoad (triggered by create_review)
+        // First event should be ViewClose
         let event1 = events.try_recv().unwrap();
-        assert!(matches!(event1, Event::App(AppEvent::ReviewsLoad)));
-
-        // Second event should be ViewClose
-        let event2 = events.try_recv().unwrap();
-        assert!(matches!(event2, Event::App(AppEvent::ViewClose)));
+        assert!(matches!(event1, Event::App(AppEvent::ViewClose)));
 
         // No more events should be pending
         assert!(!events.has_pending_events());
@@ -569,13 +577,9 @@ mod tests {
         // Should have sent ReviewsLoaded and ViewClose events
         assert!(events.has_pending_events());
 
-        // First event should be ReviewsLoad (triggered by delete_review_by_id)
+        // Event should be ViewClose (to close the dialog)
         let event1 = events.try_recv().unwrap();
-        assert!(matches!(event1, Event::App(AppEvent::ReviewsLoad)));
-
-        // Second event should be ViewClose (to close the dialog)
-        let event2 = events.try_recv().unwrap();
-        assert!(matches!(event2, Event::App(AppEvent::ViewClose)));
+        assert!(matches!(event1, Event::App(AppEvent::ViewClose)));
 
         // No more events should be pending
         assert!(!events.has_pending_events());

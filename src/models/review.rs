@@ -72,6 +72,20 @@ impl Review {
         Ok(reviews)
     }
 
+    pub async fn find_by_id(pool: &SqlitePool, id: &str) -> Result<Option<Review>, sqlx::Error> {
+        let review = sqlx::query_as::<_, Review>(
+            r#"
+            SELECT id, title, created_at, updated_at
+            FROM reviews
+            WHERE id = ?1
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
+        Ok(review)
+    }
+
     pub async fn delete(&self, pool: &SqlitePool) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
@@ -203,6 +217,28 @@ mod tests {
 
         // Second save with same ID should fail
         assert!(review2.save(&pool).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_review_find_by_id() {
+        let pool = create_test_pool().await;
+        let review = Review::new("Test Review".to_string());
+
+        // Save the review
+        review.save(&pool).await.unwrap();
+
+        // Find by ID
+        let found_review = Review::find_by_id(&pool, &review.id).await.unwrap();
+        assert!(found_review.is_some());
+        let found_review = found_review.unwrap();
+        assert_eq!(found_review.id, review.id);
+        assert_eq!(found_review.title, review.title);
+        assert_eq!(found_review.created_at, review.created_at);
+        assert_eq!(found_review.updated_at, review.updated_at);
+
+        // Find by non-existent ID
+        let not_found = Review::find_by_id(&pool, "non-existent-id").await.unwrap();
+        assert!(not_found.is_none());
     }
 
     #[tokio::test]
