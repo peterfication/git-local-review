@@ -1,4 +1,4 @@
-use crate::services::ReviewCreateData;
+use crate::{models::review::Review, services::ReviewCreateData};
 use color_eyre::eyre::OptionExt;
 use futures::{FutureExt, StreamExt};
 use ratatui::crossterm::event::Event as CrosstermEvent;
@@ -34,27 +34,25 @@ pub enum Event {
 pub enum AppEvent {
     /// Quit the application.
     Quit,
+    /// Close the current view.
+    ViewClose,
 
     /// Trigger loading of reviews.
     ReviewsLoad,
     /// Load the reviews from the database
     ReviewsLoading,
     /// Reviews have been loaded from the database
-    ReviewsLoaded,
+    ReviewsLoaded(Vec<Review>),
     /// Error occurred while loading reviews
     ReviewsLoadingError(String),
 
     /// Open the review creation view.
     ReviewCreateOpen,
-    /// Close the review creation view.
-    ReviewCreateClose,
     /// Submit the review creation form.
     ReviewCreateSubmit(ReviewCreateData),
 
     /// Open delete confirmation dialog for selected review.
     ReviewDeleteConfirm(String),
-    /// Cancel review deletion.
-    ReviewDeleteCancel,
     /// Delete the selected review.
     ReviewDelete(String),
 }

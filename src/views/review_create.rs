@@ -24,10 +24,7 @@ impl ViewHandler for ReviewCreateView {
 
     fn handle_key_events(&mut self, app: &mut App, key_event: KeyEvent) -> color_eyre::Result<()> {
         match key_event.code {
-            KeyCode::Esc => {
-                self.title_input.clear();
-                app.events.send(AppEvent::ReviewCreateClose);
-            }
+            KeyCode::Esc => self.close_view(app),
             KeyCode::Enter => {
                 app.events
                     .send(AppEvent::ReviewCreateSubmit(ReviewCreateData {
@@ -90,6 +87,18 @@ impl ViewHandler for ReviewCreateView {
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
+
+    #[cfg(test)]
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+impl ReviewCreateView {
+    fn close_view(&mut self, app: &mut App) {
+        self.title_input.clear();
+        app.events.send(AppEvent::ViewClose);
+    }
 }
 
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
@@ -118,7 +127,6 @@ mod tests {
     use crate::database::Database;
     use crate::event::{AppEvent, Event};
     use crate::models::review::Review;
-    use crate::services::ReviewsLoadingState;
     use crate::test_utils::render_app_to_terminal_backend;
     use insta::assert_snapshot;
     use sqlx::SqlitePool;
@@ -130,14 +138,11 @@ mod tests {
         Review::create_table(&pool).await.unwrap();
 
         let database = Database::from_pool(pool);
-        let reviews = vec![];
 
         App {
             running: true,
             events: crate::event::EventHandler::new_for_test(),
             database,
-            reviews,
-            reviews_loading_state: ReviewsLoadingState::Loaded,
             view_stack: vec![],
         }
     }
@@ -243,7 +248,7 @@ mod tests {
         // Verify that a ReviewCreateClose event was sent
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ReviewCreateClose)));
+        assert!(matches!(event, Event::App(AppEvent::ViewClose)));
     }
 
     #[tokio::test]
