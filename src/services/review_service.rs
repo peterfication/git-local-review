@@ -56,7 +56,10 @@ impl ReviewService {
 
     /// List all reviews
     pub async fn list_reviews(database: &Database) -> color_eyre::Result<Vec<Review>> {
-        let reviews = Review::list_all(database.pool()).await?;
+        let reviews = Review::list_all(database.pool()).await.map_err(|error| {
+            eprintln!("Failed to list reviews: {error}");
+            error
+        })?;
         Ok(reviews)
     }
 
@@ -83,7 +86,7 @@ impl ReviewService {
     }
 
     /// Actually load reviews from database
-    async fn handle_reviews_loaded(database: &Database, events: &mut EventHandler) {
+    async fn handle_reviews_loading(database: &Database, events: &mut EventHandler) {
         match Self::list_reviews(database).await {
             Ok(reviews) => {
                 events.send(AppEvent::ReviewsLoaded(reviews));
@@ -132,25 +135,27 @@ impl ReviewService {
 }
 
 impl ServiceHandler for ReviewService {
-    async fn handle_app_event(
-        event: &AppEvent,
-        database: &Database,
-        events: &mut EventHandler,
-    ) -> color_eyre::Result<()> {
-        match event {
-            AppEvent::ReviewsLoad => Self::handle_reviews_load(events),
-            AppEvent::ReviewsLoading => Self::handle_reviews_loaded(database, events).await,
-            AppEvent::ReviewCreateSubmit(data) => {
-                Self::handle_review_create_submit(data, database, events).await
+    fn handle_app_event<'a>(
+        event: &'a AppEvent,
+        database: &'a Database,
+        events: &'a mut EventHandler,
+    ) -> std::pin::Pin<Box<dyn Future<Output = color_eyre::Result<()>> + Send + 'a>> {
+        Box::pin(async move {
+            match event {
+                AppEvent::ReviewsLoad => Self::handle_reviews_load(events),
+                AppEvent::ReviewsLoading => Self::handle_reviews_loading(database, events).await,
+                AppEvent::ReviewCreateSubmit(data) => {
+                    Self::handle_review_create_submit(data, database, events).await
+                }
+                AppEvent::ReviewDelete(review_id) => {
+                    Self::handle_review_delete(review_id, database, events).await
+                }
+                _ => {
+                    // Other events are not handled by ReviewService
+                }
             }
-            AppEvent::ReviewDelete(review_id) => {
-                Self::handle_review_delete(review_id, database, events).await
-            }
-            _ => {
-                // Other events are not handled by ReviewService
-            }
-        }
-        Ok(())
+            Ok(())
+        })
     }
 }
 

@@ -8,12 +8,11 @@ pub use review_service::ReviewService;
 pub use review_service::ReviewsLoadingState;
 
 /// Trait for services that can handle app events
-#[allow(async_fn_in_trait)]
 pub trait ServiceHandler {
     /// Handle an app event and potentially send new events through the event handler
-    async fn handle_app_event(
-        event: &AppEvent,
-        database: &Database,
-        events: &mut EventHandler,
-    ) -> color_eyre::Result<()>;
+    fn handle_app_event<'a>(
+        event: &'a AppEvent,
+        database: &'a Database,
+        events: &'a mut EventHandler,
+    ) -> std::pin::Pin<Box<dyn Future<Output = color_eyre::Result<()>> + Send + 'a>>;
 }
