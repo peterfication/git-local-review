@@ -53,7 +53,7 @@ impl App {
 
     /// Handles the key events and updates the state of [`App`].
     /// Only the top view in the stack will handle the key events.
-    pub fn handle_key_events(&mut self, key_event: KeyEvent) -> color_eyre::Result<()> {
+    pub fn handle_key_events(&mut self, key_event: &KeyEvent) -> color_eyre::Result<()> {
         // We need to avoid borrowing self twice, so we'll extract the view temporarily
         if !self.view_stack.is_empty() {
             let mut current_view = self.view_stack.pop().unwrap();
@@ -223,13 +223,13 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        app.handle_key_events(key_event).unwrap();
+        app.handle_key_events(&key_event).unwrap();
 
         // MainView should have received the key event and sent a Quit event
         assert!(app.running); // App doesn't quit until event is processed by EventProcessor
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::Quit)));
+        assert!(matches!(*event, Event::App(AppEvent::Quit)));
     }
 
     #[tokio::test]
@@ -252,7 +252,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        app.handle_key_events(key_event).unwrap();
+        app.handle_key_events(&key_event).unwrap();
 
         // The ReviewCreateView (top of stack) should have received the key event and sent a
         // ViewClose event The view stack should remain the same since we only sent the event
@@ -260,7 +260,7 @@ mod tests {
         assert_eq!(app.view_stack.len(), 2);
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ViewClose)));
+        assert!(matches!(*event, Event::App(AppEvent::ViewClose)));
     }
 
     #[tokio::test]
@@ -296,7 +296,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        app.handle_key_events(key_event).unwrap();
+        app.handle_key_events(&key_event).unwrap();
 
         // Only the ReviewCreateView (top of stack) should have received the key event
         // It should have processed 'n' as text input, changing the title_input

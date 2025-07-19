@@ -1,7 +1,9 @@
+use std::sync::Arc;
+use std::time::Duration;
+
 use color_eyre::eyre::OptionExt;
 use futures::{FutureExt, StreamExt};
 use ratatui::crossterm::event::Event as CrosstermEvent;
-use std::time::Duration;
 use tokio::sync::mpsc;
 
 use crate::{
@@ -50,30 +52,30 @@ pub enum AppEvent {
     /// Inform that a review has been created.
     ReviewCreated(Review),
     /// Error occurred while creating a review.
-    ReviewCreatedError(String),
+    ReviewCreatedError(Arc<str>),
     /// Inform that a review has been deleted.
     ReviewDeleted,
     /// Error occurred while deleting a review.
-    ReviewDeletedError(String),
+    ReviewDeletedError(Arc<str>),
 
     /// Open the review creation view.
     ReviewCreateOpen,
     /// Submit the review creation form.
-    ReviewCreateSubmit(ReviewCreateData),
+    ReviewCreateSubmit(Arc<ReviewCreateData>),
 
     /// Open delete confirmation dialog for selected review.
-    ReviewDeleteConfirm(String),
+    ReviewDeleteConfirm(Arc<str>),
     /// Delete the selected review.
-    ReviewDelete(String),
+    ReviewDelete(Arc<str>),
 }
 
 /// Terminal event handler.
 #[derive(Debug)]
 pub struct EventHandler {
     /// Event sender channel.
-    sender: mpsc::UnboundedSender<Event>,
+    sender: mpsc::UnboundedSender<Arc<Event>>,
     /// Event receiver channel.
-    receiver: mpsc::UnboundedReceiver<Event>,
+    receiver: mpsc::UnboundedReceiver<Arc<Event>>,
 }
 
 impl Default for EventHandler {
@@ -108,7 +110,7 @@ impl EventHandler {
     /// This function returns an error if the sender channel is disconnected. This can happen if an
     /// error occurs in the event thread. In practice, this should not happen unless there is a
     /// problem with the underlying terminal.
-    pub async fn next(&mut self) -> color_eyre::Result<Event> {
+    pub async fn next(&mut self) -> color_eyre::Result<Arc<Event>> {
         self.receiver
             .recv()
             .await
@@ -122,7 +124,7 @@ impl EventHandler {
     pub fn send(&mut self, app_event: AppEvent) {
         // Ignore the result as the reciever cannot be dropped while this struct still has a
         // reference to it
-        let _ = self.sender.send(Event::App(app_event));
+        let _ = self.sender.send(Event::App(app_event).into());
     }
 
     /// Check if there are any pending events in the queue.
@@ -136,7 +138,7 @@ impl EventHandler {
     /// Returns None if no events are available.
     /// This is useful for testing to check what events have been sent.
     #[cfg(test)]
-    pub fn try_recv(&mut self) -> Option<Event> {
+    pub fn try_recv(&mut self) -> Option<Arc<Event>> {
         self.receiver.try_recv().ok()
     }
 }
@@ -144,12 +146,12 @@ impl EventHandler {
 /// A thread that handles reading crossterm events and emitting tick events on a regular schedule.
 struct EventTask {
     /// Event sender channel.
-    sender: mpsc::UnboundedSender<Event>,
+    sender: mpsc::UnboundedSender<Arc<Event>>,
 }
 
 impl EventTask {
     /// Constructs a new instance of [`Event`].
-    fn new(sender: mpsc::UnboundedSender<Event>) -> Self {
+    fn new(sender: mpsc::UnboundedSender<Arc<Event>>) -> Self {
         Self { sender }
     }
 
@@ -168,10 +170,10 @@ impl EventTask {
                 break;
               }
               _ = tick_delay => {
-                self.send(Event::Tick);
+                self.send(Event::Tick.into());
               }
-              Some(Ok(evt)) = crossterm_event => {
-                self.send(Event::Crossterm(evt));
+              Some(Ok(event)) = crossterm_event => {
+                self.send(Event::Crossterm(event).into());
               }
             };
         }
@@ -179,7 +181,7 @@ impl EventTask {
     }
 
     /// Sends an event to the receiver.
-    fn send(&self, event: Event) {
+    fn send(&self, event: Arc<Event>) {
         // Ignores the result because shutting down the app drops the receiver, which causes the send
         // operation to fail. This is expected behavior and should not panic.
         let _ = self.sender.send(event);

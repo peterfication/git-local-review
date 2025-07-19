@@ -33,7 +33,7 @@ impl ViewHandler for ConfirmationDialogView {
         ViewType::ConfirmationDialog
     }
 
-    fn handle_key_events(&mut self, app: &mut App, key_event: KeyEvent) -> color_eyre::Result<()> {
+    fn handle_key_events(&mut self, app: &mut App, key_event: &KeyEvent) -> color_eyre::Result<()> {
         match key_event.code {
             KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
                 app.events.send(self.on_confirm_event.clone());
@@ -164,11 +164,11 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::Quit)));
+        assert!(matches!(*event, Event::App(AppEvent::Quit)));
     }
 
     #[tokio::test]
@@ -188,11 +188,11 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::Quit)));
+        assert!(matches!(*event, Event::App(AppEvent::Quit)));
     }
 
     #[tokio::test]
@@ -212,11 +212,11 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::Quit)));
+        assert!(matches!(*event, Event::App(AppEvent::Quit)));
     }
 
     #[tokio::test]
@@ -236,11 +236,11 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ViewClose)));
+        assert!(matches!(*event, Event::App(AppEvent::ViewClose)));
     }
 
     #[tokio::test]
@@ -260,11 +260,11 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ViewClose)));
+        assert!(matches!(*event, Event::App(AppEvent::ViewClose)));
     }
 
     #[tokio::test]
@@ -284,11 +284,11 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ViewClose)));
+        assert!(matches!(*event, Event::App(AppEvent::ViewClose)));
     }
 
     #[tokio::test]
@@ -308,11 +308,11 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ViewClose)));
+        assert!(matches!(*event, Event::App(AppEvent::ViewClose)));
     }
 
     #[tokio::test]
@@ -332,11 +332,11 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ViewClose)));
+        assert!(matches!(*event, Event::App(AppEvent::ViewClose)));
     }
 
     #[tokio::test]
@@ -356,7 +356,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Unknown keys should not send any events
         assert!(!app.events.has_pending_events());

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{KeyCode, KeyEvent},
@@ -23,14 +25,14 @@ impl ViewHandler for ReviewCreateView {
         ViewType::ReviewCreate
     }
 
-    fn handle_key_events(&mut self, app: &mut App, key_event: KeyEvent) -> color_eyre::Result<()> {
+    fn handle_key_events(&mut self, app: &mut App, key_event: &KeyEvent) -> color_eyre::Result<()> {
         match key_event.code {
             KeyCode::Esc => self.close_view(app),
             KeyCode::Enter => {
                 app.events
-                    .send(AppEvent::ReviewCreateSubmit(ReviewCreateData {
+                    .send(AppEvent::ReviewCreateSubmit(Arc::new(ReviewCreateData {
                         title: self.title_input.clone(),
-                    }));
+                    })));
                 self.title_input.clear();
             }
             KeyCode::Char(char) => {
@@ -178,7 +180,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         assert_eq!(view.title_input, "a");
     }
@@ -196,7 +198,7 @@ mod tests {
                 kind: KeyEventKind::Press,
                 state: KeyEventState::empty(),
             };
-            view.handle_key_events(&mut app, key_event).unwrap();
+            view.handle_key_events(&mut app, &key_event).unwrap();
         }
 
         assert_eq!(view.title_input, "Hello");
@@ -216,7 +218,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         assert_eq!(view.title_input, "Hell");
     }
@@ -233,7 +235,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         assert_eq!(view.title_input, "");
     }
@@ -253,7 +255,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Title input should be cleared
         assert_eq!(view.title_input, "");
@@ -261,7 +263,7 @@ mod tests {
         // Verify that a ReviewCreateClose event was sent
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ViewClose)));
+        assert!(matches!(*event, Event::App(AppEvent::ViewClose)));
     }
 
     #[tokio::test]
@@ -279,7 +281,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Title input should be cleared after submit
         assert_eq!(view.title_input, "");
@@ -287,7 +289,7 @@ mod tests {
         // Verify that a ReviewCreateSubmit event was sent with the correct title
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        if let Event::App(AppEvent::ReviewCreateSubmit(data)) = event {
+        if let Event::App(AppEvent::ReviewCreateSubmit(ref data)) = *event {
             assert_eq!(data.title, "Test Review");
         } else {
             panic!("Expected ReviewCreateSubmit event");
@@ -306,7 +308,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Should still work with empty input
         assert_eq!(view.title_input, "");
@@ -326,7 +328,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Unknown keys should not change input
         assert_eq!(view.title_input, initial_input);

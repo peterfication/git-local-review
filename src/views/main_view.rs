@@ -33,7 +33,7 @@ impl ViewHandler for MainView {
         ViewType::Main
     }
 
-    fn handle_key_events(&mut self, app: &mut App, key_event: KeyEvent) -> color_eyre::Result<()> {
+    fn handle_key_events(&mut self, app: &mut App, key_event: &KeyEvent) -> color_eyre::Result<()> {
         match key_event.code {
             KeyCode::Esc | KeyCode::Char('q') => app.events.send(AppEvent::Quit),
             KeyCode::Char('c' | 'C') if key_event.modifiers == KeyModifiers::CONTROL => {
@@ -160,7 +160,8 @@ impl MainView {
         if let Some(index) = self.selected_review_index {
             if index < self.reviews.len() {
                 let review_id = self.reviews[index].id.clone();
-                app.events.send(AppEvent::ReviewDeleteConfirm(review_id));
+                app.events
+                    .send(AppEvent::ReviewDeleteConfirm(Arc::from(review_id)));
             }
         }
     }
@@ -280,7 +281,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // The view handler only sends events, it doesn't process them immediately
         // The app remains running until the event is processed by EventProcessor
@@ -289,7 +290,7 @@ mod tests {
         // Verify that a Quit event was sent
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::Quit)));
+        assert!(matches!(*event, Event::App(AppEvent::Quit)));
     }
 
     #[tokio::test]
@@ -306,14 +307,14 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         assert!(app.running);
 
         // Verify that a Quit event was sent (Esc also triggers quit)
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::Quit)));
+        assert!(matches!(*event, Event::App(AppEvent::Quit)));
     }
 
     #[tokio::test]
@@ -330,14 +331,14 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         assert!(app.running);
 
         // Verify that a Quit event was sent (Ctrl+C also triggers quit)
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::Quit)));
+        assert!(matches!(*event, Event::App(AppEvent::Quit)));
     }
 
     #[tokio::test]
@@ -353,12 +354,12 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Verify that a ReviewCreateOpen event was sent
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ReviewCreateOpen)));
+        assert!(matches!(*event, Event::App(AppEvent::ReviewCreateOpen)));
         assert!(app.running);
     }
 
@@ -376,7 +377,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Unknown keys should not change app state or send events
         assert_eq!(app.running, initial_running);
@@ -399,7 +400,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Should select first review (index 0)
         assert_eq!(view.selected_review_index, Some(0));
@@ -424,7 +425,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Should move to first review
         assert_eq!(view.selected_review_index, Some(0));
@@ -449,7 +450,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Should move to second review
         assert_eq!(view.selected_review_index, Some(1));
@@ -474,7 +475,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Should move to first review
         assert_eq!(view.selected_review_index, Some(0));
@@ -525,7 +526,7 @@ mod tests {
         let mut app = create_test_app_with_reviews().await;
         // Create a MainView with Error state
         let mut main_view = MainView::new();
-        main_view.reviews_loading_state = ReviewsLoadingState::Error("Test error".to_string());
+        main_view.reviews_loading_state = ReviewsLoadingState::Error(Arc::from("Test error"));
         app.view_stack = vec![Box::new(main_view)];
         assert_snapshot!(render_app_to_terminal_backend(app))
     }
@@ -564,13 +565,13 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Should have sent a ReviewDeleteConfirm event with the review ID
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
         assert!(matches!(
-            event,
+            *event,
             Event::App(AppEvent::ReviewDeleteConfirm(_))
         ));
     }
@@ -591,7 +592,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Should not have sent any events since no selection
         assert!(!app.events.has_pending_events());
@@ -614,7 +615,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Should not have sent any events since reviews list is empty
         assert!(!app.events.has_pending_events());
@@ -649,7 +650,7 @@ mod tests {
         let review = Review::new("Test Review".to_string());
         review.save(app.database.pool()).await.unwrap();
 
-        view.handle_app_events(&mut app, &AppEvent::ReviewDelete("some_id".to_string()));
+        view.handle_app_events(&mut app, &AppEvent::ReviewDelete("some_id".into()));
 
         // Selection should not change until ReviewsLoadingState::Loaded is received
         assert_eq!(view.selected_review_index, None);
@@ -667,9 +668,9 @@ mod tests {
 
         view.handle_app_events(
             &mut app,
-            &AppEvent::ReviewCreateSubmit(ReviewCreateData {
+            &AppEvent::ReviewCreateSubmit(Arc::new(ReviewCreateData {
                 title: "New Review".to_string(),
-            }),
+            })),
         );
 
         // Selection should not change until ReviewsLoadingState::Loaded is received

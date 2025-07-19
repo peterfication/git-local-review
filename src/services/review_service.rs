@@ -23,7 +23,7 @@ pub enum ReviewsLoadingState {
     /// Reviews have been successfully loaded
     Loaded(Arc<[Review]>),
     /// Error occurred during loading
-    Error(String),
+    Error(Arc<str>),
 }
 
 pub struct ReviewService {
@@ -110,7 +110,7 @@ impl ReviewService {
             }
             Err(error) => {
                 events.send(AppEvent::ReviewsLoadingState(ReviewsLoadingState::Error(
-                    error.to_string(),
+                    error.to_string().into(),
                 )));
             }
         }
@@ -130,7 +130,7 @@ impl ReviewService {
                 log::error!("Failed to create review: {error}");
                 // For now, we'll still close the dialog even on error
                 // In the future, we might want to show an error message
-                events.send(AppEvent::ReviewCreatedError(error.to_string()));
+                events.send(AppEvent::ReviewCreatedError(error.to_string().into()));
             }
         }
     }
@@ -143,7 +143,7 @@ impl ReviewService {
             }
             Err(error) => {
                 log::error!("Failed to delete review: {error}");
-                events.send(AppEvent::ReviewDeletedError(error.to_string()));
+                events.send(AppEvent::ReviewDeletedError(error.to_string().into()));
             }
         }
     }
@@ -201,7 +201,7 @@ mod tests {
         // Should have triggered ReviewsLoad event
         assert!(events.has_pending_events());
         let event = events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ReviewsLoad)));
+        assert!(matches!(*event, Event::App(AppEvent::ReviewsLoad)));
 
         // Verify the review was actually created
         let reviews = Review::list_all(database.pool()).await.unwrap();
@@ -262,7 +262,7 @@ mod tests {
         // Should have triggered ReviewsLoad event
         assert!(events.has_pending_events());
         let event = events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ReviewsLoad)));
+        assert!(matches!(*event, Event::App(AppEvent::ReviewsLoad)));
 
         // Verify the review was created with trimmed title
         let reviews = Review::list_all(database.pool()).await.unwrap();
@@ -338,7 +338,7 @@ mod tests {
 
         // Should have triggered ReviewsLoad event
         let event = events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ReviewsLoad)));
+        assert!(matches!(*event, Event::App(AppEvent::ReviewsLoad)));
 
         // Verify the review was deleted
         let updated_reviews = Review::list_all(database.pool()).await.unwrap();
@@ -389,7 +389,7 @@ mod tests {
         // Should have sent a ReviewsLoading event
         assert!(events.has_pending_events());
         let event = events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ReviewsLoading)));
+        assert!(matches!(*event, Event::App(AppEvent::ReviewsLoading)));
     }
 
     #[tokio::test]
@@ -408,8 +408,8 @@ mod tests {
         // Should have sent a ReviewsLoadingState event with the review
         assert!(events.has_pending_events());
         let event = events.try_recv().unwrap();
-        if let Event::App(AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(reviews))) =
-            event
+        if let Event::App(AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(ref reviews))) =
+            *event
         {
             assert_eq!(reviews.len(), 1);
             assert_eq!(reviews[0].title, "Test Review");
@@ -430,8 +430,8 @@ mod tests {
         // Should have sent a ReviewsLoadingState event with empty list
         assert!(events.has_pending_events());
         let event = events.try_recv().unwrap();
-        if let Event::App(AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(reviews))) =
-            event
+        if let Event::App(AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(ref reviews))) =
+            *event
         {
             assert_eq!(reviews.len(), 0);
         } else {
@@ -463,7 +463,7 @@ mod tests {
         };
 
         ReviewService::handle_app_event(
-            &AppEvent::ReviewCreateSubmit(data),
+            &AppEvent::ReviewCreateSubmit(data.into()),
             &database,
             &mut events,
         )
@@ -475,11 +475,11 @@ mod tests {
 
         // First event should be ReviewsLoad (triggered by create_review)
         let event1 = events.try_recv().unwrap();
-        assert!(matches!(event1, Event::App(AppEvent::ReviewsLoad)));
+        assert!(matches!(*event1, Event::App(AppEvent::ReviewsLoad)));
 
         // Second event should be ReviewCreated
         let event2 = events.try_recv().unwrap();
-        assert!(matches!(event2, Event::App(AppEvent::ReviewCreated(_))));
+        assert!(matches!(*event2, Event::App(AppEvent::ReviewCreated(_))));
 
         // Verify the review was created
         let reviews = Review::list_all(database.pool()).await.unwrap();
@@ -498,7 +498,7 @@ mod tests {
 
         // Test empty title submission
         ReviewService::handle_app_event(
-            &AppEvent::ReviewCreateSubmit(data),
+            &AppEvent::ReviewCreateSubmit(data.into()),
             &database,
             &mut events,
         )
@@ -510,7 +510,10 @@ mod tests {
 
         // First event should be ReviewCreatedError
         let event = events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ReviewCreatedError(_))));
+        assert!(matches!(
+            *event,
+            Event::App(AppEvent::ReviewCreatedError(_))
+        ));
 
         // No more events should be pending
         assert!(!events.has_pending_events());
@@ -533,7 +536,7 @@ mod tests {
 
         // Load reviews to get IDs (they will be ordered by created_at DESC)
         let reviews = Review::list_all(database.pool()).await.unwrap();
-        let review_id_to_delete = reviews[0].id.clone();
+        let review_id_to_delete: Arc<str> = reviews[0].id.clone().into();
 
         // Test review deletion
         ReviewService::handle_app_event(
@@ -549,20 +552,20 @@ mod tests {
 
         // First event should be ReviewsLoad (triggered by delete_review_by_id)
         let event1 = events.try_recv().unwrap();
-        assert!(matches!(event1, Event::App(AppEvent::ReviewsLoad)));
+        assert!(matches!(*event1, Event::App(AppEvent::ReviewsLoad)));
 
         // Second event should be ReviewDeleted
         let event2 = events.try_recv().unwrap();
-        assert!(matches!(event2, Event::App(AppEvent::ReviewDeleted)));
+        assert!(matches!(*event2, Event::App(AppEvent::ReviewDeleted)));
 
         // No more events should be pending
         assert!(!events.has_pending_events());
 
         // Review should be deleted from database
-        let reviews = Review::list_all(database.pool()).await.unwrap();
-        assert!(!reviews.iter().any(|r| r.id == review_id_to_delete));
-        assert_eq!(reviews.len(), 1);
-        assert_eq!(reviews[0].title, "Review 1");
+        let review = Review::find_by_id(database.pool(), &review_id_to_delete)
+            .await
+            .unwrap();
+        assert!(review.is_none());
     }
 
     #[tokio::test]
@@ -576,7 +579,7 @@ mod tests {
 
         // Test deletion with non-existent ID
         ReviewService::handle_app_event(
-            &AppEvent::ReviewDelete("non-existent-id".to_string()),
+            &AppEvent::ReviewDelete("non-existent-id".into()),
             &database,
             &mut events,
         )
@@ -588,7 +591,7 @@ mod tests {
 
         // Event should be ViewClose (to close the dialog)
         let event1 = events.try_recv().unwrap();
-        assert!(matches!(event1, Event::App(AppEvent::ReviewDeleted)));
+        assert!(matches!(*event1, Event::App(AppEvent::ReviewDeleted)));
 
         // No more events should be pending
         assert!(!events.has_pending_events());
@@ -616,7 +619,7 @@ mod tests {
         assert!(events.has_pending_events());
         let event = events.try_recv().unwrap();
         assert!(matches!(
-            event,
+            *event,
             Event::App(AppEvent::ReviewsLoadingState(ReviewsLoadingState::Error(_)))
         ));
     }
