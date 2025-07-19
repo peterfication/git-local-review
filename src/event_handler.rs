@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{
     app::App,
     event::{AppEvent, Event},
@@ -8,30 +10,30 @@ use crate::{
 pub struct EventProcessor;
 
 impl EventProcessor {
-    pub async fn process_event(app: &mut App, event: Event) -> color_eyre::Result<()> {
-        match event {
+    pub async fn process_event(app: &mut App, event: Arc<Event>) -> color_eyre::Result<()> {
+        match *event {
             Event::Tick => app.tick(),
             #[allow(clippy::single_match)]
-            Event::Crossterm(event) => match event {
+            Event::Crossterm(ref event) => match event {
                 crossterm::event::Event::Key(key_event) => app.handle_key_events(key_event)?,
                 _ => {}
             },
-            Event::App(app_event) => {
+            Event::App(ref app_event) => {
                 log::info!("Processing event: {app_event:#?}");
 
                 // First let services handle the event
-                Self::handle_services(app, &app_event).await?;
+                Self::handle_services(app, app_event).await?;
 
                 // Then let views handle the event
-                app.handle_app_events(&app_event);
+                app.handle_app_events(app_event);
 
                 // Finally handle app events globally
-                match app_event {
+                match *app_event {
                     AppEvent::Quit => app.quit(),
                     AppEvent::ViewClose => app.pop_view(),
                     // Events that open views
                     AppEvent::ReviewCreateOpen => Self::review_create_open(app),
-                    AppEvent::ReviewDeleteConfirm(review_id) => {
+                    AppEvent::ReviewDeleteConfirm(ref review_id) => {
                         Self::review_delete_confirm(app, review_id)
                     }
                     _ => {
@@ -59,14 +61,14 @@ impl EventProcessor {
     }
 
     /// Open delete confirmation dialog
-    fn review_delete_confirm(app: &mut App, review_id: String) {
+    fn review_delete_confirm(app: &mut App, review_id: &str) {
         // Create a generic confirmation dialog without the specific review title
         // since we don't have access to the reviews in the App anymore
         // TODO: Load the title from the review_service / database
         let message = "Do you want to delete the selected review?".to_string();
         let confirmation_dialog = ConfirmationDialogView::new(
             message,
-            AppEvent::ReviewDelete(review_id),
+            AppEvent::ReviewDelete(review_id.to_string()),
             AppEvent::ViewClose,
         );
         app.push_view(Box::new(confirmation_dialog));
@@ -102,7 +104,7 @@ mod tests {
         let mut app = create_test_app().await;
         assert!(app.running);
 
-        EventProcessor::process_event(&mut app, Event::App(AppEvent::Quit))
+        EventProcessor::process_event(&mut app, Event::App(AppEvent::Quit).into())
             .await
             .unwrap();
 
@@ -114,7 +116,7 @@ mod tests {
         let mut app = create_test_app().await;
         assert_eq!(app.view_stack.len(), 1);
 
-        EventProcessor::process_event(&mut app, Event::App(AppEvent::ReviewCreateOpen))
+        EventProcessor::process_event(&mut app, Event::App(AppEvent::ReviewCreateOpen).into())
             .await
             .unwrap();
 
@@ -130,13 +132,13 @@ mod tests {
         let mut app = create_test_app().await;
 
         // First open a review create view
-        EventProcessor::process_event(&mut app, Event::App(AppEvent::ReviewCreateOpen))
+        EventProcessor::process_event(&mut app, Event::App(AppEvent::ReviewCreateOpen).into())
             .await
             .unwrap();
         assert_eq!(app.view_stack.len(), 2);
 
         // Then close it
-        EventProcessor::process_event(&mut app, Event::App(AppEvent::ViewClose))
+        EventProcessor::process_event(&mut app, Event::App(AppEvent::ViewClose).into())
             .await
             .unwrap();
 
@@ -149,7 +151,7 @@ mod tests {
         let mut app = create_test_app().await;
 
         // Tick event should not change anything
-        EventProcessor::process_event(&mut app, Event::Tick)
+        EventProcessor::process_event(&mut app, Event::Tick.into())
             .await
             .unwrap();
 
@@ -171,7 +173,7 @@ mod tests {
 
         let crossterm_event = ratatui::crossterm::event::Event::Key(key_event);
 
-        EventProcessor::process_event(&mut app, Event::Crossterm(crossterm_event))
+        EventProcessor::process_event(&mut app, Event::Crossterm(crossterm_event).into())
             .await
             .unwrap();
 
@@ -193,7 +195,7 @@ mod tests {
 
         EventProcessor::process_event(
             &mut app,
-            Event::App(AppEvent::ReviewDeleteConfirm(review_id)),
+            Event::App(AppEvent::ReviewDeleteConfirm(review_id)).into(),
         )
         .await
         .unwrap();
@@ -214,7 +216,7 @@ mod tests {
 
         EventProcessor::process_event(
             &mut app,
-            Event::App(AppEvent::ReviewDeleteConfirm("non-existent-id".to_string())),
+            Event::App(AppEvent::ReviewDeleteConfirm("non-existent-id".to_string())).into(),
         )
         .await
         .unwrap();
@@ -237,7 +239,7 @@ mod tests {
         app.push_view(Box::new(confirmation_dialog));
         assert_eq!(app.view_stack.len(), 2);
 
-        EventProcessor::process_event(&mut app, Event::App(AppEvent::ViewClose))
+        EventProcessor::process_event(&mut app, Event::App(AppEvent::ViewClose).into())
             .await
             .unwrap();
 

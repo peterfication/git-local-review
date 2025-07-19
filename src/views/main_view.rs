@@ -33,7 +33,7 @@ impl ViewHandler for MainView {
         ViewType::Main
     }
 
-    fn handle_key_events(&mut self, app: &mut App, key_event: KeyEvent) -> color_eyre::Result<()> {
+    fn handle_key_events(&mut self, app: &mut App, key_event: &KeyEvent) -> color_eyre::Result<()> {
         match key_event.code {
             KeyCode::Esc | KeyCode::Char('q') => app.events.send(AppEvent::Quit),
             KeyCode::Char('c' | 'C') if key_event.modifiers == KeyModifiers::CONTROL => {
@@ -280,7 +280,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // The view handler only sends events, it doesn't process them immediately
         // The app remains running until the event is processed by EventProcessor
@@ -289,7 +289,7 @@ mod tests {
         // Verify that a Quit event was sent
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::Quit)));
+        assert!(matches!(*event, Event::App(AppEvent::Quit)));
     }
 
     #[tokio::test]
@@ -306,14 +306,14 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         assert!(app.running);
 
         // Verify that a Quit event was sent (Esc also triggers quit)
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::Quit)));
+        assert!(matches!(*event, Event::App(AppEvent::Quit)));
     }
 
     #[tokio::test]
@@ -330,14 +330,14 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         assert!(app.running);
 
         // Verify that a Quit event was sent (Ctrl+C also triggers quit)
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::Quit)));
+        assert!(matches!(*event, Event::App(AppEvent::Quit)));
     }
 
     #[tokio::test]
@@ -353,12 +353,12 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Verify that a ReviewCreateOpen event was sent
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(event, Event::App(AppEvent::ReviewCreateOpen)));
+        assert!(matches!(*event, Event::App(AppEvent::ReviewCreateOpen)));
         assert!(app.running);
     }
 
@@ -376,7 +376,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Unknown keys should not change app state or send events
         assert_eq!(app.running, initial_running);
@@ -399,7 +399,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Should select first review (index 0)
         assert_eq!(view.selected_review_index, Some(0));
@@ -424,7 +424,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Should move to first review
         assert_eq!(view.selected_review_index, Some(0));
@@ -449,7 +449,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Should move to second review
         assert_eq!(view.selected_review_index, Some(1));
@@ -474,7 +474,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Should move to first review
         assert_eq!(view.selected_review_index, Some(0));
@@ -564,13 +564,13 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Should have sent a ReviewDeleteConfirm event with the review ID
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
         assert!(matches!(
-            event,
+            *event,
             Event::App(AppEvent::ReviewDeleteConfirm(_))
         ));
     }
@@ -591,7 +591,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Should not have sent any events since no selection
         assert!(!app.events.has_pending_events());
@@ -614,7 +614,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Should not have sent any events since reviews list is empty
         assert!(!app.events.has_pending_events());
@@ -667,9 +667,12 @@ mod tests {
 
         view.handle_app_events(
             &mut app,
-            &AppEvent::ReviewCreateSubmit(ReviewCreateData {
-                title: "New Review".to_string(),
-            }),
+            &AppEvent::ReviewCreateSubmit(
+                ReviewCreateData {
+                    title: "New Review".to_string(),
+                }
+                .into(),
+            ),
         );
 
         // Selection should not change until ReviewsLoadingState::Loaded is received
