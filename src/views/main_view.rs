@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
@@ -16,7 +18,7 @@ use crate::{
 
 pub struct MainView {
     selected_review_index: Option<usize>,
-    reviews: Vec<Review>,
+    reviews: Arc<[Review]>,
     reviews_loading_state: ReviewsLoadingState,
 }
 
@@ -77,7 +79,7 @@ impl ViewHandler for MainView {
             AppEvent::ReviewsLoadingState(state) => {
                 self.reviews_loading_state = state.clone();
                 if let ReviewsLoadingState::Loaded(reviews) = state {
-                    self.reviews = reviews.clone();
+                    self.reviews = Arc::clone(reviews);
                     self.update_selection_after_reviews_change();
                 }
             }
@@ -102,7 +104,7 @@ impl MainView {
     pub fn new() -> Self {
         Self {
             selected_review_index: None,
-            reviews: Vec::new(),
+            reviews: Arc::new([]),
             reviews_loading_state: ReviewsLoadingState::Init,
         }
     }
@@ -388,7 +390,7 @@ mod tests {
 
         // Populate the view with reviews first
         let reviews = Review::list_all(app.database.pool()).await.unwrap();
-        view.reviews = reviews;
+        view.reviews = reviews.into();
 
         let key_event = KeyEvent {
             code: KeyCode::Char('j'),
@@ -410,7 +412,7 @@ mod tests {
 
         // Populate the view with reviews first
         let reviews = Review::list_all(app.database.pool()).await.unwrap();
-        view.reviews = reviews;
+        view.reviews = reviews.into();
 
         // Start with second review selected
         view.selected_review_index = Some(1);
@@ -435,7 +437,7 @@ mod tests {
 
         // Populate the view with reviews first
         let reviews = Review::list_all(app.database.pool()).await.unwrap();
-        view.reviews = reviews;
+        view.reviews = reviews.into();
 
         // Start with first review selected
         view.selected_review_index = Some(0);
@@ -460,7 +462,7 @@ mod tests {
 
         // Populate the view with reviews first
         let reviews = Review::list_all(app.database.pool()).await.unwrap();
-        view.reviews = reviews;
+        view.reviews = reviews.into();
 
         // Start with second review selected
         view.selected_review_index = Some(1);
@@ -503,7 +505,7 @@ mod tests {
         let mut app = create_test_app_with_reviews().await;
         let reviews = Review::list_all(app.database.pool()).await.unwrap();
         app.handle_app_events(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(
-            reviews,
+            reviews.into(),
         )));
         assert_snapshot!(render_app_to_terminal_backend(app))
     }
@@ -513,7 +515,7 @@ mod tests {
         let mut app = create_test_app_with_reviews().await;
         // Create a MainView with Loaded state but no reviews
         let mut main_view = MainView::new();
-        main_view.reviews_loading_state = ReviewsLoadingState::Loaded(vec![]);
+        main_view.reviews_loading_state = ReviewsLoadingState::Loaded(Arc::new([]));
         app.view_stack = vec![Box::new(main_view)];
         assert_snapshot!(render_app_to_terminal_backend(app))
     }
@@ -534,8 +536,8 @@ mod tests {
         // Create a MainView with first review selected
         let mut main_view = MainView::new();
         let reviews = Review::list_all(app.database.pool()).await.unwrap();
-        main_view.reviews_loading_state = ReviewsLoadingState::Loaded(reviews.clone());
-        main_view.reviews = reviews;
+        main_view.reviews_loading_state = ReviewsLoadingState::Loaded(reviews.clone().into());
+        main_view.reviews = reviews.into();
         main_view.selected_review_index = Some(0);
         app.view_stack = vec![Box::new(main_view)];
 
@@ -549,7 +551,7 @@ mod tests {
 
         // Populate the view with reviews first
         let reviews = Review::list_all(app.database.pool()).await.unwrap();
-        view.reviews = reviews;
+        view.reviews = reviews.into();
 
         // Select first review
         view.selected_review_index = Some(0);
@@ -601,7 +603,7 @@ mod tests {
         let mut view = MainView::new();
 
         // Empty reviews list
-        view.reviews = vec![];
+        view.reviews = Arc::new([]);
         view.selected_review_index = Some(0); // Invalid selection
         assert!(!app.events.has_pending_events());
 
@@ -631,7 +633,7 @@ mod tests {
 
         view.handle_app_events(
             &mut app,
-            &AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(reviews)),
+            &AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(reviews.into())),
         );
 
         assert_eq!(view.selected_review_index, Some(0));
@@ -679,7 +681,7 @@ mod tests {
         let mut view = MainView::new();
         view.selected_review_index = Some(0);
 
-        view.reviews = vec![];
+        view.reviews = Arc::new([]);
         view.update_selection_after_reviews_change();
 
         // Should clear selection for empty reviews
@@ -694,7 +696,7 @@ mod tests {
         view.selected_review_index = Some(1);
 
         // Create a review and a smaller reviews list (only 1 item)
-        view.reviews = vec![Review::new("Test Review".to_string())];
+        view.reviews = Arc::new([Review::new("Test Review".to_string())]);
         view.update_selection_after_reviews_change();
 
         // Should adjust selection to last valid index (0)
@@ -709,7 +711,7 @@ mod tests {
         view.selected_review_index = Some(0);
 
         // Create a reviews list for testing
-        view.reviews = vec![Review::new("Test Review".to_string())];
+        view.reviews = Arc::new([Review::new("Test Review".to_string())]);
         view.update_selection_after_reviews_change();
 
         // Should preserve valid selection
@@ -724,7 +726,7 @@ mod tests {
         assert_eq!(view.selected_review_index, None);
 
         // Create a reviews list for testing
-        view.reviews = vec![Review::new("Test Review".to_string())];
+        view.reviews = Arc::new([Review::new("Test Review".to_string())]);
         view.update_selection_after_reviews_change();
 
         // Should select first review

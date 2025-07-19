@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::ServiceHandler;
 
 use crate::{
@@ -19,7 +21,7 @@ pub enum ReviewsLoadingState {
     /// Currently loading reviews from database
     Loading,
     /// Reviews have been successfully loaded
-    Loaded(Vec<Review>),
+    Loaded(Arc<[Review]>),
     /// Error occurred during loading
     Error(String),
 }
@@ -103,7 +105,7 @@ impl ReviewService {
         match Self::list_reviews(database).await {
             Ok(reviews) => {
                 events.send(AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(
-                    reviews,
+                    reviews.into(),
                 )));
             }
             Err(error) => {
