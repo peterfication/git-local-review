@@ -103,15 +103,18 @@ impl App {
 
 #[cfg(test)]
 mod tests {
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
+    use sqlx::SqlitePool;
+    use std::sync::Arc;
+
     use super::*;
+
     use crate::{
         event::{AppEvent, Event},
         models::Review,
         services::ReviewsLoadingState,
         views::{MainView, ReviewCreateView, ViewType},
     };
-    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
-    use sqlx::SqlitePool;
 
     async fn create_test_app() -> App {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
@@ -342,7 +345,7 @@ mod tests {
 
         // Call handle_app_events with ReviewsLoadingState event
         app.handle_app_events(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(
-            reviews,
+            reviews.into(),
         )));
 
         // Verify MainView now has the first review selected
@@ -375,7 +378,7 @@ mod tests {
 
         // Call handle_app_events with ReviewsLoadingState::Loaded event
         app.handle_app_events(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(
-            reviews,
+            reviews.into(),
         )));
 
         // Verify MainView now has the first review selected (all views should have received the event)
@@ -410,7 +413,7 @@ mod tests {
 
         // Call handle_app_events
         app.handle_app_events(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(
-            vec![],
+            Arc::new([]),
         )));
 
         // Verify view stack order is preserved
