@@ -52,11 +52,11 @@ pub enum AppEvent {
     /// Inform that a review has been created.
     ReviewCreated(Review),
     /// Error occurred while creating a review.
-    ReviewCreatedError(String),
+    ReviewCreatedError(Arc<str>),
     /// Inform that a review has been deleted.
     ReviewDeleted,
     /// Error occurred while deleting a review.
-    ReviewDeletedError(String),
+    ReviewDeletedError(Arc<str>),
 
     /// Open the review creation view.
     ReviewCreateOpen,
@@ -64,9 +64,9 @@ pub enum AppEvent {
     ReviewCreateSubmit(Arc<ReviewCreateData>),
 
     /// Open delete confirmation dialog for selected review.
-    ReviewDeleteConfirm(String),
+    ReviewDeleteConfirm(Arc<str>),
     /// Delete the selected review.
-    ReviewDelete(String),
+    ReviewDelete(Arc<str>),
 }
 
 /// Terminal event handler.
@@ -124,7 +124,7 @@ impl EventHandler {
     pub fn send(&mut self, app_event: AppEvent) {
         // Ignore the result as the reciever cannot be dropped while this struct still has a
         // reference to it
-        let _ = self.sender.send(Arc::new(Event::App(app_event)));
+        let _ = self.sender.send(Event::App(app_event).into());
     }
 
     /// Check if there are any pending events in the queue.
@@ -170,10 +170,10 @@ impl EventTask {
                 break;
               }
               _ = tick_delay => {
-                self.send(Arc::new(Event::Tick));
+                self.send(Event::Tick.into());
               }
-              Some(Ok(evt)) = crossterm_event => {
-                self.send(Arc::new(Event::Crossterm(evt)));
+              Some(Ok(event)) = crossterm_event => {
+                self.send(Event::Crossterm(event).into());
               }
             };
         }

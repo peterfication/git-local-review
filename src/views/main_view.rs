@@ -160,7 +160,8 @@ impl MainView {
         if let Some(index) = self.selected_review_index {
             if index < self.reviews.len() {
                 let review_id = self.reviews[index].id.clone();
-                app.events.send(AppEvent::ReviewDeleteConfirm(review_id));
+                app.events
+                    .send(AppEvent::ReviewDeleteConfirm(Arc::from(review_id)));
             }
         }
     }
@@ -525,7 +526,7 @@ mod tests {
         let mut app = create_test_app_with_reviews().await;
         // Create a MainView with Error state
         let mut main_view = MainView::new();
-        main_view.reviews_loading_state = ReviewsLoadingState::Error("Test error".to_string());
+        main_view.reviews_loading_state = ReviewsLoadingState::Error(Arc::from("Test error"));
         app.view_stack = vec![Box::new(main_view)];
         assert_snapshot!(render_app_to_terminal_backend(app))
     }
@@ -649,7 +650,7 @@ mod tests {
         let review = Review::new("Test Review".to_string());
         review.save(app.database.pool()).await.unwrap();
 
-        view.handle_app_events(&mut app, &AppEvent::ReviewDelete("some_id".to_string()));
+        view.handle_app_events(&mut app, &AppEvent::ReviewDelete("some_id".into()));
 
         // Selection should not change until ReviewsLoadingState::Loaded is received
         assert_eq!(view.selected_review_index, None);
@@ -667,12 +668,9 @@ mod tests {
 
         view.handle_app_events(
             &mut app,
-            &AppEvent::ReviewCreateSubmit(
-                ReviewCreateData {
-                    title: "New Review".to_string(),
-                }
-                .into(),
-            ),
+            &AppEvent::ReviewCreateSubmit(Arc::new(ReviewCreateData {
+                title: "New Review".to_string(),
+            })),
         );
 
         // Selection should not change until ReviewsLoadingState::Loaded is received

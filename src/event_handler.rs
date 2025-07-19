@@ -68,7 +68,7 @@ impl EventProcessor {
         let message = "Do you want to delete the selected review?".to_string();
         let confirmation_dialog = ConfirmationDialogView::new(
             message,
-            AppEvent::ReviewDelete(review_id.to_string()),
+            AppEvent::ReviewDelete(review_id.into()),
             AppEvent::ViewClose,
         );
         app.push_view(Box::new(confirmation_dialog));
@@ -195,7 +195,7 @@ mod tests {
 
         EventProcessor::process_event(
             &mut app,
-            Event::App(AppEvent::ReviewDeleteConfirm(review_id)).into(),
+            Event::App(AppEvent::ReviewDeleteConfirm(review_id.into())).into(),
         )
         .await
         .unwrap();
@@ -216,7 +216,7 @@ mod tests {
 
         EventProcessor::process_event(
             &mut app,
-            Event::App(AppEvent::ReviewDeleteConfirm("non-existent-id".to_string())).into(),
+            Event::App(AppEvent::ReviewDeleteConfirm(Arc::from("non-existent-id"))).into(),
         )
         .await
         .unwrap();
@@ -233,7 +233,7 @@ mod tests {
         // Simulate having a confirmation dialog open
         let confirmation_dialog = crate::views::confirmation_dialog::ConfirmationDialogView::new(
             "Test".to_string(),
-            AppEvent::ReviewDelete("test-id".to_string()),
+            AppEvent::ReviewDelete("test-id".into()),
             AppEvent::ViewClose,
         );
         app.push_view(Box::new(confirmation_dialog));

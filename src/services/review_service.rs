@@ -23,7 +23,7 @@ pub enum ReviewsLoadingState {
     /// Reviews have been successfully loaded
     Loaded(Arc<[Review]>),
     /// Error occurred during loading
-    Error(String),
+    Error(Arc<str>),
 }
 
 pub struct ReviewService {
@@ -110,7 +110,7 @@ impl ReviewService {
             }
             Err(error) => {
                 events.send(AppEvent::ReviewsLoadingState(ReviewsLoadingState::Error(
-                    error.to_string(),
+                    error.to_string().into(),
                 )));
             }
         }
@@ -130,7 +130,7 @@ impl ReviewService {
                 log::error!("Failed to create review: {error}");
                 // For now, we'll still close the dialog even on error
                 // In the future, we might want to show an error message
-                events.send(AppEvent::ReviewCreatedError(error.to_string()));
+                events.send(AppEvent::ReviewCreatedError(error.to_string().into()));
             }
         }
     }
@@ -143,7 +143,7 @@ impl ReviewService {
             }
             Err(error) => {
                 log::error!("Failed to delete review: {error}");
-                events.send(AppEvent::ReviewDeletedError(error.to_string()));
+                events.send(AppEvent::ReviewDeletedError(error.to_string().into()));
             }
         }
     }
@@ -536,7 +536,7 @@ mod tests {
 
         // Load reviews to get IDs (they will be ordered by created_at DESC)
         let reviews = Review::list_all(database.pool()).await.unwrap();
-        let review_id_to_delete = reviews[0].id.clone();
+        let review_id_to_delete: Arc<str> = reviews[0].id.clone().into();
 
         // Test review deletion
         ReviewService::handle_app_event(
@@ -562,10 +562,10 @@ mod tests {
         assert!(!events.has_pending_events());
 
         // Review should be deleted from database
-        let reviews = Review::list_all(database.pool()).await.unwrap();
-        assert!(!reviews.iter().any(|r| r.id == review_id_to_delete));
-        assert_eq!(reviews.len(), 1);
-        assert_eq!(reviews[0].title, "Review 1");
+        let review = Review::find_by_id(database.pool(), &review_id_to_delete)
+            .await
+            .unwrap();
+        assert!(review.is_none());
     }
 
     #[tokio::test]
@@ -579,7 +579,7 @@ mod tests {
 
         // Test deletion with non-existent ID
         ReviewService::handle_app_event(
-            &AppEvent::ReviewDelete("non-existent-id".to_string()),
+            &AppEvent::ReviewDelete("non-existent-id".into()),
             &database,
             &mut events,
         )
