@@ -1,0 +1,10 @@
+pre-commit:
+  jobs:
+    - name: Format
+      run: just format
+
+    - name: Lint
+      run: just lint
+
+    - name: test
+      run: just test

@@ -31,3 +31,7 @@ doc:
 # Build the application
 build:
   cargo build
+
+# Install git hooks using Lefthook
+git-hooks-install:
+  lefthook install
