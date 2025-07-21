@@ -33,6 +33,7 @@ impl EventProcessor {
 
                 // Finally handle app events globally
                 match *app_event {
+                    AppEvent::Init => Self::init(app),
                     AppEvent::Quit => app.quit(),
                     AppEvent::ViewClose => app.pop_view(),
                     // Events that open views
@@ -54,6 +55,12 @@ impl EventProcessor {
             }
         }
         Ok(())
+    }
+
+    fn init(app: &mut App) {
+        // Initialize any global state or services if needed
+        log::info!("App initialized");
+        app.events.send(AppEvent::ReviewsLoad);
     }
 
     /// Handle app events through services
