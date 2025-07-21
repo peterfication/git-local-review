@@ -41,7 +41,7 @@ impl App {
     /// Run the application's main loop.
     pub async fn run(mut self, mut terminal: DefaultTerminal) -> color_eyre::Result<()> {
         // Trigger initial reviews load
-        self.events.send(AppEvent::ReviewsLoad);
+        self.events.send(AppEvent::Init);
 
         while self.running {
             terminal.draw(|frame| frame.render_widget(&self, frame.area()))?;
