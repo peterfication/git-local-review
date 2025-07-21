@@ -12,6 +12,7 @@ A Terminal User Interface (TUI) application for reviewing Git changes with local
 
 | View                   | Key                                | Action                  |
 | ---------------------- | ---------------------------------- | ----------------------- |
+| **Global**             | `?`                                | Show help modal         |
 | **Main**               | `q` / `Esc` / `Ctrl+C`             | Quit application        |
 | **Main**               | `n`                                | Create new review       |
 | **Main**               | `Up` / `Down` / `k` / `j`          | Change review selection |
@@ -22,6 +23,9 @@ A Terminal User Interface (TUI) application for reviewing Git changes with local
 | **ReviewCreate**       | `Backspace`                        | Delete character        |
 | **ConfirmationDialog** | `y` / `Y` / `Enter`                | Confirm                 |
 | **ConfirmationDialog** | `n` / `N` / `q` / `Esc` / `Ctrl+C` | Cancel                  |
+| **Help Modal**         | `Up` / `Down` / `k` / `j`          | Navigate keybindings    |
+| **Help Modal**         | `Enter`                            | Execute selected action |
+| **Help Modal**         | `Esc` / `q` / `Ctrl+C`             | Close help modal        |
 
 ## Installation
 

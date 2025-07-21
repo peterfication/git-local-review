@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
@@ -9,7 +11,7 @@ use ratatui::{
 use crate::{
     app::App,
     event::AppEvent,
-    views::{ViewHandler, ViewType},
+    views::{KeyBinding, ViewHandler, ViewType, centered_rectangle},
 };
 
 pub struct ConfirmationDialogView {
@@ -47,13 +49,14 @@ impl ViewHandler for ConfirmationDialogView {
                 app.events.send(self.on_cancel_event.clone());
                 app.events.send(AppEvent::ViewClose);
             }
+            KeyCode::Char('?') => app.events.send(AppEvent::HelpOpen(self.get_keybindings())),
             _ => {}
         }
         Ok(())
     }
 
     fn render(&self, _app: &App, area: Rect, buf: &mut Buffer) {
-        let popup_area = centered_rect(50, 7, area);
+        let popup_area = centered_rectangle(50, 7, area);
 
         Clear.render(popup_area, buf);
 
@@ -85,30 +88,35 @@ impl ViewHandler for ConfirmationDialogView {
         self
     }
 
+    fn get_keybindings(&self) -> Arc<[KeyBinding]> {
+        Arc::new([
+            KeyBinding {
+                key: "y / Y / Enter".to_string(),
+                description: "Confirm".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Char('y'),
+                    modifiers: KeyModifiers::empty(),
+                    kind: ratatui::crossterm::event::KeyEventKind::Press,
+                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                },
+            },
+            KeyBinding {
+                key: "n / N / q / Esc / Ctrl+C".to_string(),
+                description: "Cancel".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Char('n'),
+                    modifiers: KeyModifiers::empty(),
+                    kind: ratatui::crossterm::event::KeyEventKind::Press,
+                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                },
+            },
+        ])
+    }
+
     #[cfg(test)]
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
-}
-
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(r);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(popup_layout[1])[1]
 }
 
 #[cfg(test)]
