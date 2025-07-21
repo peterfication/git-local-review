@@ -12,7 +12,7 @@ use crate::{
     app::App,
     event::AppEvent,
     services::ReviewCreateData,
-    views::{KeyBinding, ViewHandler, ViewType},
+    views::{KeyBinding, ViewHandler, ViewType, centered_rectangle},
 };
 
 #[derive(Default)]
@@ -60,7 +60,7 @@ impl ViewHandler for ReviewCreateView {
     }
 
     fn render(&self, _app: &App, area: Rect, buf: &mut Buffer) {
-        let popup_area = centered_rect(60, 40, area);
+        let popup_area = centered_rectangle(60, 40, area);
 
         Clear.render(popup_area, buf);
 
@@ -160,26 +160,6 @@ impl ReviewCreateView {
         self.title_input.clear();
         app.events.send(AppEvent::ViewClose);
     }
-}
-
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(r);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(popup_layout[1])[1]
 }
 
 #[cfg(test)]
