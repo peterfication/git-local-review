@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use ratatui::{
     buffer::Buffer,
-    crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
+    crossterm::event::{KeyCode, KeyEvent},
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     widgets::{Block, BorderType, Clear, List, ListItem, ListState, Widget},
@@ -84,10 +84,7 @@ impl ViewHandler for HelpModalView {
 
     fn handle_key_events(&mut self, app: &mut App, key_event: &KeyEvent) -> color_eyre::Result<()> {
         match key_event.code {
-            KeyCode::Esc | KeyCode::Char('q') => {
-                app.events.send(AppEvent::ViewClose);
-            }
-            KeyCode::Char('c' | 'C') if key_event.modifiers == KeyModifiers::CONTROL => {
+            KeyCode::Esc => {
                 app.events.send(AppEvent::ViewClose);
             }
             KeyCode::Enter => {
@@ -143,7 +140,7 @@ impl ViewHandler for HelpModalView {
         ratatui::widgets::StatefulWidget::render(list, chunks[0], buf, &mut list_state);
 
         let help_text = ratatui::widgets::Paragraph::new(
-            "Use ↑/↓ or j/k to navigate, Enter to execute, Esc/q/Ctrl+C to close",
+            "Use ↑/↓ or j/k to navigate, Enter to execute, Esc to close",
         )
         .style(Style::default().fg(Color::Gray));
         help_text.render(chunks[1], buf);
@@ -258,56 +255,6 @@ mod tests {
         let key_event = KeyEvent {
             code: KeyCode::Esc,
             modifiers: KeyModifiers::empty(),
-            kind: KeyEventKind::Press,
-            state: KeyEventState::empty(),
-        };
-
-        view.handle_key_events(&mut app, &key_event).unwrap();
-
-        assert!(app.events.has_pending_events());
-        let event = app.events.try_recv().unwrap();
-        assert!(matches!(
-            *event,
-            crate::event::Event::App(AppEvent::ViewClose)
-        ));
-    }
-
-    #[tokio::test]
-    async fn test_help_modal_view_handle_q_key() {
-        let mut app = create_test_app().await;
-        let main_view = crate::views::MainView::new();
-        let keybindings = main_view.get_keybindings();
-        let mut view = HelpModalView::new(keybindings);
-        assert!(!app.events.has_pending_events());
-
-        let key_event = KeyEvent {
-            code: KeyCode::Char('q'),
-            modifiers: KeyModifiers::empty(),
-            kind: KeyEventKind::Press,
-            state: KeyEventState::empty(),
-        };
-
-        view.handle_key_events(&mut app, &key_event).unwrap();
-
-        assert!(app.events.has_pending_events());
-        let event = app.events.try_recv().unwrap();
-        assert!(matches!(
-            *event,
-            crate::event::Event::App(AppEvent::ViewClose)
-        ));
-    }
-
-    #[tokio::test]
-    async fn test_help_modal_view_handle_ctrl_c() {
-        let mut app = create_test_app().await;
-        let main_view = crate::views::MainView::new();
-        let keybindings = main_view.get_keybindings();
-        let mut view = HelpModalView::new(keybindings);
-        assert!(!app.events.has_pending_events());
-
-        let key_event = KeyEvent {
-            code: KeyCode::Char('c'),
-            modifiers: KeyModifiers::CONTROL,
             kind: KeyEventKind::Press,
             state: KeyEventState::empty(),
         };
