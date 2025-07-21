@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
+use ratatui::crossterm::event::KeyEvent;
+
 use crate::{
     app::App,
     event::{AppEvent, Event},
     services::{ReviewService, ServiceHandler},
-    views::{ConfirmationDialogView, ReviewCreateView},
+    views::{ConfirmationDialogView, HelpModalView, KeyBinding, ReviewCreateView},
 };
 
 pub struct EventProcessor;
@@ -35,6 +37,10 @@ impl EventProcessor {
                     AppEvent::ReviewCreateOpen => Self::review_create_open(app),
                     AppEvent::ReviewDeleteConfirm(ref review_id) => {
                         Self::review_delete_confirm(app, review_id)
+                    }
+                    AppEvent::HelpOpen(ref keybindings) => Self::help_open(app, keybindings),
+                    AppEvent::HelpKeySelected(ref key_event) => {
+                        Self::help_key_selected(app, key_event)
                     }
                     _ => {
                         // Other events are handled by services or views
@@ -72,6 +78,20 @@ impl EventProcessor {
             AppEvent::ViewClose,
         );
         app.push_view(Box::new(confirmation_dialog));
+    }
+
+    /// Open help modal with provided keybindings
+    fn help_open(app: &mut App, keybindings: &Arc<[KeyBinding]>) {
+        let help_modal = HelpModalView::new(Arc::clone(keybindings));
+        app.push_view(Box::new(help_modal));
+    }
+
+    /// Handle key selected from help modal
+    fn help_key_selected(app: &mut App, key_event: &KeyEvent) {
+        // First close the help modal
+        app.events.send(AppEvent::ViewClose);
+        // Then send the selected key event through the normal event flow
+        app.events.send_key_event(*key_event);
     }
 }
 
@@ -246,5 +266,164 @@ mod tests {
         // Should have closed the confirmation dialog
         assert_eq!(app.view_stack.len(), 1);
         assert_eq!(app.view_stack.last().unwrap().view_type(), ViewType::Main);
+    }
+
+    #[tokio::test]
+    async fn test_process_help_open_event() {
+        let mut app = create_test_app().await;
+        assert_eq!(app.view_stack.len(), 1); // Only MainView
+
+        // Create some keybindings for testing
+        let keybindings: Arc<[crate::views::KeyBinding]> = Arc::new([crate::views::KeyBinding {
+            key: "q".to_string(),
+            description: "Quit".to_string(),
+            key_event: ratatui::crossterm::event::KeyEvent {
+                code: ratatui::crossterm::event::KeyCode::Char('q'),
+                modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
+                kind: ratatui::crossterm::event::KeyEventKind::Press,
+                state: ratatui::crossterm::event::KeyEventState::empty(),
+            },
+        }]);
+
+        EventProcessor::process_event(&mut app, Event::App(AppEvent::HelpOpen(keybindings)).into())
+            .await
+            .unwrap();
+
+        // Should have added a help modal view
+        assert_eq!(app.view_stack.len(), 2);
+        assert_eq!(
+            app.view_stack.last().unwrap().view_type(),
+            ViewType::HelpModal
+        );
+    }
+
+    #[tokio::test]
+    async fn test_process_help_key_selected_event() {
+        let mut app = create_test_app().await;
+
+        // First add a help modal
+        let keybindings: Arc<[crate::views::KeyBinding]> = Arc::new([crate::views::KeyBinding {
+            key: "q".to_string(),
+            description: "Quit".to_string(),
+            key_event: ratatui::crossterm::event::KeyEvent {
+                code: ratatui::crossterm::event::KeyCode::Char('q'),
+                modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
+                kind: ratatui::crossterm::event::KeyEventKind::Press,
+                state: ratatui::crossterm::event::KeyEventState::empty(),
+            },
+        }]);
+        let help_modal = HelpModalView::new(keybindings);
+        app.push_view(Box::new(help_modal));
+        assert_eq!(app.view_stack.len(), 2);
+        assert!(!app.events.has_pending_events());
+
+        // Now process a help key selected event
+        let selected_key_event = ratatui::crossterm::event::KeyEvent {
+            code: ratatui::crossterm::event::KeyCode::Char('n'),
+            modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
+            kind: ratatui::crossterm::event::KeyEventKind::Press,
+            state: ratatui::crossterm::event::KeyEventState::empty(),
+        };
+
+        EventProcessor::process_event(
+            &mut app,
+            Event::App(AppEvent::HelpKeySelected(Arc::new(selected_key_event))).into(),
+        )
+        .await
+        .unwrap();
+
+        // Should have sent ViewClose and the key event
+        assert!(app.events.has_pending_events());
+
+        // First event should be ViewClose
+        let event1 = app.events.try_recv().unwrap();
+        assert!(matches!(*event1, Event::App(AppEvent::ViewClose)));
+
+        // Second event should be the key event as a crossterm event
+        let event2 = app.events.try_recv().unwrap();
+        if let Event::Crossterm(ratatui::crossterm::event::Event::Key(key_event)) = *event2 {
+            assert_eq!(
+                key_event.code,
+                ratatui::crossterm::event::KeyCode::Char('n')
+            );
+            assert_eq!(
+                key_event.modifiers,
+                ratatui::crossterm::event::KeyModifiers::empty()
+            );
+        } else {
+            panic!("Expected crossterm key event, got: {event2:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_help_open_function() {
+        let mut app = create_test_app().await;
+        assert_eq!(app.view_stack.len(), 1); // Only MainView
+
+        let keybindings: Arc<[crate::views::KeyBinding]> = Arc::new([crate::views::KeyBinding {
+            key: "test".to_string(),
+            description: "Test keybinding".to_string(),
+            key_event: ratatui::crossterm::event::KeyEvent {
+                code: ratatui::crossterm::event::KeyCode::Char('t'),
+                modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
+                kind: ratatui::crossterm::event::KeyEventKind::Press,
+                state: ratatui::crossterm::event::KeyEventState::empty(),
+            },
+        }]);
+
+        EventProcessor::help_open(&mut app, &keybindings);
+
+        // Should have added help modal to view stack
+        assert_eq!(app.view_stack.len(), 2);
+        assert_eq!(
+            app.view_stack.last().unwrap().view_type(),
+            ViewType::HelpModal
+        );
+    }
+
+    #[tokio::test]
+    async fn test_help_key_selected_function() {
+        let mut app = create_test_app().await;
+        assert!(!app.events.has_pending_events());
+
+        let key_event = ratatui::crossterm::event::KeyEvent {
+            code: ratatui::crossterm::event::KeyCode::Enter,
+            modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
+            kind: ratatui::crossterm::event::KeyEventKind::Press,
+            state: ratatui::crossterm::event::KeyEventState::empty(),
+        };
+
+        EventProcessor::help_key_selected(&mut app, &key_event);
+
+        // Should have sent ViewClose and the key event
+        assert!(app.events.has_pending_events());
+
+        // First event should be ViewClose
+        let event1 = app.events.try_recv().unwrap();
+        assert!(matches!(*event1, Event::App(AppEvent::ViewClose)));
+
+        // Second event should be the key event as a crossterm event
+        let event2 = app.events.try_recv().unwrap();
+        if let Event::Crossterm(ratatui::crossterm::event::Event::Key(received_key_event)) = *event2
+        {
+            assert_eq!(
+                received_key_event.code,
+                ratatui::crossterm::event::KeyCode::Enter
+            );
+            assert_eq!(
+                received_key_event.modifiers,
+                ratatui::crossterm::event::KeyModifiers::empty()
+            );
+            assert_eq!(
+                received_key_event.kind,
+                ratatui::crossterm::event::KeyEventKind::Press
+            );
+            assert_eq!(
+                received_key_event.state,
+                ratatui::crossterm::event::KeyEventState::empty()
+            );
+        } else {
+            panic!("Expected crossterm key event, got: {event2:?}");
+        }
     }
 }

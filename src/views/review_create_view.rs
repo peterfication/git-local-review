@@ -12,7 +12,7 @@ use crate::{
     app::App,
     event::AppEvent,
     services::ReviewCreateData,
-    views::{ViewHandler, ViewType},
+    views::{KeyBinding, ViewHandler, ViewType},
 };
 
 #[derive(Default)]
@@ -35,6 +35,7 @@ impl ViewHandler for ReviewCreateView {
                     })));
                 self.title_input.clear();
             }
+            KeyCode::Char('?') => app.events.send(AppEvent::HelpOpen(self.get_keybindings())),
             KeyCode::Char(char) => {
                 self.title_input.push(char);
             }
@@ -101,6 +102,51 @@ impl ViewHandler for ReviewCreateView {
     #[cfg(test)]
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
+    }
+
+    fn get_keybindings(&self) -> Arc<[KeyBinding]> {
+        Arc::new([
+            KeyBinding {
+                key: "Esc".to_string(),
+                description: "Cancel and close popup".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Esc,
+                    modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
+                    kind: ratatui::crossterm::event::KeyEventKind::Press,
+                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                },
+            },
+            KeyBinding {
+                key: "Enter".to_string(),
+                description: "Submit review".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Enter,
+                    modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
+                    kind: ratatui::crossterm::event::KeyEventKind::Press,
+                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                },
+            },
+            KeyBinding {
+                key: "<char>".to_string(),
+                description: "Enter review title".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Char('a'),
+                    modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
+                    kind: ratatui::crossterm::event::KeyEventKind::Press,
+                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                },
+            },
+            KeyBinding {
+                key: "Backspace".to_string(),
+                description: "Delete character".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Backspace,
+                    modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
+                    kind: ratatui::crossterm::event::KeyEventKind::Press,
+                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                },
+            },
+        ])
     }
 
     #[cfg(test)]

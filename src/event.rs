@@ -3,12 +3,13 @@ use std::time::Duration;
 
 use color_eyre::eyre::OptionExt;
 use futures::{FutureExt, StreamExt};
-use ratatui::crossterm::event::Event as CrosstermEvent;
+use ratatui::crossterm::event::{Event as CrosstermEvent, KeyEvent};
 use tokio::sync::mpsc;
 
 use crate::{
     models::Review,
     services::{ReviewCreateData, ReviewsLoadingState},
+    views::KeyBinding,
 };
 
 /// The frequency at which tick events are emitted.
@@ -67,6 +68,11 @@ pub enum AppEvent {
     ReviewDeleteConfirm(Arc<str>),
     /// Delete the selected review.
     ReviewDelete(Arc<str>),
+
+    /// Open help modal with keybindings.
+    HelpOpen(Arc<[KeyBinding]>),
+    /// Key selected from help modal.
+    HelpKeySelected(Arc<KeyEvent>),
 }
 
 /// Terminal event handler.
@@ -127,6 +133,15 @@ impl EventHandler {
         let _ = self.sender.send(Event::App(app_event).into());
     }
 
+    /// Queue a key event to be sent to the event receiver as a crossterm event.
+    ///
+    /// This is useful for programmatically sending key events that will be processed
+    /// through the normal key event handling flow.
+    pub fn send_key_event(&mut self, key_event: KeyEvent) {
+        let crossterm_event = CrosstermEvent::Key(key_event);
+        let _ = self.sender.send(Event::Crossterm(crossterm_event).into());
+    }
+
     /// Check if there are any pending events in the queue.
     /// This is useful for testing to verify that events have been sent.
     #[cfg(test)]
@@ -185,5 +200,40 @@ impl EventTask {
         // Ignores the result because shutting down the app drops the receiver, which causes the send
         // operation to fail. This is expected behavior and should not panic.
         let _ = self.sender.send(event);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::crossterm::event::{KeyCode, KeyEventKind, KeyEventState, KeyModifiers};
+
+    #[test]
+    fn test_send_key_event() {
+        let mut event_handler = EventHandler::new_for_test();
+
+        let key_event = KeyEvent {
+            code: KeyCode::Char('q'),
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: KeyEventState::empty(),
+        };
+
+        // Send a key event
+        event_handler.send_key_event(key_event);
+
+        // Verify the event was sent as a crossterm event
+        assert!(event_handler.has_pending_events());
+        let event = event_handler.try_recv().unwrap();
+
+        match *event {
+            Event::Crossterm(CrosstermEvent::Key(received_key_event)) => {
+                assert_eq!(received_key_event.code, KeyCode::Char('q'));
+                assert_eq!(received_key_event.modifiers, KeyModifiers::empty());
+                assert_eq!(received_key_event.kind, KeyEventKind::Press);
+                assert_eq!(received_key_event.state, KeyEventState::empty());
+            }
+            _ => panic!("Expected crossterm key event, got: {event:?}"),
+        }
     }
 }

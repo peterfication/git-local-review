@@ -1,12 +1,17 @@
 use ratatui::{buffer::Buffer, crossterm::event::KeyEvent, layout::Rect};
+use std::sync::Arc;
 
 use crate::{app::App, event::AppEvent};
 
+pub use help_modal::KeyBinding;
+
 pub mod confirmation_dialog;
+pub mod help_modal;
 pub mod main_view;
 pub mod review_create_view;
 
 pub use confirmation_dialog::ConfirmationDialogView;
+pub use help_modal::HelpModalView;
 pub use main_view::MainView;
 pub use review_create_view::ReviewCreateView;
 
@@ -15,6 +20,7 @@ pub enum ViewType {
     Main,
     ReviewCreate,
     ConfirmationDialog,
+    HelpModal,
 }
 
 pub trait ViewHandler {
@@ -26,6 +32,8 @@ pub trait ViewHandler {
         // Default implementation does nothing
         let _ = (app, event);
     }
+    /// Get the keybindings for this view to display in help modal
+    fn get_keybindings(&self) -> Arc<[KeyBinding]>;
 
     /// Get a debug representation of the view's state for testing purposes.
     /// This is only available in test builds.

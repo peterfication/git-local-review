@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
@@ -9,7 +11,7 @@ use ratatui::{
 use crate::{
     app::App,
     event::AppEvent,
-    views::{ViewHandler, ViewType},
+    views::{KeyBinding, ViewHandler, ViewType},
 };
 
 pub struct ConfirmationDialogView {
@@ -47,6 +49,7 @@ impl ViewHandler for ConfirmationDialogView {
                 app.events.send(self.on_cancel_event.clone());
                 app.events.send(AppEvent::ViewClose);
             }
+            KeyCode::Char('?') => app.events.send(AppEvent::HelpOpen(self.get_keybindings())),
             _ => {}
         }
         Ok(())
@@ -83,6 +86,31 @@ impl ViewHandler for ConfirmationDialogView {
     #[cfg(test)]
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
+    }
+
+    fn get_keybindings(&self) -> Arc<[KeyBinding]> {
+        Arc::new([
+            KeyBinding {
+                key: "y / Y / Enter".to_string(),
+                description: "Confirm".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Char('y'),
+                    modifiers: KeyModifiers::empty(),
+                    kind: ratatui::crossterm::event::KeyEventKind::Press,
+                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                },
+            },
+            KeyBinding {
+                key: "n / N / q / Esc / Ctrl+C".to_string(),
+                description: "Cancel".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Char('n'),
+                    modifiers: KeyModifiers::empty(),
+                    kind: ratatui::crossterm::event::KeyEventKind::Press,
+                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                },
+            },
+        ])
     }
 
     #[cfg(test)]

@@ -13,7 +13,7 @@ use crate::{
     event::AppEvent,
     models::Review,
     services::ReviewsLoadingState,
-    views::{ViewHandler, ViewType},
+    views::{KeyBinding, ViewHandler, ViewType},
 };
 
 pub struct MainView {
@@ -43,6 +43,7 @@ impl ViewHandler for MainView {
             KeyCode::Char('j') | KeyCode::Down => self.select_next_review(),
             KeyCode::Char('k') | KeyCode::Up => self.select_previous_review(),
             KeyCode::Char('d') => self.delete_selected_review(app),
+            KeyCode::Char('?') => app.events.send(AppEvent::HelpOpen(self.get_keybindings())),
             _ => {}
         }
         Ok(())
@@ -54,10 +55,9 @@ impl ViewHandler for MainView {
             .constraints([Constraint::Length(3), Constraint::Min(0)])
             .split(area);
 
-        let header =
-            Paragraph::new("Git Local Review - Press 'n' to create a new review, 'q' to quit")
-                .block(Block::bordered().title("git-local-review"))
-                .fg(Color::Cyan);
+        let header = Paragraph::new("Git Local Review - Press '?' for help")
+            .block(Block::bordered().title("git-local-review"))
+            .fg(Color::Cyan);
         header.render(chunks[0], buf);
 
         let reviews: Vec<ListItem> = match &self.reviews_loading_state {
@@ -92,6 +92,51 @@ impl ViewHandler for MainView {
     #[cfg(test)]
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
+    }
+
+    fn get_keybindings(&self) -> Arc<[KeyBinding]> {
+        Arc::new([
+            KeyBinding {
+                key: "q / Esc / Ctrl+C".to_string(),
+                description: "Quit application".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Char('q'),
+                    modifiers: KeyModifiers::empty(),
+                    kind: ratatui::crossterm::event::KeyEventKind::Press,
+                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                },
+            },
+            KeyBinding {
+                key: "n".to_string(),
+                description: "Create new review".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Char('n'),
+                    modifiers: KeyModifiers::empty(),
+                    kind: ratatui::crossterm::event::KeyEventKind::Press,
+                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                },
+            },
+            KeyBinding {
+                key: "Up / Down / k / j".to_string(),
+                description: "Navigate review selection".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Down,
+                    modifiers: KeyModifiers::empty(),
+                    kind: ratatui::crossterm::event::KeyEventKind::Press,
+                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                },
+            },
+            KeyBinding {
+                key: "d".to_string(),
+                description: "Delete selected review".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Char('d'),
+                    modifiers: KeyModifiers::empty(),
+                    kind: ratatui::crossterm::event::KeyEventKind::Press,
+                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                },
+            },
+        ])
     }
 
     #[cfg(test)]
