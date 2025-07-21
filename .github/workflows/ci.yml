@@ -32,6 +32,7 @@ jobs:
         run: cargo fmt -- --check
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
+
   clippy:
     name: clippy
     runs-on: ubuntu-latest
@@ -49,6 +50,7 @@ jobs:
         uses: clechasseur/rs-clippy-check@v3
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
+
   doc:
     # run docs generation on nightly rather than stable. This enables features like
     # https://doc.rust-lang.org/beta/unstable-book/language-features/doc-cfg.html which allows an
@@ -63,6 +65,7 @@ jobs:
         run: cargo doc --no-deps --all-features
         env:
           RUSTDOCFLAGS: --cfg docsrs
+
   test:
     runs-on: ${{ matrix.os }}
     name: test ${{ matrix.os }}
