@@ -20,6 +20,14 @@ lint:
 test:
   cargo nextest run
 
+# Run tests with coverage
+test-coverage:
+  cargo tarpaulin --out Html && open tarpaulin-report.html
+
+# Open the coverage report in the browser
+test-coverage-open:
+  open tarpaulin-report.html
+
 # Review test snapshots
 test-snapshot-review:
   cargo insta review
