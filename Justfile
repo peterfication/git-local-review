@@ -36,6 +36,10 @@ test-snapshot-review:
 doc:
   cargo doc --no-deps --all-features
 
+# Generate documentation and open it in the browser
+doc-open:
+  just doc && open target/doc/git_local_review/index.html
+
 # Build the application
 build:
   cargo build
