@@ -13,11 +13,13 @@ pub mod confirmation_dialog;
 pub mod help_modal;
 pub mod main_view;
 pub mod review_create_view;
+pub mod review_details_view;
 
 pub use confirmation_dialog::ConfirmationDialogView;
 pub use help_modal::HelpModalView;
 pub use main_view::MainView;
 pub use review_create_view::ReviewCreateView;
+pub use review_details_view::ReviewDetailsView;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViewType {
@@ -25,6 +27,7 @@ pub enum ViewType {
     ReviewCreate,
     ConfirmationDialog,
     HelpModal,
+    ReviewDetails,
 }
 
 pub trait ViewHandler {

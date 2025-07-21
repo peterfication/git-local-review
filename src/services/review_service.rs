@@ -147,6 +147,24 @@ impl ReviewService {
             }
         }
     }
+
+    /// Handle loading a single review by ID
+    async fn handle_review_load(review_id: &str, database: &Database, events: &mut EventHandler) {
+        match Review::find_by_id(database.pool(), review_id).await {
+            Ok(Some(review)) => {
+                log::debug!("Loaded review with ID {}", review.id);
+                events.send(AppEvent::ReviewLoaded(Arc::from(review)));
+            }
+            Ok(None) => {
+                log::warn!("No review found with ID: {review_id}");
+                events.send(AppEvent::ReviewNotFound(review_id.into()));
+            }
+            Err(error) => {
+                log::error!("Error loading review by ID: {error}");
+                events.send(AppEvent::ReviewLoadError(error.to_string().into()));
+            }
+        }
+    }
 }
 
 impl ServiceHandler for ReviewService {
@@ -164,6 +182,9 @@ impl ServiceHandler for ReviewService {
                 }
                 AppEvent::ReviewDelete(review_id) => {
                     Self::handle_review_delete(review_id, database, events).await
+                }
+                AppEvent::ReviewLoad(review_id) => {
+                    Self::handle_review_load(review_id, database, events).await
                 }
                 _ => {
                     // Other events are not handled by ReviewService
@@ -622,5 +643,89 @@ mod tests {
             *event,
             Event::App(AppEvent::ReviewsLoadingState(ReviewsLoadingState::Error(_)))
         ));
+    }
+
+    #[tokio::test]
+    async fn test_handle_app_event_review_load_existing_review() {
+        let database = create_test_database().await;
+        let mut events = EventHandler::new_for_test();
+
+        // Create a test review
+        let review = Review::new("Test Review".to_string());
+        review.save(database.pool()).await.unwrap();
+
+        // Test loading the review
+        ReviewService::handle_app_event(
+            &AppEvent::ReviewLoad(review.id.clone().into()),
+            &database,
+            &mut events,
+        )
+        .await
+        .unwrap();
+
+        // Should send ReviewLoaded event
+        assert!(events.has_pending_events());
+        let event = events.try_recv().unwrap();
+        match &*event {
+            Event::App(AppEvent::ReviewLoaded(loaded_review)) => {
+                assert_eq!(loaded_review.id, review.id);
+                assert_eq!(loaded_review.title, "Test Review");
+            }
+            _ => panic!("Expected ReviewLoaded event"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_app_event_review_load_non_existent_review() {
+        let database = create_test_database().await;
+        let mut events = EventHandler::new_for_test();
+
+        // Test loading a non-existent review
+        let non_existent_id = "non-existent-id";
+        ReviewService::handle_app_event(
+            &AppEvent::ReviewLoad(non_existent_id.into()),
+            &database,
+            &mut events,
+        )
+        .await
+        .unwrap();
+
+        // Should send ReviewNotFound event
+        assert!(events.has_pending_events());
+        let event = events.try_recv().unwrap();
+        match &*event {
+            Event::App(AppEvent::ReviewNotFound(review_id)) => {
+                assert_eq!(review_id.as_ref(), non_existent_id);
+            }
+            _ => panic!("Expected ReviewNotFound event"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_app_event_review_load_database_error() {
+        // Create a database without the reviews table to simulate an error
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        // Note: We intentionally don't call Review::create_table here
+        let database = Database::from_pool(pool);
+        let mut events = EventHandler::new_for_test();
+
+        // Test loading a review when the table doesn't exist (will cause a database error)
+        ReviewService::handle_app_event(
+            &AppEvent::ReviewLoad("some-id".into()),
+            &database,
+            &mut events,
+        )
+        .await
+        .unwrap();
+
+        // Should send ReviewLoadError event
+        assert!(events.has_pending_events());
+        let event = events.try_recv().unwrap();
+        match &*event {
+            Event::App(AppEvent::ReviewLoadError(error)) => {
+                assert!(error.contains("no such table: reviews"));
+            }
+            _ => panic!("Expected ReviewLoadError event"),
+        }
     }
 }

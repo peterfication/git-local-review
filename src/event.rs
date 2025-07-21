@@ -50,14 +50,29 @@ pub enum AppEvent {
     ReviewsLoading,
     /// Propagates the current loading state of reviews.
     ReviewsLoadingState(ReviewsLoadingState),
+    /// Load a single review by ID.
+    ReviewLoad(Arc<str>),
+    /// Single review loaded successfully.
+    ReviewLoaded(Arc<Review>),
+    /// Review was not found.
+    ReviewNotFound(Arc<str>),
+    /// Error occurred while loading a review.
+    ReviewLoadError(Arc<str>),
     /// Inform that a review has been created.
     ReviewCreated(Review),
     /// Error occurred while creating a review.
     ReviewCreatedError(Arc<str>),
+    /// Delete the selected review.
+    ReviewDelete(Arc<str>),
     /// Inform that a review has been deleted.
     ReviewDeleted,
     /// Error occurred while deleting a review.
     ReviewDeletedError(Arc<str>),
+
+    /// Open help modal with keybindings.
+    HelpOpen(Arc<[KeyBinding]>),
+    /// Key selected from help modal.
+    HelpKeySelected(Arc<KeyEvent>),
 
     /// Open the review creation view.
     ReviewCreateOpen,
@@ -66,13 +81,9 @@ pub enum AppEvent {
 
     /// Open delete confirmation dialog for selected review.
     ReviewDeleteConfirm(Arc<str>),
-    /// Delete the selected review.
-    ReviewDelete(Arc<str>),
 
-    /// Open help modal with keybindings.
-    HelpOpen(Arc<[KeyBinding]>),
-    /// Key selected from help modal.
-    HelpKeySelected(Arc<KeyEvent>),
+    /// Open review details view.
+    ReviewDetailsOpen(Arc<str>),
 }
 
 /// Terminal event handler.
