@@ -43,6 +43,9 @@ impl ViewHandler for MainView {
             KeyCode::Char('j') | KeyCode::Down => self.select_next_review(),
             KeyCode::Char('k') | KeyCode::Up => self.select_previous_review(),
             KeyCode::Char('d') => self.delete_selected_review(app),
+            KeyCode::Char('o') | KeyCode::Char(' ') | KeyCode::Enter => {
+                self.open_review_details(app)
+            }
             KeyCode::Char('?') => app.events.send(AppEvent::HelpOpen(self.get_keybindings())),
             _ => {}
         }
@@ -136,6 +139,16 @@ impl ViewHandler for MainView {
                     state: ratatui::crossterm::event::KeyEventState::empty(),
                 },
             },
+            KeyBinding {
+                key: "o / Space / Enter".to_string(),
+                description: "Open review details".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Char('o'),
+                    modifiers: KeyModifiers::empty(),
+                    kind: ratatui::crossterm::event::KeyEventKind::Press,
+                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                },
+            },
         ])
     }
 
@@ -207,6 +220,17 @@ impl MainView {
                 let review_id = self.reviews[index].id.clone();
                 app.events
                     .send(AppEvent::ReviewDeleteConfirm(Arc::from(review_id)));
+            }
+        }
+    }
+
+    /// Open review details for the currently selected review
+    pub fn open_review_details(&self, app: &mut App) {
+        if let Some(index) = self.selected_review_index {
+            if index < self.reviews.len() {
+                let review_id = self.reviews[index].id.clone();
+                app.events
+                    .send(AppEvent::ReviewDetailsOpen(Arc::from(review_id)));
             }
         }
     }
@@ -777,5 +801,111 @@ mod tests {
 
         // Should select first review
         assert_eq!(view.selected_review_index, Some(0));
+    }
+
+    #[tokio::test]
+    async fn test_main_view_handle_open_review_details_key_with_selection() {
+        let mut app = create_test_app_with_reviews().await;
+        let mut view = MainView::new();
+
+        // Populate the view with reviews first
+        let reviews = Review::list_all(app.database.pool()).await.unwrap();
+        view.reviews = reviews.into();
+
+        // Select first review
+        view.selected_review_index = Some(0);
+        assert!(!app.events.has_pending_events());
+
+        let key_event = KeyEvent {
+            code: KeyCode::Char('o'),
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: KeyEventState::empty(),
+        };
+
+        view.handle_key_events(&mut app, &key_event).unwrap();
+
+        // Should have sent a ReviewDetailsOpen event with the review ID
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        match &*event {
+            Event::App(AppEvent::ReviewDetailsOpen(review_id)) => {
+                // Should be the ID of the first review
+                assert_eq!(review_id.as_ref(), view.reviews[0].id);
+            }
+            _ => panic!("Expected ReviewDetailsOpen event, got: {event:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_main_view_handle_open_review_details_key_no_selection() {
+        let mut app = create_test_app_with_reviews().await;
+        let mut view = MainView::new();
+
+        // No selection
+        // view.selected_review_index is None by default
+        assert!(!app.events.has_pending_events());
+
+        let key_event = KeyEvent {
+            code: KeyCode::Char('o'),
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: KeyEventState::empty(),
+        };
+
+        view.handle_key_events(&mut app, &key_event).unwrap();
+
+        // Should not have sent any events since no selection
+        assert!(!app.events.has_pending_events());
+    }
+
+    #[tokio::test]
+    async fn test_main_view_handle_open_review_details_key_empty_reviews() {
+        let mut app = create_test_app_with_reviews().await;
+        let mut view = MainView::new();
+
+        // Empty reviews list
+        view.reviews = Arc::new([]);
+        view.selected_review_index = Some(0); // Invalid selection
+        assert!(!app.events.has_pending_events());
+
+        let key_event = KeyEvent {
+            code: KeyCode::Char('o'),
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: KeyEventState::empty(),
+        };
+
+        view.handle_key_events(&mut app, &key_event).unwrap();
+
+        // Should not have sent any events since reviews list is empty
+        assert!(!app.events.has_pending_events());
+    }
+
+    #[tokio::test]
+    async fn test_main_view_open_review_details_method_with_selection() {
+        let mut app = create_test_app_with_reviews().await;
+        let mut view = MainView::new();
+
+        // Populate the view with reviews first
+        let reviews = Review::list_all(app.database.pool()).await.unwrap();
+        view.reviews = reviews.into();
+
+        // Select first review
+        view.selected_review_index = Some(0);
+        assert!(!app.events.has_pending_events());
+
+        view.open_review_details(&mut app);
+
+        // Should have sent a ReviewDetailsOpen event with the review ID
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        match &*event {
+            Event::App(AppEvent::ReviewDetailsOpen(review_id)) => {
+                // Should be the ID of the first review
+                assert_eq!(review_id.as_ref(), view.reviews[0].id);
+            }
+            _ => panic!("Expected ReviewDetailsOpen event, got: {event:?}"),
+        }
     }
 }

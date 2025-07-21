@@ -6,7 +6,9 @@ use crate::{
     app::App,
     event::{AppEvent, Event},
     services::{ReviewService, ServiceHandler},
-    views::{ConfirmationDialogView, HelpModalView, KeyBinding, ReviewCreateView},
+    views::{
+        ConfirmationDialogView, HelpModalView, KeyBinding, ReviewCreateView, ReviewDetailsView,
+    },
 };
 
 pub struct EventProcessor;
@@ -41,6 +43,9 @@ impl EventProcessor {
                     AppEvent::HelpOpen(ref keybindings) => Self::help_open(app, keybindings),
                     AppEvent::HelpKeySelected(ref key_event) => {
                         Self::help_key_selected(app, key_event)
+                    }
+                    AppEvent::ReviewDetailsOpen(ref review_id) => {
+                        Self::review_details_open(app, review_id)
                     }
                     _ => {
                         // Other events are handled by services or views
@@ -92,6 +97,13 @@ impl EventProcessor {
         app.events.send(AppEvent::ViewClose);
         // Then send the selected key event through the normal event flow
         app.events.send_key_event(*key_event);
+    }
+
+    /// Open review details view
+    fn review_details_open(app: &mut App, review_id: &str) {
+        // Create an empty ReviewDetailsView and trigger loading
+        app.push_view(Box::new(ReviewDetailsView::new_loading()));
+        app.events.send(AppEvent::ReviewLoad(Arc::from(review_id)));
     }
 }
 
@@ -424,6 +436,65 @@ mod tests {
             );
         } else {
             panic!("Expected crossterm key event, got: {event2:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_process_review_details_open_event() {
+        let mut app = create_test_app().await;
+        assert_eq!(app.view_stack.len(), 1); // Only MainView
+        assert!(!app.events.has_pending_events());
+
+        let review_id = "test-review-id";
+        EventProcessor::process_event(
+            &mut app,
+            Event::App(AppEvent::ReviewDetailsOpen(review_id.into())).into(),
+        )
+        .await
+        .unwrap();
+
+        // Should have added a ReviewDetailsView to the stack
+        assert_eq!(app.view_stack.len(), 2);
+        assert_eq!(
+            app.view_stack.last().unwrap().view_type(),
+            ViewType::ReviewDetails
+        );
+
+        // Should have sent a ReviewLoad event
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        match &*event {
+            Event::App(AppEvent::ReviewLoad(event_review_id)) => {
+                assert_eq!(event_review_id.as_ref(), review_id);
+            }
+            _ => panic!("Expected ReviewLoad event, got: {event:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_review_details_open_function() {
+        let mut app = create_test_app().await;
+        assert_eq!(app.view_stack.len(), 1); // Only MainView
+        assert!(!app.events.has_pending_events());
+
+        let review_id = "direct-test-id";
+        EventProcessor::review_details_open(&mut app, review_id);
+
+        // Should have added a ReviewDetailsView to the stack
+        assert_eq!(app.view_stack.len(), 2);
+        assert_eq!(
+            app.view_stack.last().unwrap().view_type(),
+            ViewType::ReviewDetails
+        );
+
+        // Should have sent a ReviewLoad event
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        match &*event {
+            Event::App(AppEvent::ReviewLoad(event_review_id)) => {
+                assert_eq!(event_review_id.as_ref(), review_id);
+            }
+            _ => panic!("Expected ReviewLoad event, got: {event:?}"),
         }
     }
 }

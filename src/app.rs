@@ -116,7 +116,7 @@ mod tests {
         views::{MainView, ReviewCreateView, ViewType},
     };
 
-    async fn create_test_app() -> App {
+    pub async fn create_test_app() -> App {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         Review::create_table(&pool).await.unwrap();
 
