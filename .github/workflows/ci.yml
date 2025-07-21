@@ -94,21 +94,3 @@ jobs:
         run: cargo test --locked --all-features --all-targets
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
-
-  coverage:
-    runs-on: ubuntu-latest
-    name: Coverage
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: cargo generate-lockfile
-        if: hashFiles('Cargo.lock') == ''
-        run: cargo generate-lockfile
-      - name: Install cargo-tarpaulin
-        run: cargo install cargo-tarpaulin
-      - name: Run tests with code coverage
-        run: cargo tarpaulin
-      - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@v2
-
