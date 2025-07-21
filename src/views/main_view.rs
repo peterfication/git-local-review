@@ -35,7 +35,7 @@ impl ViewHandler for MainView {
 
     fn handle_key_events(&mut self, app: &mut App, key_event: &KeyEvent) -> color_eyre::Result<()> {
         match key_event.code {
-            KeyCode::Esc | KeyCode::Char('q') => app.events.send(AppEvent::Quit),
+            KeyCode::Char('q') => app.events.send(AppEvent::Quit),
             KeyCode::Char('c' | 'C') if key_event.modifiers == KeyModifiers::CONTROL => {
                 app.events.send(AppEvent::Quit)
             }
@@ -100,7 +100,7 @@ impl ViewHandler for MainView {
     fn get_keybindings(&self) -> Arc<[KeyBinding]> {
         Arc::new([
             KeyBinding {
-                key: "q / Esc / Ctrl+C".to_string(),
+                key: "q / Ctrl+C".to_string(),
                 description: "Quit application".to_string(),
                 key_event: KeyEvent {
                     code: KeyCode::Char('q'),
@@ -357,30 +357,6 @@ mod tests {
         assert!(app.running);
 
         // Verify that a Quit event was sent
-        assert!(app.events.has_pending_events());
-        let event = app.events.try_recv().unwrap();
-        assert!(matches!(*event, Event::App(AppEvent::Quit)));
-    }
-
-    #[tokio::test]
-    async fn test_main_view_handle_esc_key() {
-        let mut app = create_test_app_with_reviews().await;
-        let mut view = MainView::new();
-        assert!(app.running);
-        assert!(!app.events.has_pending_events());
-
-        let key_event = KeyEvent {
-            code: KeyCode::Esc,
-            modifiers: KeyModifiers::empty(),
-            kind: KeyEventKind::Press,
-            state: KeyEventState::empty(),
-        };
-
-        view.handle_key_events(&mut app, &key_event).unwrap();
-
-        assert!(app.running);
-
-        // Verify that a Quit event was sent (Esc also triggers quit)
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
         assert!(matches!(*event, Event::App(AppEvent::Quit)));
