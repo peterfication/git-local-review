@@ -12,6 +12,9 @@ use crate::{
     views::KeyBinding,
 };
 
+/// Type alias for review identifiers to make event signatures more descriptive.
+pub type ReviewId = str;
+
 /// The frequency at which tick events are emitted.
 const TICK_FPS: f64 = 30.0;
 
@@ -53,23 +56,23 @@ pub enum AppEvent {
     /// Propagates the current loading state of reviews.
     ReviewsLoadingState(ReviewsLoadingState),
     /// Load a single review by ID.
-    ReviewLoad(Arc<str>),
+    ReviewLoad(Arc<ReviewId>),
     /// Single review loaded successfully.
     ReviewLoaded(Arc<Review>),
     /// Review was not found.
-    ReviewNotFound(Arc<str>),
+    ReviewNotFound(Arc<ReviewId>),
     /// Error occurred while loading a review.
-    ReviewLoadError(Arc<str>),
+    ReviewLoadError(Arc<ReviewId>),
     /// Inform that a review has been created.
     ReviewCreated(Review),
     /// Error occurred while creating a review.
     ReviewCreatedError(Arc<str>),
     /// Delete the selected review.
-    ReviewDelete(Arc<str>),
+    ReviewDelete(Arc<ReviewId>),
     /// Inform that a review has been deleted.
     ReviewDeleted,
     /// Error occurred while deleting a review.
-    ReviewDeletedError(Arc<str>),
+    ReviewDeletedError(Arc<ReviewId>),
 
     /// Open help modal with keybindings.
     HelpOpen(Arc<[KeyBinding]>),
@@ -82,10 +85,10 @@ pub enum AppEvent {
     ReviewCreateSubmit(Arc<ReviewCreateData>),
 
     /// Open delete confirmation dialog for selected review.
-    ReviewDeleteConfirm(Arc<str>),
+    ReviewDeleteConfirm(Arc<ReviewId>),
 
     /// Open review details view.
-    ReviewDetailsOpen(Arc<str>),
+    ReviewDetailsOpen(Arc<ReviewId>),
 }
 
 /// Terminal event handler.

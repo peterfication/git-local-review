@@ -198,7 +198,7 @@ impl ServiceHandler for ReviewService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::event::{Event, EventHandler};
+    use crate::event::{Event, EventHandler, ReviewId};
     use sqlx::SqlitePool;
 
     async fn create_test_database() -> Database {
@@ -557,7 +557,7 @@ mod tests {
 
         // Load reviews to get IDs (they will be ordered by created_at DESC)
         let reviews = Review::list_all(database.pool()).await.unwrap();
-        let review_id_to_delete: Arc<str> = reviews[0].id.clone().into();
+        let review_id_to_delete: Arc<ReviewId> = reviews[0].id.clone().into();
 
         // Test review deletion
         ReviewService::handle_app_event(
