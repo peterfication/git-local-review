@@ -32,8 +32,8 @@ A Terminal User Interface (TUI) application for reviewing Git changes with local
 ## Installation
 
 ```bash
- cargo install --git https://github.com/peterfication/git-local-review
- git-local-review
+cargo install --git https://github.com/peterfication/git-local-review
+git-local-review
 ```
 
 ## Architecture

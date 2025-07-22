@@ -67,6 +67,7 @@ All commands are available via `just` (task runner). See README.md for user-focu
 - **views/confirmation_dialog.rs**: Reusable confirmation dialog for destructive operations
 
 **View Stack Management:**
+
 - `App.view_stack: Vec<Box<dyn ViewHandler>>` - Dynamic view stack using trait objects
 - Only the top view receives key events (proper modal behavior)
 - All views receive app events (for state synchronization)
@@ -127,6 +128,7 @@ CREATE TABLE reviews (
 See [Cargo.toml](Cargo.toml)
 
 Key dependencies:
+
 - **ratatui**: TUI framework for terminal interfaces
 - **tokio**: Async runtime for event handling and I/O
 - **sqlx**: Async SQLite database operations
@@ -139,6 +141,7 @@ Key dependencies:
 **Comprehensive test suite with 42+ tests covering all components:**
 
 #### Test Categories:
+
 - **Unit Tests**: Models, services, and business logic (isolated)
 - **Integration Tests**: Event processing and view interactions
 - **UI Tests**: View behavior with event verification and state inspection
@@ -146,6 +149,7 @@ Key dependencies:
 - **Arc Optimization Tests**: Verification of efficient memory usage patterns
 
 #### Key Testing Features:
+
 - **Event Verification**: Tests can inspect published events using `EventHandler.try_recv()`
 - **View State Inspection**: Test-only `debug_state()` method for checking view internals
 - **Modal Behavior Testing**: Verification that only top view receives key events
@@ -155,6 +159,7 @@ Key dependencies:
 - **Snapshot Testing**: Uses `insta` crate for UI rendering regression tests
 
 #### Test Examples:
+
 - Event publishing verification (e.g., key 'q' sends `AppEvent::Quit`)
 - View type assertions (e.g., `view.view_type() == ViewType::ReviewCreate`)
 - State mutation testing (e.g., `debug_state()` shows `"title_input: \"test\""`)
