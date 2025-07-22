@@ -33,6 +33,7 @@ impl Review {
         }
     }
 
+    #[cfg(test)]
     pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"

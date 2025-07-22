@@ -5,6 +5,7 @@ pub mod database;
 pub mod event;
 pub mod event_handler;
 pub mod logging;
+pub mod migrations;
 pub mod models;
 pub mod services;
 #[cfg(test)]
