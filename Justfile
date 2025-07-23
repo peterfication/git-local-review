@@ -2,11 +2,15 @@ default:
   just --list
 
 # Run all steps of CI
-ci: db-schema-dump format lint test build doc
+ci: run-version db-schema-dump format lint test build doc
 
 # Run the application
 run:
   cargo run
+
+# Run the application and print the version
+run-version:
+  cargo run -- --version
 
 # Format all files
 format: format-rust format-rest
