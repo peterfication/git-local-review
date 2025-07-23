@@ -10,7 +10,8 @@ use crate::{
 
 #[derive(Clone, Debug)]
 pub struct ReviewCreateData {
-    pub title: String,
+    pub base_branch: String,
+    pub target_branch: String,
 }
 
 /// State of reviews loading process
@@ -46,17 +47,19 @@ impl ReviewService {
         data: ReviewCreateData,
         events: &mut EventHandler,
     ) -> color_eyre::Result<Review> {
-        if data.title.trim().is_empty() {
-            return Err(color_eyre::eyre::eyre!("Review title cannot be empty"));
+        if data.base_branch.trim().is_empty() {
+            return Err(color_eyre::eyre::eyre!("Base branch cannot be empty"));
+        }
+        if data.target_branch.trim().is_empty() {
+            return Err(color_eyre::eyre::eyre!("Target branch cannot be empty"));
         }
 
         let review = Review::new(
-            data.title.trim().to_string(),
-            "default".to_string(),
-            "default".to_string(),
+            data.base_branch.trim().to_string(),
+            data.target_branch.trim().to_string(),
         );
         review.save(database.pool()).await?;
-        log::info!("Created review: {}", review.title);
+        log::info!("Created review: {}", review.title());
 
         // Trigger reviews reload
         events.send(AppEvent::ReviewsLoad);
@@ -213,11 +216,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_review_with_valid_title() {
+    async fn test_create_review_with_valid_branches() {
         let database = create_test_database().await;
         let mut events = EventHandler::new_for_test();
         let data = ReviewCreateData {
-            title: "Test Review".to_string(),
+            base_branch: "main".to_string(),
+            target_branch: "feature/test".to_string(),
         };
 
         ReviewService::create_review(&database, data, &mut events)
@@ -232,21 +236,23 @@ mod tests {
         // Verify the review was actually created
         let reviews = Review::list_all(database.pool()).await.unwrap();
         assert_eq!(reviews.len(), 1);
-        assert_eq!(reviews[0].title, "Test Review");
+        assert_eq!(reviews[0].base_branch, "main");
+        assert_eq!(reviews[0].target_branch, "feature/test");
     }
 
     #[tokio::test]
-    async fn test_create_review_with_empty_title() {
+    async fn test_create_review_with_empty_base_branch() {
         let database = create_test_database().await;
         let mut events = EventHandler::new_for_test();
         let data = ReviewCreateData {
-            title: "".to_string(),
+            base_branch: "".to_string(),
+            target_branch: "feature/test".to_string(),
         };
 
         match ReviewService::create_review(&database, data, &mut events).await {
-            Ok(_) => panic!("Expected error for empty title"),
+            Ok(_) => panic!("Expected error for empty base branch"),
             Err(e) => {
-                assert_eq!(e.to_string(), "Review title cannot be empty");
+                assert_eq!(e.to_string(), "Base branch cannot be empty");
                 // Verify no review was created
                 let reviews = Review::list_all(database.pool()).await.unwrap();
                 assert_eq!(reviews.len(), 0);
@@ -255,17 +261,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_review_with_whitespace_title() {
+    async fn test_create_review_with_empty_target_branch() {
         let database = create_test_database().await;
         let mut events = EventHandler::new_for_test();
         let data = ReviewCreateData {
-            title: "   ".to_string(),
+            base_branch: "main".to_string(),
+            target_branch: "".to_string(),
         };
 
         match ReviewService::create_review(&database, data, &mut events).await {
-            Ok(_) => panic!("Expected error for empty title"),
+            Ok(_) => panic!("Expected error for empty target branch"),
             Err(e) => {
-                assert_eq!(e.to_string(), "Review title cannot be empty");
+                assert_eq!(e.to_string(), "Target branch cannot be empty");
                 // Verify no review was created
                 let reviews = Review::list_all(database.pool()).await.unwrap();
                 assert_eq!(reviews.len(), 0);
@@ -278,7 +285,8 @@ mod tests {
         let database = create_test_database().await;
         let mut events = EventHandler::new_for_test();
         let data = ReviewCreateData {
-            title: "  Test Review  ".to_string(),
+            base_branch: "  main  ".to_string(),
+            target_branch: "  feature/test  ".to_string(),
         };
 
         ReviewService::create_review(&database, data, &mut events)
@@ -290,10 +298,11 @@ mod tests {
         let event = events.try_recv().unwrap();
         assert!(matches!(*event, Event::App(AppEvent::ReviewsLoad)));
 
-        // Verify the review was created with trimmed title
+        // Verify the review was created with trimmed branches
         let reviews = Review::list_all(database.pool()).await.unwrap();
         assert_eq!(reviews.len(), 1);
-        assert_eq!(reviews[0].title, "Test Review");
+        assert_eq!(reviews[0].base_branch, "main");
+        assert_eq!(reviews[0].target_branch, "feature/test");
     }
 
     #[tokio::test]
@@ -312,10 +321,12 @@ mod tests {
         // Create some reviews
         let mut events = EventHandler::new_for_test();
         let data1 = ReviewCreateData {
-            title: "Review 1".to_string(),
+            base_branch: "main".to_string(),
+            target_branch: "feature/review-1".to_string(),
         };
         let data2 = ReviewCreateData {
-            title: "Review 2".to_string(),
+            base_branch: "main".to_string(),
+            target_branch: "feature/review-2".to_string(),
         };
 
         ReviewService::create_review(&database, data1, &mut events)
@@ -329,8 +340,8 @@ mod tests {
 
         assert_eq!(reviews.len(), 2);
         // Should be ordered by created_at DESC, so newest first
-        assert_eq!(reviews[0].title, "Review 2");
-        assert_eq!(reviews[1].title, "Review 1");
+        assert_eq!(reviews[0].target_branch, "feature/review-2");
+        assert_eq!(reviews[1].target_branch, "feature/review-1");
     }
 
     #[tokio::test]
@@ -340,10 +351,12 @@ mod tests {
         // Create some reviews
         let mut events = EventHandler::new_for_test();
         let data1 = ReviewCreateData {
-            title: "Review 1".to_string(),
+            base_branch: "main".to_string(),
+            target_branch: "feature/review-1".to_string(),
         };
         let data2 = ReviewCreateData {
-            title: "Review 2".to_string(),
+            base_branch: "main".to_string(),
+            target_branch: "feature/review-2".to_string(),
         };
 
         ReviewService::create_review(&database, data1, &mut events)
@@ -369,7 +382,7 @@ mod tests {
         // Verify the review was deleted
         let updated_reviews = Review::list_all(database.pool()).await.unwrap();
         assert_eq!(updated_reviews.len(), 1);
-        assert_eq!(updated_reviews[0].title, "Review 1");
+        assert_eq!(updated_reviews[0].target_branch, "feature/review-1");
     }
 
     #[tokio::test]
@@ -379,7 +392,8 @@ mod tests {
         // Create one review
         let mut events = EventHandler::new_for_test();
         let data = ReviewCreateData {
-            title: "Review 1".to_string(),
+            base_branch: "main".to_string(),
+            target_branch: "feature/review-1".to_string(),
         };
         ReviewService::create_review(&database, data, &mut events)
             .await
@@ -400,7 +414,7 @@ mod tests {
         // Should still have 1 review since deletion didn't happen
         let updated_reviews = Review::list_all(database.pool()).await.unwrap();
         assert_eq!(updated_reviews.len(), 1);
-        assert_eq!(updated_reviews[0].title, "Review 1");
+        assert_eq!(updated_reviews[0].target_branch, "feature/review-1");
     }
 
     #[tokio::test]
@@ -438,7 +452,7 @@ mod tests {
             *event
         {
             assert_eq!(reviews.len(), 1);
-            assert_eq!(reviews[0].title, "Test Review");
+            assert_eq!(reviews[0].base_branch, "default");
         } else {
             panic!("Expected ReviewsLoadingState event with reviews");
         }
@@ -485,7 +499,8 @@ mod tests {
         let mut events = EventHandler::new_for_test();
 
         let data = ReviewCreateData {
-            title: "Created Review".to_string(),
+            base_branch: "main".to_string(),
+            target_branch: "feature/created".to_string(),
         };
 
         ReviewService::handle_app_event(
@@ -510,19 +525,20 @@ mod tests {
         // Verify the review was created
         let reviews = Review::list_all(database.pool()).await.unwrap();
         assert_eq!(reviews.len(), 1);
-        assert_eq!(reviews[0].title, "Created Review");
+        assert_eq!(reviews[0].target_branch, "feature/created");
     }
 
     #[tokio::test]
-    async fn test_handle_app_event_review_create_submit_empty_title() {
+    async fn test_handle_app_event_review_create_submit_empty_branches() {
         let database = create_test_database().await;
         let mut events = EventHandler::new_for_test();
 
         let data = ReviewCreateData {
-            title: "".to_string(),
+            base_branch: "".to_string(),
+            target_branch: "feature/test".to_string(),
         };
 
-        // Test empty title submission
+        // Test empty branches submission
         ReviewService::handle_app_event(
             &AppEvent::ReviewCreateSubmit(data.into()),
             &database,
@@ -555,8 +571,8 @@ mod tests {
         let mut events = EventHandler::new_for_test();
 
         // Create two reviews
-        let review1 = Review::test_review(TestReviewParams::new().title("Review 1"));
-        let review2 = Review::test_review(TestReviewParams::new().title("Review 2"));
+        let review1 = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let review2 = Review::test_review(TestReviewParams::new().base_branch("dev"));
         review1.save(database.pool()).await.unwrap();
         review2.save(database.pool()).await.unwrap();
 
@@ -625,7 +641,7 @@ mod tests {
         // Original review should still be there
         let reviews = Review::list_all(database.pool()).await.unwrap();
         assert_eq!(reviews.len(), 1);
-        assert_eq!(reviews[0].title, "Test Review");
+        assert_eq!(reviews[0].base_branch, "default");
     }
 
     #[tokio::test]
@@ -674,7 +690,7 @@ mod tests {
         match &*event {
             Event::App(AppEvent::ReviewLoaded(loaded_review)) => {
                 assert_eq!(loaded_review.id, review.id);
-                assert_eq!(loaded_review.title, "Test Review");
+                assert_eq!(loaded_review.base_branch, "default");
             }
             _ => panic!("Expected ReviewLoaded event"),
         }

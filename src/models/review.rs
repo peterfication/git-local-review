@@ -7,7 +7,6 @@ use crate::time_provider::{SystemTimeProvider, TimeProvider};
 #[derive(Debug, Clone, FromRow)]
 pub struct Review {
     pub id: String,
-    pub title: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub base_branch: String,
@@ -21,12 +20,11 @@ impl PartialEq for Review {
 }
 
 impl Review {
-    pub fn new(title: String, base_branch: String, target_branch: String) -> Self {
-        Self::new_with_time_provider(title, base_branch, target_branch, &SystemTimeProvider)
+    pub fn new(base_branch: String, target_branch: String) -> Self {
+        Self::new_with_time_provider(base_branch, target_branch, &SystemTimeProvider)
     }
 
     pub fn new_with_time_provider(
-        title: String,
         base_branch: String,
         target_branch: String,
         time_provider: &dyn TimeProvider,
@@ -34,7 +32,6 @@ impl Review {
         let now = time_provider.now();
         Self {
             id: Uuid::new_v4().to_string(),
-            title,
             created_at: now,
             updated_at: now,
             base_branch,
@@ -42,10 +39,15 @@ impl Review {
         }
     }
 
+    /// Returns a human-readable title for the review in the format "base_branch -> target_branch"
+    pub fn title(&self) -> String {
+        format!("{} -> {}", self.base_branch, self.target_branch)
+    }
+
     #[cfg(test)]
     pub fn test_review(opts: impl Into<TestReviewParams>) -> Self {
         let opts = opts.into();
-        Self::new(opts.title, opts.base_branch, opts.target_branch)
+        Self::new(opts.base_branch, opts.target_branch)
     }
 
     #[cfg(test)]
@@ -54,23 +56,17 @@ impl Review {
         time_provider: &dyn TimeProvider,
     ) -> Self {
         let opts = opts.into();
-        Self::new_with_time_provider(
-            opts.title,
-            opts.base_branch,
-            opts.target_branch,
-            time_provider,
-        )
+        Self::new_with_time_provider(opts.base_branch, opts.target_branch, time_provider)
     }
 
     pub async fn save(&self, pool: &SqlitePool) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
-            INSERT INTO reviews (id, title, created_at, updated_at, base_branch, target_branch)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            INSERT INTO reviews (id, created_at, updated_at, base_branch, target_branch)
+            VALUES (?1, ?2, ?3, ?4, ?5)
             "#,
         )
         .bind(&self.id)
-        .bind(&self.title)
         .bind(self.created_at.to_rfc3339())
         .bind(self.updated_at.to_rfc3339())
         .bind(&self.base_branch)
@@ -83,7 +79,7 @@ impl Review {
     pub async fn list_all(pool: &SqlitePool) -> Result<Vec<Review>, sqlx::Error> {
         let reviews = sqlx::query_as::<_, Review>(
             r#"
-            SELECT id, title, created_at, updated_at, base_branch, target_branch
+            SELECT id, created_at, updated_at, base_branch, target_branch
             FROM reviews
             ORDER BY created_at DESC
             "#,
@@ -96,7 +92,7 @@ impl Review {
     pub async fn find_by_id(pool: &SqlitePool, id: &str) -> Result<Option<Review>, sqlx::Error> {
         let review = sqlx::query_as::<_, Review>(
             r#"
-            SELECT id, title, created_at, updated_at, base_branch, target_branch
+            SELECT id, created_at, updated_at, base_branch, target_branch
             FROM reviews
             WHERE id = ?1
             "#,
@@ -123,7 +119,6 @@ impl Review {
 
 #[cfg(test)]
 pub struct TestReviewParams {
-    pub title: String,
     pub base_branch: String,
     pub target_branch: String,
 }
@@ -132,15 +127,9 @@ pub struct TestReviewParams {
 impl TestReviewParams {
     pub fn new() -> Self {
         Self {
-            title: "Test Review".to_string(),
             base_branch: "default".to_string(),
             target_branch: "default".to_string(),
         }
-    }
-
-    pub fn title(mut self, title: &str) -> Self {
-        self.title = title.to_string();
-        self
     }
 
     pub fn base_branch(mut self, base_branch: &str) -> Self {
@@ -183,12 +172,10 @@ mod tests {
 
     #[test]
     fn test_review_new() {
-        let title = "Test Review".to_string();
         let base_branch = "main".to_string();
         let target_branch = "feature/test".to_string();
-        let review = Review::new(title.clone(), base_branch.clone(), target_branch.clone());
+        let review = Review::new(base_branch.clone(), target_branch.clone());
 
-        assert_eq!(review.title, title);
         assert!(!review.id.is_empty());
         assert_eq!(review.created_at, review.updated_at);
         assert_eq!(review.base_branch, base_branch);
@@ -200,18 +187,15 @@ mod tests {
 
     #[test]
     fn test_review_new_with_mock_time() {
-        let title = "Test Review".to_string();
         let fixed_time = fixed_time();
         let time_provider = MockTimeProvider::new(fixed_time);
 
         let review = Review::new_with_time_provider(
-            title.clone(),
             "default".to_string(),
             "default".to_string(),
             &time_provider,
         );
 
-        assert_eq!(review.title, title);
         assert!(!review.id.is_empty());
         assert_eq!(review.created_at, fixed_time);
         assert_eq!(review.updated_at, fixed_time);
@@ -225,20 +209,17 @@ mod tests {
 
     #[test]
     fn test_review_new_time_provider() {
-        let title = "Test Review".to_string();
         let base_branch = "develop".to_string();
         let target_branch = "feature/branch-support".to_string();
         let fixed_time = fixed_time();
         let time_provider = MockTimeProvider::new(fixed_time);
 
         let review = Review::new_with_time_provider(
-            title.clone(),
             base_branch.clone(),
             target_branch.clone(),
             &time_provider,
         );
 
-        assert_eq!(review.title, title);
         assert!(!review.id.is_empty());
         assert_eq!(review.created_at, fixed_time);
         assert_eq!(review.updated_at, fixed_time);
@@ -247,6 +228,18 @@ mod tests {
 
         // ID should be a valid UUID
         assert!(uuid::Uuid::parse_str(&review.id).is_ok());
+    }
+
+    #[test]
+    fn test_title() {
+        let review = Review::test_review(());
+        assert_eq!(review.title(), "default -> default");
+        let custom_review = Review::test_review(
+            TestReviewParams::new()
+                .base_branch("main")
+                .target_branch("feature/test"),
+        );
+        assert_eq!(custom_review.title(), "main -> feature/test");
     }
 
     #[tokio::test]
@@ -262,7 +255,6 @@ mod tests {
 
         assert_eq!(reviews.len(), 1);
         assert_eq!(reviews[0].id, review.id);
-        assert_eq!(reviews[0].title, review.title);
         assert_eq!(reviews[0].base_branch, "default".to_string());
         assert_eq!(reviews[0].target_branch, "default".to_string());
     }
@@ -274,7 +266,6 @@ mod tests {
         let target_branch = "feature/test".to_string();
         let review = Review::test_review(
             TestReviewParams::new()
-                .title("Test Review with Branches")
                 .base_branch(&base_branch)
                 .target_branch(&target_branch),
         );
@@ -287,7 +278,6 @@ mod tests {
 
         assert_eq!(reviews.len(), 1);
         assert_eq!(reviews[0].id, review.id);
-        assert_eq!(reviews[0].title, review.title);
         assert_eq!(reviews[0].base_branch, base_branch);
         assert_eq!(reviews[0].target_branch, target_branch);
 
@@ -320,11 +310,11 @@ mod tests {
         let time_provider2 = MockTimeProvider::new(time2);
 
         let review1 = Review::test_review_with_time_provider(
-            TestReviewParams::default().title("First Review"),
+            TestReviewParams::default().base_branch("First Review"),
             &time_provider1,
         );
         let review2 = Review::test_review_with_time_provider(
-            TestReviewParams::default().title("Second Review"),
+            TestReviewParams::default().base_branch("Second Review"),
             &time_provider2,
         );
 
@@ -336,8 +326,8 @@ mod tests {
 
         assert_eq!(reviews.len(), 2);
         // Should be ordered by created_at DESC, so newest first
-        assert_eq!(reviews[0].title, "Second Review");
-        assert_eq!(reviews[1].title, "First Review");
+        assert_eq!(reviews[0].base_branch, "Second Review");
+        assert_eq!(reviews[1].base_branch, "First Review");
         assert!(reviews[0].created_at > reviews[1].created_at);
     }
 
@@ -345,8 +335,8 @@ mod tests {
     async fn test_review_save_duplicate_id_fails() {
         let pool = create_test_pool().await;
 
-        let review1 = Review::test_review(TestReviewParams::default().title("Review 1"));
-        let mut review2 = Review::test_review(TestReviewParams::default().title("Review 2"));
+        let review1 = Review::test_review(());
+        let mut review2 = Review::test_review(());
 
         // Make them have the same ID
         review2.id = review1.id.clone();
@@ -371,7 +361,6 @@ mod tests {
         assert!(found_review.is_some());
         let found_review = found_review.unwrap();
         assert_eq!(found_review.id, review.id);
-        assert_eq!(found_review.title, review.title);
         assert_eq!(found_review.created_at, review.created_at);
         assert_eq!(found_review.updated_at, review.updated_at);
 
@@ -409,18 +398,18 @@ mod tests {
         let time_provider2 = MockTimeProvider::new(time2);
 
         let review1 = Review::test_review_with_time_provider(
-            TestReviewParams::default().title("Review 1"),
+            TestReviewParams::default().base_branch("main"),
             &time_provider1,
         );
         let mut review2 = Review::test_review_with_time_provider(
-            TestReviewParams::default().title("Review 2"),
+            TestReviewParams::default().base_branch("dev"),
             &time_provider2,
         );
 
         // Make review2 have the same ID as review1
         review2.id = review1.id.clone();
 
-        // Should be equal despite different titles and timestamps
+        // Should be equal despite different base_branch and timestamps
         assert_eq!(review1, review2);
     }
 
@@ -430,15 +419,15 @@ mod tests {
         let time_provider = MockTimeProvider::new(fixed_time);
 
         let review1 = Review::test_review_with_time_provider(
-            TestReviewParams::default().title("Same Title"),
+            TestReviewParams::default().base_branch("Same Title"),
             &time_provider,
         );
         let review2 = Review::test_review_with_time_provider(
-            TestReviewParams::default().title("Same Title"),
+            TestReviewParams::default().base_branch("Same Title"),
             &time_provider,
         );
 
-        // Should not be equal despite same title and timestamps because IDs are different
+        // Should not be equal despite same base_branch and timestamps because IDs are different
         assert_ne!(review1, review2);
     }
 
@@ -463,30 +452,25 @@ mod tests {
     fn test_review_test_helper() {
         // Test with all defaults
         let review1 = Review::test_review(());
-        assert_eq!(review1.title, "Test Review");
         assert_eq!(review1.base_branch, "default");
         assert_eq!(review1.target_branch, "default");
 
-        // Test with custom title only
-        let review2 = Review::test_review(TestReviewParams::new().title("Custom Title"));
-        assert_eq!(review2.title, "Custom Title");
-        assert_eq!(review2.base_branch, "default");
+        // Test with custom base_branch only
+        let review2 = Review::test_review(TestReviewParams::new().base_branch("Custom Title"));
+        assert_eq!(review2.base_branch, "Custom Title");
         assert_eq!(review2.target_branch, "default");
 
         // Test with all custom values
         let review3 = Review::test_review(
             TestReviewParams::new()
-                .title("Custom Title")
                 .base_branch("main")
                 .target_branch("feature/test"),
         );
-        assert_eq!(review3.title, "Custom Title");
         assert_eq!(review3.base_branch, "main");
         assert_eq!(review3.target_branch, "feature/test");
 
         // Test using Default trait
         let review4 = Review::test_review(TestReviewParams::default());
-        assert_eq!(review4.title, "Test Review");
         assert_eq!(review4.base_branch, "default");
         assert_eq!(review4.target_branch, "default");
     }
@@ -499,18 +483,16 @@ mod tests {
         let time_provider1 = MockTimeProvider::new(time1);
 
         let review1 = Review::new_with_time_provider(
-            "Original Title".to_string(),
             "default".to_string(),
             "default".to_string(),
             &time_provider1,
         );
         let review2 = Review {
-            id: review1.id.clone(),                          // Same ID
-            title: "Completely Different Title".to_string(), // Different title
-            created_at: time2,                               // Different created_at
-            updated_at: time2,                               // Different updated_at
-            base_branch: "different-base".to_string(),       // Different base_branch
-            target_branch: "different-target".to_string(),   // Different target_branch
+            id: review1.id.clone(),                        // Same ID
+            created_at: time2,                             // Different created_at
+            updated_at: time2,                             // Different updated_at
+            base_branch: "different-base".to_string(),     // Different base_branch
+            target_branch: "different-target".to_string(), // Different target_branch
         };
 
         // Should be equal because only ID matters for equality

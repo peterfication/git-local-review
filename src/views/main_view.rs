@@ -271,7 +271,7 @@ impl MainView {
         let content = format!(
             "{} {} ({})",
             prefix,
-            review.title,
+            review.title(),
             review.created_at.format("%Y-%m-%d %H:%M")
         );
         ListItem::new(content).style(style)
@@ -322,11 +322,11 @@ mod tests {
         let time_provider2 = MockTimeProvider::new(time2);
 
         let review1 = Review::test_review_with_time_provider(
-            TestReviewParams::default().title("Review 1"),
+            TestReviewParams::default().base_branch("main"),
             &time_provider1,
         );
         let review2 = Review::test_review_with_time_provider(
-            TestReviewParams::default().title("Review 2"),
+            TestReviewParams::default().base_branch("dev"),
             &time_provider2,
         );
         review1.save(&pool).await.unwrap();
@@ -720,7 +720,8 @@ mod tests {
         view.handle_app_events(
             &mut app,
             &AppEvent::ReviewCreateSubmit(Arc::new(ReviewCreateData {
-                title: "New Review".to_string(),
+                base_branch: "main".to_string(),
+                target_branch: "feature/new-review".to_string(),
             })),
         );
 

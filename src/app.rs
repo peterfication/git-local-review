@@ -269,7 +269,9 @@ mod tests {
 
         // Create a ReviewCreateView with some initial content to track changes
         let review_create_view = ReviewCreateView {
-            title_input: "test".to_string(),
+            base_branch_input: "main".to_string(),
+            target_branch_input: "feature/test".to_string(),
+            current_field: crate::views::review_create_view::InputField::BaseBranch,
         };
 
         // Add it to the stack
@@ -284,7 +286,7 @@ mod tests {
         // Verify initial state
         assert_eq!(
             app.view_stack.last().unwrap().debug_state(),
-            "ReviewCreateView(title_input: \"test\")"
+            "ReviewCreateView(base_branch_input: \"main\", target_branch_input: \"feature/test\", current_field: BaseBranch)"
         );
 
         // Send a character key that would trigger different behaviors in different views
@@ -299,14 +301,14 @@ mod tests {
         app.handle_key_events(&key_event).unwrap();
 
         // Only the ReviewCreateView (top of stack) should have received the key event
-        // It should have processed 'n' as text input, changing the title_input
+        // It should have processed 'n' as text input, changing the base_branch_input (since it's the current field)
         assert_eq!(app.view_stack.len(), 2);
         assert!(!app.events.has_pending_events()); // No events sent for regular character input
 
-        // Verify that the ReviewCreateView's title_input has been updated to include 'n'
+        // Verify that the ReviewCreateView's base_branch_input has been updated to include 'n'
         assert_eq!(
             app.view_stack.last().unwrap().debug_state(),
-            "ReviewCreateView(title_input: \"testn\")"
+            "ReviewCreateView(base_branch_input: \"mainn\", target_branch_input: \"feature/test\", current_field: BaseBranch)"
         );
     }
 
