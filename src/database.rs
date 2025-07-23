@@ -1,6 +1,4 @@
-use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
-
-use crate::models::Review;
+use sqlx::{SqlitePool, migrate, sqlite::SqliteConnectOptions};
 
 pub struct Database {
     pool: SqlitePool,
@@ -16,9 +14,9 @@ impl Database {
 
         let pool = SqlitePool::connect_with(options).await?;
 
-        Review::create_table(&pool).await?;
+        migrate!().run(&pool).await?;
 
-        log::info!("Database initialized at tmp/reviews.db");
+        log::info!("Database initialized at tmp/reviews.db with migrations");
 
         Ok(Self { pool })
     }

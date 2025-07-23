@@ -118,7 +118,7 @@ mod tests {
 
     pub async fn create_test_app() -> App {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        Review::create_table(&pool).await.unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
 
         let database = Database::from_pool(pool);
 
@@ -133,7 +133,7 @@ mod tests {
     #[tokio::test]
     async fn test_app_new() {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        Review::create_table(&pool).await.unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
 
         let database = Database::from_pool(pool);
 
@@ -313,7 +313,7 @@ mod tests {
     #[tokio::test]
     async fn test_tick() {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        Review::create_table(&pool).await.unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
 
         let app = App {
             running: true,
@@ -332,7 +332,7 @@ mod tests {
         let mut app = create_test_app().await;
 
         // Create a review to have data for testing
-        let review = Review::new("Test Review".to_string());
+        let review = Review::test_review(());
         review.save(app.database.pool()).await.unwrap();
         let reviews = vec![review];
 
@@ -361,7 +361,7 @@ mod tests {
         let mut app = create_test_app().await;
 
         // Create a review to have data for testing
-        let review = Review::new("Test Review".to_string());
+        let review = Review::test_review(());
         review.save(app.database.pool()).await.unwrap();
         let reviews = vec![review];
 

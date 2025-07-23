@@ -124,9 +124,7 @@ mod tests {
 
     async fn create_test_app() -> App {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        crate::models::review::Review::create_table(&pool)
-            .await
-            .unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
 
         let database = Database::from_pool(pool);
 
@@ -226,7 +224,7 @@ mod tests {
         let mut app = create_test_app().await;
 
         // Create a review
-        let review = Review::new("Test Review".to_string());
+        let review = Review::test_review(());
         review.save(app.database.pool()).await.unwrap();
         let review_id = review.id.clone();
 

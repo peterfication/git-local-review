@@ -191,14 +191,17 @@ impl ReviewDetailsView {
 mod tests {
     use super::*;
     use crate::{
-        app::App, database::Database, models::Review, test_utils::render_app_to_terminal_backend,
+        app::App,
+        database::Database,
+        models::{Review, review::TestReviewParams},
+        test_utils::render_app_to_terminal_backend,
     };
     use insta::assert_snapshot;
     use sqlx::SqlitePool;
 
     async fn create_test_app() -> App {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        Review::create_table(&pool).await.unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
 
         let database = Database::from_pool(pool);
 
@@ -212,7 +215,7 @@ mod tests {
 
     #[test]
     fn test_review_details_view_creation() {
-        let review = Review::new("Test Review".to_string());
+        let review = Review::test_review(());
         let view = ReviewDetailsView::new(review.clone());
 
         assert_eq!(view.view_type(), ViewType::ReviewDetails);
@@ -237,7 +240,7 @@ mod tests {
 
     #[test]
     fn test_review_details_view_debug_state() {
-        let review = Review::new("Test Review".to_string());
+        let review = Review::test_review(());
         let view = ReviewDetailsView::new(review.clone());
 
         let debug_state = view.debug_state();
@@ -255,7 +258,7 @@ mod tests {
 
     #[test]
     fn test_review_details_view_keybindings() {
-        let review = Review::new("Test Review".to_string());
+        let review = Review::test_review(());
         let view = ReviewDetailsView::new(review);
 
         let keybindings = view.get_keybindings();
@@ -268,7 +271,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_review_details_view_handles_escape_key() {
-        let review = Review::new("Test Review".to_string());
+        let review = Review::test_review(());
         let mut view = ReviewDetailsView::new(review);
         let mut app = create_test_app().await;
 
@@ -285,7 +288,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_review_details_view_handles_help_key() {
-        let review = Review::new("Test Review".to_string());
+        let review = Review::test_review(());
         let mut view = ReviewDetailsView::new(review);
         let mut app = create_test_app().await;
 
@@ -306,7 +309,7 @@ mod tests {
     #[tokio::test]
     async fn test_review_details_view_handles_review_loaded_event() {
         let mut view = ReviewDetailsView::new_loading();
-        let review = Review::new("Loaded Review".to_string());
+        let review = Review::test_review(TestReviewParams::new().title("Loaded Review"));
         let mut app = create_test_app().await;
 
         view.handle_app_events(&mut app, &AppEvent::ReviewLoaded(Arc::from(review)));
@@ -377,7 +380,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_review_details_view_render_loaded_state() {
-        let review = Review::new("Sample Review Title".to_string());
+        let review = Review::test_review(TestReviewParams::new().title("Sample Review Title"));
         let view = ReviewDetailsView::new(review);
         let app = App {
             view_stack: vec![Box::new(view)],

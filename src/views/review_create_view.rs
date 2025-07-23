@@ -167,7 +167,6 @@ mod tests {
     use super::*;
     use crate::database::Database;
     use crate::event::{AppEvent, Event};
-    use crate::models::review::Review;
     use crate::test_utils::render_app_to_terminal_backend;
     use insta::assert_snapshot;
     use sqlx::SqlitePool;
@@ -176,7 +175,7 @@ mod tests {
 
     async fn create_test_app() -> App {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        Review::create_table(&pool).await.unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
 
         let database = Database::from_pool(pool);
 

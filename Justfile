@@ -2,11 +2,15 @@ default:
   just --list
 
 # Run all steps of CI
-ci: format lint test build doc
+ci: run-version db-schema-dump format lint test build doc
 
 # Run the application
 run:
   cargo run
+
+# Run the application and print the version
+run-version:
+  cargo run -- --version
 
 # Format all files
 format: format-rust format-rest
@@ -54,3 +58,42 @@ build:
 # Install git hooks using Lefthook
 git-hooks-install:
   lefthook install
+
+# Install the database migrations tool
+db-cli-install:
+  cargo install sqlx-cli
+
+# Create a new database migration
+db-migration-generate NAME:
+  sqlx migrate add {{NAME}}
+
+# Run database migrations
+db-migrate:
+  DATABASE_URL="sqlite:./tmp/reviews.db" sqlx migrate run
+
+# Revert the last database migration
+db-revert:
+  DATABASE_URL="sqlite:./tmp/reviews.db" sqlx migrate revert
+
+# Create the database
+db-create:
+  DATABASE_URL="sqlite:./tmp/reviews.db" sqlx database create
+
+# Drop the database
+db-drop:
+  DATABASE_URL="sqlite:./tmp/reviews.db" sqlx database drop -y
+
+# Reset the database by dropping, creating, and migrating
+db-reset:
+  just db-drop
+  just db-create
+  just db-migrate
+
+# Setup the database by creating and migrating it
+db-setup:
+  just db-create
+  just db-migrate
+
+# Dump the current database schema to a file
+db-schema-dump:
+  sqlite3 tmp/reviews.db .schema > schema.sql
