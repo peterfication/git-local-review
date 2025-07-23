@@ -5,21 +5,23 @@ use ratatui::{
     crossterm::event::{KeyCode, KeyEvent},
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
-    widgets::{Block, BorderType, Clear, Paragraph, Widget},
+    widgets::{Block, BorderType, Clear, List, ListItem, Paragraph, Widget},
 };
 
 use crate::{
     app::App,
     event::AppEvent,
-    services::ReviewCreateData,
+    services::{GitService, ReviewCreateData},
     views::{KeyBinding, ViewHandler, ViewType, centered_rectangle},
 };
 
 #[derive(Default)]
 pub struct ReviewCreateView {
-    pub base_branch_input: String,
-    pub target_branch_input: String,
+    pub branches: Vec<String>,
+    pub base_branch_index: usize,
+    pub target_branch_index: usize,
     pub current_field: InputField,
+    pub error_message: Option<String>,
 }
 
 #[derive(Default, PartialEq, Debug)]
@@ -43,28 +45,58 @@ impl ViewHandler for ReviewCreateView {
                     InputField::TargetBranch => InputField::BaseBranch,
                 };
             }
-            KeyCode::Enter => {
-                app.events
-                    .send(AppEvent::ReviewCreateSubmit(Arc::new(ReviewCreateData {
-                        base_branch: self.base_branch_input.clone(),
-                        target_branch: self.target_branch_input.clone(),
-                    })));
-                self.base_branch_input.clear();
-                self.target_branch_input.clear();
-            }
-            KeyCode::Char('?') => app.events.send(AppEvent::HelpOpen(self.get_keybindings())),
-            KeyCode::Char(char) => match self.current_field {
-                InputField::BaseBranch => self.base_branch_input.push(char),
-                InputField::TargetBranch => self.target_branch_input.push(char),
-            },
-            KeyCode::Backspace => match self.current_field {
+            KeyCode::Up | KeyCode::Char('k') => match self.current_field {
                 InputField::BaseBranch => {
-                    self.base_branch_input.pop();
+                    if self.base_branch_index > 0 {
+                        self.base_branch_index -= 1;
+                    }
                 }
                 InputField::TargetBranch => {
-                    self.target_branch_input.pop();
+                    if self.target_branch_index > 0 {
+                        self.target_branch_index -= 1;
+                    }
                 }
             },
+            KeyCode::Down | KeyCode::Char('j') => match self.current_field {
+                InputField::BaseBranch => {
+                    if self.base_branch_index < self.branches.len().saturating_sub(1) {
+                        self.base_branch_index += 1;
+                    }
+                }
+                InputField::TargetBranch => {
+                    if self.target_branch_index < self.branches.len().saturating_sub(1) {
+                        self.target_branch_index += 1;
+                    }
+                }
+            },
+            KeyCode::Enter => {
+                if self.branches.is_empty() {
+                    return Ok(());
+                }
+                let base_branch = match self.branches.get(self.base_branch_index) {
+                    Some(branch) => branch.clone(),
+                    None => {
+                        // This should never happen, but handle gracefully
+                        self.error_message = Some("No base branch selected".to_string());
+                        return Ok(());
+                    }
+                };
+                let target_branch = match self.branches.get(self.target_branch_index) {
+                    Some(branch) => branch.clone(),
+                    None => {
+                        // This should never happen, but handle gracefully
+                        self.error_message = Some("No target branch selected".to_string());
+                        return Ok(());
+                    }
+                };
+
+                app.events
+                    .send(AppEvent::ReviewCreateSubmit(Arc::new(ReviewCreateData {
+                        base_branch,
+                        target_branch,
+                    })));
+            }
+            KeyCode::Char('?') => app.events.send(AppEvent::HelpOpen(self.get_keybindings())),
             _ => {}
         }
         Ok(())
@@ -83,65 +115,130 @@ impl ViewHandler for ReviewCreateView {
     }
 
     fn render(&self, _app: &App, area: Rect, buf: &mut Buffer) {
-        let popup_area = centered_rectangle(60, 40, area);
+        let popup_area = centered_rectangle(80, 60, area);
 
         Clear.render(popup_area, buf);
 
         let block = Block::bordered()
-            .title("Create New Review")
+            .title("Create New Review - Select Branches")
             .border_type(BorderType::Rounded)
             .style(Style::default().bg(Color::Black));
 
         let inner = block.inner(popup_area);
         block.render(popup_area, buf);
 
+        if let Some(error) = &self.error_message {
+            let error_paragraph =
+                Paragraph::new(error.as_str()).style(Style::default().fg(Color::Red));
+            error_paragraph.render(inner, buf);
+            return;
+        }
+
+        if self.branches.is_empty() {
+            let no_branches = Paragraph::new("No Git branches found in current directory")
+                .style(Style::default().fg(Color::Yellow));
+            no_branches.render(inner, buf);
+            return;
+        }
+
         let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(1),
-                Constraint::Length(3),
-                Constraint::Length(1),
-                Constraint::Length(3),
-                Constraint::Length(1),
-            ])
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
             .split(inner);
 
-        let base_branch_label = Paragraph::new("Base Branch:");
-        base_branch_label.render(chunks[0], buf);
+        // Base branch list
+        let base_branch_items: Vec<ListItem> = self
+            .branches
+            .iter()
+            .enumerate()
+            .map(|(i, branch)| {
+                let style = if i == self.base_branch_index {
+                    Style::default().bg(Color::Blue).fg(Color::Black)
+                } else {
+                    Style::default()
+                };
+                let text = if i == self.base_branch_index {
+                    format!("> {branch}")
+                } else {
+                    format!("  {branch}")
+                };
+                ListItem::new(text).style(style)
+            })
+            .collect();
 
         let base_branch_style = if self.current_field == InputField::BaseBranch {
             Style::default().fg(Color::Yellow)
         } else {
             Style::default().fg(Color::White)
         };
-        let base_branch_input = Paragraph::new(self.base_branch_input.as_str())
-            .block(Block::bordered())
-            .style(base_branch_style);
-        base_branch_input.render(chunks[1], buf);
 
-        let target_branch_label = Paragraph::new("Target Branch:");
-        target_branch_label.render(chunks[2], buf);
+        let base_branch_list = List::new(base_branch_items).block(
+            Block::bordered()
+                .title("Base Branch")
+                .border_style(base_branch_style),
+        );
+        base_branch_list.render(chunks[0], buf);
+
+        // Target branch list
+        let target_branch_items: Vec<ListItem> = self
+            .branches
+            .iter()
+            .enumerate()
+            .map(|(i, branch)| {
+                let style = if i == self.target_branch_index {
+                    Style::default().bg(Color::Blue).fg(Color::Black)
+                } else {
+                    Style::default()
+                };
+                let text = if i == self.target_branch_index {
+                    format!("> {branch}")
+                } else {
+                    format!("  {branch}")
+                };
+                ListItem::new(text).style(style)
+            })
+            .collect();
 
         let target_branch_style = if self.current_field == InputField::TargetBranch {
             Style::default().fg(Color::Yellow)
         } else {
             Style::default().fg(Color::White)
         };
-        let target_branch_input = Paragraph::new(self.target_branch_input.as_str())
-            .block(Block::bordered())
-            .style(target_branch_style);
-        target_branch_input.render(chunks[3], buf);
 
-        let help = Paragraph::new("Press Tab to switch fields, Enter to create, Esc to cancel")
+        let target_branch_list = List::new(target_branch_items).block(
+            Block::bordered()
+                .title("Target Branch")
+                .border_style(target_branch_style),
+        );
+        target_branch_list.render(chunks[1], buf);
+
+        // Help text at the bottom
+        let help_area = Rect {
+            x: popup_area.x + 1,
+            y: popup_area.y + popup_area.height - 2,
+            width: popup_area.width - 2,
+            height: 1,
+        };
+        let help = Paragraph::new("↑↓: Navigate, Tab: Switch lists, Enter: Create, Esc: Cancel")
             .style(Style::default().fg(Color::Gray));
-        help.render(chunks[4], buf);
+        help.render(help_area, buf);
     }
 
     #[cfg(test)]
     fn debug_state(&self) -> String {
+        let base_branch = self
+            .branches
+            .get(self.base_branch_index)
+            .map(|s| s.as_str())
+            .unwrap_or("none");
+        let target_branch = self
+            .branches
+            .get(self.target_branch_index)
+            .map(|s| s.as_str())
+            .unwrap_or("none");
         format!(
-            "ReviewCreateView(base_branch_input: \"{}\", target_branch_input: \"{}\", current_field: {:?})",
-            self.base_branch_input, self.target_branch_input, self.current_field
+            "ReviewCreateView(branches: {:?}, base_branch: \"{}\", target_branch: \"{}\", current_field: {:?})",
+            self.branches, base_branch, target_branch, self.current_field
         )
     }
 
@@ -153,20 +250,10 @@ impl ViewHandler for ReviewCreateView {
     fn get_keybindings(&self) -> Arc<[KeyBinding]> {
         Arc::new([
             KeyBinding {
-                key: "Esc".to_string(),
-                description: "Cancel and close popup".to_string(),
+                key: "↑↓ / jk".to_string(),
+                description: "Navigate branch list".to_string(),
                 key_event: KeyEvent {
-                    code: KeyCode::Esc,
-                    modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
-                    kind: ratatui::crossterm::event::KeyEventKind::Press,
-                    state: ratatui::crossterm::event::KeyEventState::empty(),
-                },
-            },
-            KeyBinding {
-                key: "Enter".to_string(),
-                description: "Create review".to_string(),
-                key_event: KeyEvent {
-                    code: KeyCode::Enter,
+                    code: KeyCode::Up,
                     modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
                     kind: ratatui::crossterm::event::KeyEventKind::Press,
                     state: ratatui::crossterm::event::KeyEventState::empty(),
@@ -183,20 +270,20 @@ impl ViewHandler for ReviewCreateView {
                 },
             },
             KeyBinding {
-                key: "<char>".to_string(),
-                description: "Enter branch names".to_string(),
+                key: "Enter".to_string(),
+                description: "Create review".to_string(),
                 key_event: KeyEvent {
-                    code: KeyCode::Char('a'),
+                    code: KeyCode::Enter,
                     modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
                     kind: ratatui::crossterm::event::KeyEventKind::Press,
                     state: ratatui::crossterm::event::KeyEventState::empty(),
                 },
             },
             KeyBinding {
-                key: "Backspace".to_string(),
-                description: "Delete character".to_string(),
+                key: "Esc".to_string(),
+                description: "Cancel and close popup".to_string(),
                 key_event: KeyEvent {
-                    code: KeyCode::Backspace,
+                    code: KeyCode::Esc,
                     modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
                     kind: ratatui::crossterm::event::KeyEventKind::Press,
                     state: ratatui::crossterm::event::KeyEventState::empty(),
@@ -212,10 +299,31 @@ impl ViewHandler for ReviewCreateView {
 }
 
 impl ReviewCreateView {
+    pub fn new() -> Self {
+        let mut view = Self::default();
+        if let Ok(branches) = GitService::get_branches(".") {
+            if !branches.is_empty() {
+                view.branches = branches;
+                // Set default selection to main/master if available
+                if let Some(main_index) = view
+                    .branches
+                    .iter()
+                    .position(|b| b == "main" || b == "master")
+                {
+                    view.base_branch_index = main_index;
+                }
+            }
+        } else {
+            view.error_message = Some("Failed to load Git branches".to_string());
+        }
+        view
+    }
+
     fn close_view(&mut self, app: &mut App) {
-        self.base_branch_input.clear();
-        self.target_branch_input.clear();
+        self.base_branch_index = 0;
+        self.target_branch_index = 0;
         self.current_field = InputField::BaseBranch;
+        self.error_message = None;
         app.events.send(AppEvent::ViewClose);
     }
 }
@@ -248,94 +356,128 @@ mod tests {
     #[test]
     fn test_review_create_view_default() {
         let view = ReviewCreateView::default();
-        assert_eq!(view.base_branch_input, "");
-        assert_eq!(view.target_branch_input, "");
+        assert_eq!(view.branches.len(), 0);
+        assert_eq!(view.base_branch_index, 0);
+        assert_eq!(view.target_branch_index, 0);
         assert_eq!(view.current_field, InputField::BaseBranch);
     }
 
     #[tokio::test]
-    async fn test_review_create_view_handle_char_input() {
-        let mut app = create_test_app().await;
-        let mut view = ReviewCreateView::default();
-
-        let key_event = KeyEvent {
-            code: KeyCode::Char('a'),
-            modifiers: KeyModifiers::empty(),
-            kind: KeyEventKind::Press,
-            state: KeyEventState::empty(),
-        };
-
-        view.handle_key_events(&mut app, &key_event).unwrap();
-
-        assert_eq!(view.base_branch_input, "a");
-        assert_eq!(view.target_branch_input, "");
-    }
-
-    #[tokio::test]
-    async fn test_review_create_view_handle_multiple_chars() {
-        let mut app = create_test_app().await;
-        let mut view = ReviewCreateView::default();
-
-        let chars = ['H', 'e', 'l', 'l', 'o'];
-        for c in chars {
-            let key_event = KeyEvent {
-                code: KeyCode::Char(c),
-                modifiers: KeyModifiers::empty(),
-                kind: KeyEventKind::Press,
-                state: KeyEventState::empty(),
-            };
-            view.handle_key_events(&mut app, &key_event).unwrap();
-        }
-
-        assert_eq!(view.base_branch_input, "Hello");
-        assert_eq!(view.target_branch_input, "");
-    }
-
-    #[tokio::test]
-    async fn test_review_create_view_handle_backspace() {
+    async fn test_review_create_view_handle_up_down() {
         let mut app = create_test_app().await;
         let mut view = ReviewCreateView {
-            base_branch_input: "Hello".to_string(),
-            target_branch_input: "".to_string(),
+            branches: vec![
+                "main".to_string(),
+                "develop".to_string(),
+                "feature/test".to_string(),
+            ],
+            base_branch_index: 1,
+            target_branch_index: 1,
             current_field: InputField::BaseBranch,
+            error_message: None,
         };
 
-        let key_event = KeyEvent {
-            code: KeyCode::Backspace,
+        let key_event_up = KeyEvent {
+            code: KeyCode::Up,
             modifiers: KeyModifiers::empty(),
             kind: KeyEventKind::Press,
             state: KeyEventState::empty(),
         };
 
-        view.handle_key_events(&mut app, &key_event).unwrap();
+        view.handle_key_events(&mut app, &key_event_up).unwrap();
+        assert_eq!(view.base_branch_index, 0);
 
-        assert_eq!(view.base_branch_input, "Hell");
+        let key_event_down = KeyEvent {
+            code: KeyCode::Down,
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: KeyEventState::empty(),
+        };
+
+        view.handle_key_events(&mut app, &key_event_down).unwrap();
+        assert_eq!(view.base_branch_index, 1);
     }
 
     #[tokio::test]
-    async fn test_review_create_view_handle_backspace_empty() {
+    async fn test_review_create_view_handle_tab_navigation() {
         let mut app = create_test_app().await;
-        let mut view = ReviewCreateView::default();
+        let mut view = ReviewCreateView {
+            branches: vec!["main".to_string(), "develop".to_string()],
+            base_branch_index: 0,
+            target_branch_index: 0,
+            current_field: InputField::BaseBranch,
+            error_message: None,
+        };
 
         let key_event = KeyEvent {
-            code: KeyCode::Backspace,
+            code: KeyCode::Tab,
             modifiers: KeyModifiers::empty(),
             kind: KeyEventKind::Press,
             state: KeyEventState::empty(),
         };
 
         view.handle_key_events(&mut app, &key_event).unwrap();
+        assert_eq!(view.current_field, InputField::TargetBranch);
 
-        assert_eq!(view.base_branch_input, "");
+        view.handle_key_events(&mut app, &key_event).unwrap();
+        assert_eq!(view.current_field, InputField::BaseBranch);
+    }
+
+    #[tokio::test]
+    async fn test_review_create_view_handle_up_at_bounds() {
+        let mut app = create_test_app().await;
+        let mut view = ReviewCreateView {
+            branches: vec!["main".to_string(), "develop".to_string()],
+            base_branch_index: 0,
+            target_branch_index: 0,
+            current_field: InputField::BaseBranch,
+            error_message: None,
+        };
+
+        let key_event = KeyEvent {
+            code: KeyCode::Up,
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: KeyEventState::empty(),
+        };
+
+        view.handle_key_events(&mut app, &key_event).unwrap();
+        // Should stay at 0 (top of list)
+        assert_eq!(view.base_branch_index, 0);
+    }
+
+    #[tokio::test]
+    async fn test_review_create_view_handle_down_at_bounds() {
+        let mut app = create_test_app().await;
+        let mut view = ReviewCreateView {
+            branches: vec!["main".to_string(), "develop".to_string()],
+            base_branch_index: 1,
+            target_branch_index: 1,
+            current_field: InputField::BaseBranch,
+            error_message: None,
+        };
+
+        let key_event = KeyEvent {
+            code: KeyCode::Down,
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: KeyEventState::empty(),
+        };
+
+        view.handle_key_events(&mut app, &key_event).unwrap();
+        // Should stay at 1 (bottom of list)
+        assert_eq!(view.base_branch_index, 1);
     }
 
     #[tokio::test]
     async fn test_review_create_view_handle_esc() {
         let mut app = create_test_app().await;
         let mut view = ReviewCreateView {
-            base_branch_input: "Some input".to_string(),
-            target_branch_input: "other input".to_string(),
-            current_field: InputField::BaseBranch,
+            branches: vec!["main".to_string(), "develop".to_string()],
+            base_branch_index: 1,
+            target_branch_index: 1,
+            current_field: InputField::TargetBranch,
+            error_message: Some("Test error".to_string()),
         };
         assert!(!app.events.has_pending_events());
 
@@ -348,11 +490,13 @@ mod tests {
 
         view.handle_key_events(&mut app, &key_event).unwrap();
 
-        // Both inputs should be cleared
-        assert_eq!(view.base_branch_input, "");
-        assert_eq!(view.target_branch_input, "");
+        // Indices should be reset
+        assert_eq!(view.base_branch_index, 0);
+        assert_eq!(view.target_branch_index, 0);
+        assert_eq!(view.current_field, InputField::BaseBranch);
+        assert_eq!(view.error_message, None);
 
-        // Verify that a ReviewCreateClose event was sent
+        // Verify that a ViewClose event was sent
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
         assert!(matches!(*event, Event::App(AppEvent::ViewClose)));
@@ -362,9 +506,15 @@ mod tests {
     async fn test_review_create_view_handle_enter() {
         let mut app = create_test_app().await;
         let mut view = ReviewCreateView {
-            base_branch_input: "main".to_string(),
-            target_branch_input: "feature/test".to_string(),
+            branches: vec![
+                "main".to_string(),
+                "develop".to_string(),
+                "feature/test".to_string(),
+            ],
+            base_branch_index: 0,
+            target_branch_index: 2,
             current_field: InputField::BaseBranch,
+            error_message: None,
         };
         assert!(!app.events.has_pending_events());
 
@@ -377,11 +527,7 @@ mod tests {
 
         view.handle_key_events(&mut app, &key_event).unwrap();
 
-        // Both inputs should be cleared after submit
-        assert_eq!(view.base_branch_input, "");
-        assert_eq!(view.target_branch_input, "");
-
-        // Verify that a ReviewCreateSubmit event was sent with the correct title
+        // Verify that a ReviewCreateSubmit event was sent with the correct branches
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
         if let Event::App(AppEvent::ReviewCreateSubmit(ref data)) = *event {
@@ -406,17 +552,21 @@ mod tests {
 
         view.handle_key_events(&mut app, &key_event).unwrap();
 
-        // Should still work with empty input
-        assert_eq!(view.base_branch_input, "");
-        assert_eq!(view.target_branch_input, "");
+        // Should not create event when no branches
+        assert!(!app.events.has_pending_events());
     }
 
     #[tokio::test]
     async fn test_review_create_view_handle_unknown_key() {
         let mut app = create_test_app().await;
-        let mut view = ReviewCreateView::default();
-        let initial_base = "Test".to_string();
-        view.base_branch_input = initial_base.clone();
+        let mut view = ReviewCreateView {
+            branches: vec!["main".to_string(), "develop".to_string()],
+            base_branch_index: 1,
+            target_branch_index: 0,
+            current_field: InputField::BaseBranch,
+            error_message: None,
+        };
+        let initial_index = view.base_branch_index;
 
         let key_event = KeyEvent {
             code: KeyCode::F(1),
@@ -427,8 +577,8 @@ mod tests {
 
         view.handle_key_events(&mut app, &key_event).unwrap();
 
-        // Unknown keys should not change input
-        assert_eq!(view.base_branch_input, initial_base);
+        // Unknown keys should not change indices
+        assert_eq!(view.base_branch_index, initial_index);
     }
 
     #[tokio::test]
@@ -443,11 +593,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_review_create_view_render_with_title() {
+    async fn test_review_create_view_render_with_branches() {
         let view = ReviewCreateView {
-            base_branch_input: "main".to_string(),
-            target_branch_input: "feature/new-feature".to_string(),
+            branches: vec![
+                "main".to_string(),
+                "develop".to_string(),
+                "feature/new-feature".to_string(),
+            ],
+            base_branch_index: 0,
+            target_branch_index: 2,
             current_field: InputField::BaseBranch,
+            error_message: None,
         };
         let app = App {
             view_stack: vec![Box::new(view)],

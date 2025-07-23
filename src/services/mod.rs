@@ -1,8 +1,12 @@
+use std::future::Future;
+
 use crate::database::Database;
 use crate::event::{AppEvent, EventHandler};
 
+pub mod git_service;
 pub mod review_service;
 
+pub use git_service::GitService;
 pub use review_service::ReviewCreateData;
 pub use review_service::ReviewService;
 pub use review_service::ReviewsLoadingState;

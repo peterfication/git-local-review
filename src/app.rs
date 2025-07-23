@@ -164,7 +164,7 @@ mod tests {
         assert_eq!(app.view_stack.len(), 1);
         assert_eq!(app.view_stack.last().unwrap().view_type(), ViewType::Main);
 
-        app.push_view(Box::new(ReviewCreateView::default()));
+        app.push_view(Box::new(ReviewCreateView::new()));
 
         assert_eq!(app.view_stack.len(), 2);
         assert_eq!(
@@ -182,7 +182,7 @@ mod tests {
         assert_eq!(app.view_stack.last().unwrap().view_type(), ViewType::Main);
 
         // Add a second view (ReviewCreateView)
-        app.push_view(Box::new(ReviewCreateView::default()));
+        app.push_view(Box::new(ReviewCreateView::new()));
         assert_eq!(app.view_stack.len(), 2);
         assert_eq!(
             app.view_stack.last().unwrap().view_type(),
@@ -237,7 +237,7 @@ mod tests {
         let mut app = create_test_app().await;
 
         // Add a review create view to the stack
-        app.push_view(Box::new(ReviewCreateView::default()));
+        app.push_view(Box::new(ReviewCreateView::new()));
         assert_eq!(app.view_stack.len(), 2);
         assert_eq!(
             app.view_stack.last().unwrap().view_type(),
@@ -269,9 +269,15 @@ mod tests {
 
         // Create a ReviewCreateView with some initial content to track changes
         let review_create_view = ReviewCreateView {
-            base_branch_input: "main".to_string(),
-            target_branch_input: "feature/test".to_string(),
+            branches: vec![
+                "main".to_string(),
+                "develop".to_string(),
+                "feature/test".to_string(),
+            ],
+            base_branch_index: 0,
+            target_branch_index: 2,
             current_field: crate::views::review_create_view::InputField::BaseBranch,
+            error_message: None,
         };
 
         // Add it to the stack
@@ -286,13 +292,13 @@ mod tests {
         // Verify initial state
         assert_eq!(
             app.view_stack.last().unwrap().debug_state(),
-            "ReviewCreateView(base_branch_input: \"main\", target_branch_input: \"feature/test\", current_field: BaseBranch)"
+            "ReviewCreateView(branches: [\"main\", \"develop\", \"feature/test\"], base_branch: \"main\", target_branch: \"feature/test\", current_field: BaseBranch)"
         );
 
-        // Send a character key that would trigger different behaviors in different views
-        // 'n' would trigger ReviewCreateOpen in MainView, but should be handled as text input by ReviewCreateView
+        // Send a Down key that would change branch selection in ReviewCreateView
+        // This key only has meaning in ReviewCreateView for navigation
         let key_event = KeyEvent {
-            code: KeyCode::Char('n'),
+            code: KeyCode::Down,
             modifiers: KeyModifiers::empty(),
             kind: KeyEventKind::Press,
             state: KeyEventState::empty(),
@@ -301,14 +307,14 @@ mod tests {
         app.handle_key_events(&key_event).unwrap();
 
         // Only the ReviewCreateView (top of stack) should have received the key event
-        // It should have processed 'n' as text input, changing the base_branch_input (since it's the current field)
+        // It should have processed Down as navigation, changing the base_branch_index from 0 to 1
         assert_eq!(app.view_stack.len(), 2);
-        assert!(!app.events.has_pending_events()); // No events sent for regular character input
+        assert!(!app.events.has_pending_events()); // No events sent for navigation
 
-        // Verify that the ReviewCreateView's base_branch_input has been updated to include 'n'
+        // Verify that the ReviewCreateView's base_branch_index has been updated from 0 to 1 (develop)
         assert_eq!(
             app.view_stack.last().unwrap().debug_state(),
-            "ReviewCreateView(base_branch_input: \"mainn\", target_branch_input: \"feature/test\", current_field: BaseBranch)"
+            "ReviewCreateView(branches: [\"main\", \"develop\", \"feature/test\"], base_branch: \"develop\", target_branch: \"feature/test\", current_field: BaseBranch)"
         );
     }
 
@@ -368,7 +374,7 @@ mod tests {
         let reviews = vec![review];
 
         // Add a ReviewCreateView to the stack
-        app.push_view(Box::new(ReviewCreateView::default()));
+        app.push_view(Box::new(ReviewCreateView::new()));
         assert_eq!(app.view_stack.len(), 2);
 
         // Verify MainView initially has no selection
@@ -399,7 +405,7 @@ mod tests {
         let mut app = create_test_app().await;
 
         // Add multiple views to the stack
-        app.push_view(Box::new(ReviewCreateView::default()));
+        app.push_view(Box::new(ReviewCreateView::new()));
         let confirmation_dialog = crate::views::confirmation_dialog::ConfirmationDialogView::new(
             "Test message".to_string(),
             AppEvent::Quit,

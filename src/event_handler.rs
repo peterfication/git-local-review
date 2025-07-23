@@ -75,7 +75,7 @@ impl EventProcessor {
 
     /// Open the review creation view
     fn review_create_open(app: &mut App) {
-        app.push_view(Box::new(ReviewCreateView::default()));
+        app.push_view(Box::new(ReviewCreateView::new()));
     }
 
     /// Open delete confirmation dialog
