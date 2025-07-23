@@ -2,7 +2,7 @@ default:
   just --list
 
 # Run all steps of CI
-ci: format lint test build doc
+ci: db-schema-dump format lint test build doc
 
 # Run the application
 run:
@@ -89,3 +89,7 @@ db-reset:
 db-setup:
   just db-create
   just db-migrate
+
+# Dump the current database schema to a file
+db-schema-dump:
+  sqlite3 tmp/reviews.db .schema > schema.sql
