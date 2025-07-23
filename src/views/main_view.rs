@@ -312,7 +312,7 @@ mod tests {
 
     async fn create_test_app_with_reviews() -> App {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        Review::create_table(&pool).await.unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
 
         // Create some test reviews with fixed timestamps
         let time1 = fixed_time();

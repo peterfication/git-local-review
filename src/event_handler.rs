@@ -124,9 +124,7 @@ mod tests {
 
     async fn create_test_app() -> App {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        crate::models::review::Review::create_table(&pool)
-            .await
-            .unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
 
         let database = Database::from_pool(pool);
 

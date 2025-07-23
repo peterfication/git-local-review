@@ -118,7 +118,7 @@ mod tests {
 
     pub async fn create_test_app() -> App {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        Review::create_table(&pool).await.unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
 
         let database = Database::from_pool(pool);
 
@@ -133,7 +133,7 @@ mod tests {
     #[tokio::test]
     async fn test_app_new() {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        Review::create_table(&pool).await.unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
 
         let database = Database::from_pool(pool);
 
@@ -313,7 +313,7 @@ mod tests {
     #[tokio::test]
     async fn test_tick() {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        Review::create_table(&pool).await.unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
 
         let app = App {
             running: true,

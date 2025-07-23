@@ -207,7 +207,7 @@ mod tests {
 
     async fn create_test_database() -> Database {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        Review::create_table(&pool).await.unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
         Database::from_pool(pool)
     }
 
@@ -729,7 +729,6 @@ mod tests {
     async fn test_handle_app_event_review_load_database_error() {
         // Create a database without the reviews table to simulate an error
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        // Note: We intentionally don't call Review::create_table here
         let database = Database::from_pool(pool);
         let mut events = EventHandler::new_for_test();
 

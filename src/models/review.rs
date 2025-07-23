@@ -42,25 +42,6 @@ impl Review {
         }
     }
 
-    #[cfg(test)]
-    pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS reviews (
-                id TEXT PRIMARY KEY,
-                title TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                base_branch TEXT,
-                target_branch TEXT
-            )
-            "#,
-        )
-        .execute(pool)
-        .await?;
-        Ok(())
-    }
-
     pub async fn save(&self, pool: &SqlitePool) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
@@ -129,7 +110,7 @@ mod tests {
 
     async fn create_test_pool() -> SqlitePool {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        Review::create_table(&pool).await.unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
         pool
     }
 
