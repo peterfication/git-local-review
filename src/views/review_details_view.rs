@@ -168,7 +168,8 @@ impl ReviewDetailsView {
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Gray));
 
-        let title_content = Paragraph::new(review.title.as_str())
+        let title = review.title().clone();
+        let title_content = Paragraph::new(title.as_str())
             .block(title_block)
             .style(Style::default().fg(Color::White));
 
@@ -221,7 +222,7 @@ mod tests {
         assert_eq!(view.view_type(), ViewType::ReviewDetails);
         match &view.state {
             ReviewDetailsState::Loaded(loaded_review) => {
-                assert_eq!(loaded_review.title, "Test Review");
+                assert_eq!(loaded_review.base_branch, "default");
             }
             _ => panic!("Expected loaded state"),
         }
@@ -309,14 +310,14 @@ mod tests {
     #[tokio::test]
     async fn test_review_details_view_handles_review_loaded_event() {
         let mut view = ReviewDetailsView::new_loading();
-        let review = Review::test_review(TestReviewParams::new().title("Loaded Review"));
+        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
         let mut app = create_test_app().await;
 
         view.handle_app_events(&mut app, &AppEvent::ReviewLoaded(Arc::from(review)));
 
         match &view.state {
             ReviewDetailsState::Loaded(loaded_review) => {
-                assert_eq!(loaded_review.title, "Loaded Review");
+                assert_eq!(loaded_review.base_branch, "main");
             }
             _ => panic!("Expected loaded state"),
         }
@@ -380,7 +381,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_review_details_view_render_loaded_state() {
-        let review = Review::test_review(TestReviewParams::new().title("Sample Review Title"));
+        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
         let view = ReviewDetailsView::new(review);
         let app = App {
             view_stack: vec![Box::new(view)],
