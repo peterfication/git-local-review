@@ -302,7 +302,7 @@ mod tests {
     use super::*;
     use crate::database::Database;
     use crate::event::{AppEvent, Event};
-    use crate::models::review::Review;
+    use crate::models::review::{Review, TestReviewParams};
     use crate::services::review_service::ReviewCreateData;
     use crate::test_utils::{fixed_time, render_app_to_terminal_backend};
     use crate::time_provider::MockTimeProvider;
@@ -321,16 +321,12 @@ mod tests {
         let time_provider1 = MockTimeProvider::new(time1);
         let time_provider2 = MockTimeProvider::new(time2);
 
-        let review1 = Review::new_with_time_provider(
-            "Review 1".to_string(),
-            "default".to_string(),
-            "default".to_string(),
+        let review1 = Review::test_review_with_time_provider(
+            TestReviewParams::default().title("Review 1"),
             &time_provider1,
         );
-        let review2 = Review::new_with_time_provider(
-            "Review 2".to_string(),
-            "default".to_string(),
-            "default".to_string(),
+        let review2 = Review::test_review_with_time_provider(
+            TestReviewParams::default().title("Review 2"),
             &time_provider2,
         );
         review1.save(&pool).await.unwrap();
@@ -683,11 +679,7 @@ mod tests {
 
         view.selected_review_index = None;
 
-        let review = Review::new(
-            "Test Review".to_string(),
-            "default".to_string(),
-            "default".to_string(),
-        );
+        let review = Review::test_review(());
         review.save(app.database.pool()).await.unwrap();
         let reviews = vec![review];
 
@@ -706,11 +698,7 @@ mod tests {
 
         view.selected_review_index = None;
 
-        let review = Review::new(
-            "Test Review".to_string(),
-            "default".to_string(),
-            "default".to_string(),
-        );
+        let review = Review::test_review(());
         review.save(app.database.pool()).await.unwrap();
 
         view.handle_app_events(&mut app, &AppEvent::ReviewDelete("some_id".into()));
@@ -726,11 +714,7 @@ mod tests {
 
         view.selected_review_index = None;
 
-        let review = Review::new(
-            "Test Review".to_string(),
-            "default".to_string(),
-            "default".to_string(),
-        );
+        let review = Review::test_review(());
         review.save(app.database.pool()).await.unwrap();
 
         view.handle_app_events(
@@ -764,11 +748,7 @@ mod tests {
         view.selected_review_index = Some(1);
 
         // Create a review and a smaller reviews list (only 1 item)
-        view.reviews = Arc::new([Review::new(
-            "Test Review".to_string(),
-            "default".to_string(),
-            "default".to_string(),
-        )]);
+        view.reviews = Arc::new([Review::test_review(())]);
         view.update_selection_after_reviews_change();
 
         // Should adjust selection to last valid index (0)
@@ -783,11 +763,7 @@ mod tests {
         view.selected_review_index = Some(0);
 
         // Create a reviews list for testing
-        view.reviews = Arc::new([Review::new(
-            "Test Review".to_string(),
-            "default".to_string(),
-            "default".to_string(),
-        )]);
+        view.reviews = Arc::new([Review::test_review(())]);
         view.update_selection_after_reviews_change();
 
         // Should preserve valid selection
@@ -802,11 +778,7 @@ mod tests {
         assert_eq!(view.selected_review_index, None);
 
         // Create a reviews list for testing
-        view.reviews = Arc::new([Review::new(
-            "Test Review".to_string(),
-            "default".to_string(),
-            "default".to_string(),
-        )]);
+        view.reviews = Arc::new([Review::test_review(())]);
         view.update_selection_after_reviews_change();
 
         // Should select first review

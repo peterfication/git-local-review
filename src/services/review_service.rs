@@ -203,6 +203,7 @@ impl ServiceHandler for ReviewService {
 mod tests {
     use super::*;
     use crate::event::{Event, EventHandler, ReviewId};
+    use crate::models::review::TestReviewParams;
     use sqlx::SqlitePool;
 
     async fn create_test_database() -> Database {
@@ -423,11 +424,7 @@ mod tests {
         let mut events = EventHandler::new_for_test();
 
         // Create a test review
-        let review = Review::new(
-            "Test Review".to_string(),
-            "default".to_string(),
-            "default".to_string(),
-        );
+        let review = Review::test_review(());
         review.save(database.pool()).await.unwrap();
 
         ReviewService::handle_app_event(&AppEvent::ReviewsLoading, &database, &mut events)
@@ -558,16 +555,8 @@ mod tests {
         let mut events = EventHandler::new_for_test();
 
         // Create two reviews
-        let review1 = Review::new(
-            "Review 1".to_string(),
-            "default".to_string(),
-            "default".to_string(),
-        );
-        let review2 = Review::new(
-            "Review 2".to_string(),
-            "default".to_string(),
-            "default".to_string(),
-        );
+        let review1 = Review::test_review(TestReviewParams::new().title("Review 1"));
+        let review2 = Review::test_review(TestReviewParams::new().title("Review 2"));
         review1.save(database.pool()).await.unwrap();
         review2.save(database.pool()).await.unwrap();
 
@@ -611,11 +600,7 @@ mod tests {
         let mut events = EventHandler::new_for_test();
 
         // Create a review but try to delete with non-existent ID
-        let review = Review::new(
-            "Test Review".to_string(),
-            "default".to_string(),
-            "default".to_string(),
-        );
+        let review = Review::test_review(());
         review.save(database.pool()).await.unwrap();
 
         // Test deletion with non-existent ID
@@ -671,11 +656,7 @@ mod tests {
         let mut events = EventHandler::new_for_test();
 
         // Create a test review
-        let review = Review::new(
-            "Test Review".to_string(),
-            "default".to_string(),
-            "default".to_string(),
-        );
+        let review = Review::test_review(());
         review.save(database.pool()).await.unwrap();
 
         // Test loading the review
