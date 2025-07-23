@@ -24,6 +24,7 @@ pub mod views;
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
+    let app = App::new().await?;
     // Support for command line arguments like `--version`
     let _cli = Cli::parse();
 
@@ -32,7 +33,7 @@ async fn main() -> color_eyre::Result<()> {
 
     color_eyre::install()?;
     let terminal = ratatui::init();
-    let result = App::new().await?.run(terminal).await;
+    let result = app.run(terminal).await;
     ratatui::restore();
     result
 }
