@@ -17,7 +17,16 @@ use crate::{
 
 #[derive(Default)]
 pub struct ReviewCreateView {
-    pub title_input: String,
+    pub base_branch_input: String,
+    pub target_branch_input: String,
+    pub current_field: InputField,
+}
+
+#[derive(Default, PartialEq, Debug)]
+pub enum InputField {
+    #[default]
+    BaseBranch,
+    TargetBranch,
 }
 
 impl ViewHandler for ReviewCreateView {
@@ -28,20 +37,34 @@ impl ViewHandler for ReviewCreateView {
     fn handle_key_events(&mut self, app: &mut App, key_event: &KeyEvent) -> color_eyre::Result<()> {
         match key_event.code {
             KeyCode::Esc => self.close_view(app),
+            KeyCode::Tab => {
+                self.current_field = match self.current_field {
+                    InputField::BaseBranch => InputField::TargetBranch,
+                    InputField::TargetBranch => InputField::BaseBranch,
+                };
+            }
             KeyCode::Enter => {
                 app.events
                     .send(AppEvent::ReviewCreateSubmit(Arc::new(ReviewCreateData {
-                        title: self.title_input.clone(),
+                        base_branch: self.base_branch_input.clone(),
+                        target_branch: self.target_branch_input.clone(),
                     })));
-                self.title_input.clear();
+                self.base_branch_input.clear();
+                self.target_branch_input.clear();
             }
             KeyCode::Char('?') => app.events.send(AppEvent::HelpOpen(self.get_keybindings())),
-            KeyCode::Char(char) => {
-                self.title_input.push(char);
-            }
-            KeyCode::Backspace => {
-                self.title_input.pop();
-            }
+            KeyCode::Char(char) => match self.current_field {
+                InputField::BaseBranch => self.base_branch_input.push(char),
+                InputField::TargetBranch => self.target_branch_input.push(char),
+            },
+            KeyCode::Backspace => match self.current_field {
+                InputField::BaseBranch => {
+                    self.base_branch_input.pop();
+                }
+                InputField::TargetBranch => {
+                    self.target_branch_input.pop();
+                }
+            },
             _ => {}
         }
         Ok(())
@@ -78,25 +101,48 @@ impl ViewHandler for ReviewCreateView {
                 Constraint::Length(1),
                 Constraint::Length(3),
                 Constraint::Length(1),
+                Constraint::Length(3),
+                Constraint::Length(1),
             ])
             .split(inner);
 
-        let title_label = Paragraph::new("Title:");
-        title_label.render(chunks[0], buf);
+        let base_branch_label = Paragraph::new("Base Branch:");
+        base_branch_label.render(chunks[0], buf);
 
-        let title_input = Paragraph::new(self.title_input.as_str())
+        let base_branch_style = if self.current_field == InputField::BaseBranch {
+            Style::default().fg(Color::Yellow)
+        } else {
+            Style::default().fg(Color::White)
+        };
+        let base_branch_input = Paragraph::new(self.base_branch_input.as_str())
             .block(Block::bordered())
-            .style(Style::default().fg(Color::Yellow));
-        title_input.render(chunks[1], buf);
+            .style(base_branch_style);
+        base_branch_input.render(chunks[1], buf);
 
-        let help = Paragraph::new("Press Enter to create, Esc to cancel")
+        let target_branch_label = Paragraph::new("Target Branch:");
+        target_branch_label.render(chunks[2], buf);
+
+        let target_branch_style = if self.current_field == InputField::TargetBranch {
+            Style::default().fg(Color::Yellow)
+        } else {
+            Style::default().fg(Color::White)
+        };
+        let target_branch_input = Paragraph::new(self.target_branch_input.as_str())
+            .block(Block::bordered())
+            .style(target_branch_style);
+        target_branch_input.render(chunks[3], buf);
+
+        let help = Paragraph::new("Press Tab to switch fields, Enter to create, Esc to cancel")
             .style(Style::default().fg(Color::Gray));
-        help.render(chunks[2], buf);
+        help.render(chunks[4], buf);
     }
 
     #[cfg(test)]
     fn debug_state(&self) -> String {
-        format!("ReviewCreateView(title_input: \"{}\")", self.title_input)
+        format!(
+            "ReviewCreateView(base_branch_input: \"{}\", target_branch_input: \"{}\", current_field: {:?})",
+            self.base_branch_input, self.target_branch_input, self.current_field
+        )
     }
 
     #[cfg(test)]
@@ -118,7 +164,7 @@ impl ViewHandler for ReviewCreateView {
             },
             KeyBinding {
                 key: "Enter".to_string(),
-                description: "Submit review".to_string(),
+                description: "Create review".to_string(),
                 key_event: KeyEvent {
                     code: KeyCode::Enter,
                     modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
@@ -127,8 +173,18 @@ impl ViewHandler for ReviewCreateView {
                 },
             },
             KeyBinding {
+                key: "Tab".to_string(),
+                description: "Switch between input fields".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Tab,
+                    modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
+                    kind: ratatui::crossterm::event::KeyEventKind::Press,
+                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                },
+            },
+            KeyBinding {
                 key: "<char>".to_string(),
-                description: "Enter review title".to_string(),
+                description: "Enter branch names".to_string(),
                 key_event: KeyEvent {
                     code: KeyCode::Char('a'),
                     modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
@@ -157,7 +213,9 @@ impl ViewHandler for ReviewCreateView {
 
 impl ReviewCreateView {
     fn close_view(&mut self, app: &mut App) {
-        self.title_input.clear();
+        self.base_branch_input.clear();
+        self.target_branch_input.clear();
+        self.current_field = InputField::BaseBranch;
         app.events.send(AppEvent::ViewClose);
     }
 }
@@ -190,7 +248,9 @@ mod tests {
     #[test]
     fn test_review_create_view_default() {
         let view = ReviewCreateView::default();
-        assert_eq!(view.title_input, "");
+        assert_eq!(view.base_branch_input, "");
+        assert_eq!(view.target_branch_input, "");
+        assert_eq!(view.current_field, InputField::BaseBranch);
     }
 
     #[tokio::test]
@@ -207,7 +267,8 @@ mod tests {
 
         view.handle_key_events(&mut app, &key_event).unwrap();
 
-        assert_eq!(view.title_input, "a");
+        assert_eq!(view.base_branch_input, "a");
+        assert_eq!(view.target_branch_input, "");
     }
 
     #[tokio::test]
@@ -226,14 +287,17 @@ mod tests {
             view.handle_key_events(&mut app, &key_event).unwrap();
         }
 
-        assert_eq!(view.title_input, "Hello");
+        assert_eq!(view.base_branch_input, "Hello");
+        assert_eq!(view.target_branch_input, "");
     }
 
     #[tokio::test]
     async fn test_review_create_view_handle_backspace() {
         let mut app = create_test_app().await;
         let mut view = ReviewCreateView {
-            title_input: "Hello".to_string(),
+            base_branch_input: "Hello".to_string(),
+            target_branch_input: "".to_string(),
+            current_field: InputField::BaseBranch,
         };
 
         let key_event = KeyEvent {
@@ -245,7 +309,7 @@ mod tests {
 
         view.handle_key_events(&mut app, &key_event).unwrap();
 
-        assert_eq!(view.title_input, "Hell");
+        assert_eq!(view.base_branch_input, "Hell");
     }
 
     #[tokio::test]
@@ -262,14 +326,16 @@ mod tests {
 
         view.handle_key_events(&mut app, &key_event).unwrap();
 
-        assert_eq!(view.title_input, "");
+        assert_eq!(view.base_branch_input, "");
     }
 
     #[tokio::test]
     async fn test_review_create_view_handle_esc() {
         let mut app = create_test_app().await;
         let mut view = ReviewCreateView {
-            title_input: "Some input".to_string(),
+            base_branch_input: "Some input".to_string(),
+            target_branch_input: "other input".to_string(),
+            current_field: InputField::BaseBranch,
         };
         assert!(!app.events.has_pending_events());
 
@@ -282,8 +348,9 @@ mod tests {
 
         view.handle_key_events(&mut app, &key_event).unwrap();
 
-        // Title input should be cleared
-        assert_eq!(view.title_input, "");
+        // Both inputs should be cleared
+        assert_eq!(view.base_branch_input, "");
+        assert_eq!(view.target_branch_input, "");
 
         // Verify that a ReviewCreateClose event was sent
         assert!(app.events.has_pending_events());
@@ -295,7 +362,9 @@ mod tests {
     async fn test_review_create_view_handle_enter() {
         let mut app = create_test_app().await;
         let mut view = ReviewCreateView {
-            title_input: "Test Review".to_string(),
+            base_branch_input: "main".to_string(),
+            target_branch_input: "feature/test".to_string(),
+            current_field: InputField::BaseBranch,
         };
         assert!(!app.events.has_pending_events());
 
@@ -308,14 +377,16 @@ mod tests {
 
         view.handle_key_events(&mut app, &key_event).unwrap();
 
-        // Title input should be cleared after submit
-        assert_eq!(view.title_input, "");
+        // Both inputs should be cleared after submit
+        assert_eq!(view.base_branch_input, "");
+        assert_eq!(view.target_branch_input, "");
 
         // Verify that a ReviewCreateSubmit event was sent with the correct title
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
         if let Event::App(AppEvent::ReviewCreateSubmit(ref data)) = *event {
-            assert_eq!(data.title, "Test Review");
+            assert_eq!(data.base_branch, "main");
+            assert_eq!(data.target_branch, "feature/test");
         } else {
             panic!("Expected ReviewCreateSubmit event");
         }
@@ -336,15 +407,16 @@ mod tests {
         view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Should still work with empty input
-        assert_eq!(view.title_input, "");
+        assert_eq!(view.base_branch_input, "");
+        assert_eq!(view.target_branch_input, "");
     }
 
     #[tokio::test]
     async fn test_review_create_view_handle_unknown_key() {
         let mut app = create_test_app().await;
         let mut view = ReviewCreateView::default();
-        let initial_input = "Test".to_string();
-        view.title_input = initial_input.clone();
+        let initial_base = "Test".to_string();
+        view.base_branch_input = initial_base.clone();
 
         let key_event = KeyEvent {
             code: KeyCode::F(1),
@@ -356,7 +428,7 @@ mod tests {
         view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Unknown keys should not change input
-        assert_eq!(view.title_input, initial_input);
+        assert_eq!(view.base_branch_input, initial_base);
     }
 
     #[tokio::test]
@@ -373,7 +445,9 @@ mod tests {
     #[tokio::test]
     async fn test_review_create_view_render_with_title() {
         let view = ReviewCreateView {
-            title_input: "My New Review".to_string(),
+            base_branch_input: "main".to_string(),
+            target_branch_input: "feature/new-feature".to_string(),
+            current_field: InputField::BaseBranch,
         };
         let app = App {
             view_stack: vec![Box::new(view)],

@@ -720,7 +720,8 @@ mod tests {
         view.handle_app_events(
             &mut app,
             &AppEvent::ReviewCreateSubmit(Arc::new(ReviewCreateData {
-                title: "New Review".to_string(),
+                base_branch: "main".to_string(),
+                target_branch: "feature/new-review".to_string(),
             })),
         );
 
