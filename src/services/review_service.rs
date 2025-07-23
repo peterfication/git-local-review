@@ -52,8 +52,8 @@ impl ReviewService {
 
         let review = Review::new(
             data.title.trim().to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
         );
         review.save(database.pool()).await?;
         log::info!("Created review: {}", review.title);
@@ -425,8 +425,8 @@ mod tests {
         // Create a test review
         let review = Review::new(
             "Test Review".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
         );
         review.save(database.pool()).await.unwrap();
 
@@ -560,13 +560,13 @@ mod tests {
         // Create two reviews
         let review1 = Review::new(
             "Review 1".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
         );
         let review2 = Review::new(
             "Review 2".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
         );
         review1.save(database.pool()).await.unwrap();
         review2.save(database.pool()).await.unwrap();
@@ -613,8 +613,8 @@ mod tests {
         // Create a review but try to delete with non-existent ID
         let review = Review::new(
             "Test Review".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
         );
         review.save(database.pool()).await.unwrap();
 
@@ -673,8 +673,8 @@ mod tests {
         // Create a test review
         let review = Review::new(
             "Test Review".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
         );
         review.save(database.pool()).await.unwrap();
 

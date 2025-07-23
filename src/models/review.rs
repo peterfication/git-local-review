@@ -10,8 +10,8 @@ pub struct Review {
     pub title: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub base_branch: Option<String>,
-    pub target_branch: Option<String>,
+    pub base_branch: String,
+    pub target_branch: String,
 }
 
 impl PartialEq for Review {
@@ -21,14 +21,14 @@ impl PartialEq for Review {
 }
 
 impl Review {
-    pub fn new(title: String, base_branch: Option<String>, target_branch: Option<String>) -> Self {
+    pub fn new(title: String, base_branch: String, target_branch: String) -> Self {
         Self::new_with_time_provider(title, base_branch, target_branch, &SystemTimeProvider)
     }
 
     pub fn new_with_time_provider(
         title: String,
-        base_branch: Option<String>,
-        target_branch: Option<String>,
+        base_branch: String,
+        target_branch: String,
         time_provider: &dyn TimeProvider,
     ) -> Self {
         let now = time_provider.now();
@@ -117,8 +117,8 @@ mod tests {
     #[test]
     fn test_review_new() {
         let title = "Test Review".to_string();
-        let base_branch = Some("main".to_string());
-        let target_branch = Some("feature/test".to_string());
+        let base_branch = "main".to_string();
+        let target_branch = "feature/test".to_string();
         let review = Review::new(title.clone(), base_branch.clone(), target_branch.clone());
 
         assert_eq!(review.title, title);
@@ -139,8 +139,8 @@ mod tests {
 
         let review = Review::new_with_time_provider(
             title.clone(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
             &time_provider,
         );
 
@@ -149,8 +149,8 @@ mod tests {
         assert_eq!(review.created_at, fixed_time);
         assert_eq!(review.updated_at, fixed_time);
         assert_eq!(review.created_at, review.updated_at);
-        assert_eq!(review.base_branch, Some("default".to_string()));
-        assert_eq!(review.base_branch, Some("default".to_string()));
+        assert_eq!(review.base_branch, "default".to_string());
+        assert_eq!(review.target_branch, "default".to_string());
 
         // ID should be a valid UUID
         assert!(uuid::Uuid::parse_str(&review.id).is_ok());
@@ -159,8 +159,8 @@ mod tests {
     #[test]
     fn test_review_new_time_provider() {
         let title = "Test Review".to_string();
-        let base_branch = Some("develop".to_string());
-        let target_branch = Some("feature/branch-support".to_string());
+        let base_branch = "develop".to_string();
+        let target_branch = "feature/branch-support".to_string();
         let fixed_time = fixed_time();
         let time_provider = MockTimeProvider::new(fixed_time);
 
@@ -187,8 +187,8 @@ mod tests {
         let pool = create_test_pool().await;
         let review = Review::new(
             "Test Review".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
         );
 
         // Save the review
@@ -200,15 +200,15 @@ mod tests {
         assert_eq!(reviews.len(), 1);
         assert_eq!(reviews[0].id, review.id);
         assert_eq!(reviews[0].title, review.title);
-        assert_eq!(reviews[0].base_branch, Some("default".to_string()));
-        assert_eq!(reviews[0].target_branch, Some("default".to_string()));
+        assert_eq!(reviews[0].base_branch, "default".to_string());
+        assert_eq!(reviews[0].target_branch, "default".to_string());
     }
 
     #[tokio::test]
     async fn test_review_save_and_list_with_branches() {
         let pool = create_test_pool().await;
-        let base_branch = Some("main".to_string());
-        let target_branch = Some("feature/test".to_string());
+        let base_branch = "main".to_string();
+        let target_branch = "feature/test".to_string();
         let review = Review::new(
             "Test Review with Branches".to_string(),
             base_branch.clone(),
@@ -257,14 +257,14 @@ mod tests {
 
         let review1 = Review::new_with_time_provider(
             "First Review".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
             &time_provider1,
         );
         let review2 = Review::new_with_time_provider(
             "Second Review".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
             &time_provider2,
         );
 
@@ -286,13 +286,13 @@ mod tests {
         let pool = create_test_pool().await;
         let review1 = Review::new(
             "Review 1".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
         );
         let mut review2 = Review::new(
             "Review 2".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
         );
 
         // Make them have the same ID
@@ -310,8 +310,8 @@ mod tests {
         let pool = create_test_pool().await;
         let review = Review::new(
             "Test Review".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
         );
 
         // Save the review
@@ -336,8 +336,8 @@ mod tests {
         let pool = create_test_pool().await;
         let review = Review::new(
             "Test Review".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
         );
 
         // Save the review
@@ -365,14 +365,14 @@ mod tests {
 
         let review1 = Review::new_with_time_provider(
             "Title 1".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
             &time_provider1,
         );
         let mut review2 = Review::new_with_time_provider(
             "Title 2".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
             &time_provider2,
         );
 
@@ -390,14 +390,14 @@ mod tests {
 
         let review1 = Review::new_with_time_provider(
             "Same Title".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
             &time_provider,
         );
         let review2 = Review::new_with_time_provider(
             "Same Title".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
             &time_provider,
         );
 
@@ -409,8 +409,8 @@ mod tests {
     fn test_review_eq_self() {
         let review = Review::new(
             "Test Review".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
         );
 
         // Should be equal to itself
@@ -421,8 +421,8 @@ mod tests {
     fn test_review_eq_clone() {
         let review1 = Review::new(
             "Test Review".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
         );
         let review2 = review1.clone();
 
@@ -439,17 +439,17 @@ mod tests {
 
         let review1 = Review::new_with_time_provider(
             "Original Title".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
             &time_provider1,
         );
         let review2 = Review {
-            id: review1.id.clone(),                              // Same ID
-            title: "Completely Different Title".to_string(),     // Different title
-            created_at: time2,                                   // Different created_at
-            updated_at: time2,                                   // Different updated_at
-            base_branch: Some("different-base".to_string()),     // Different base_branch
-            target_branch: Some("different-target".to_string()), // Different target_branch
+            id: review1.id.clone(),                          // Same ID
+            title: "Completely Different Title".to_string(), // Different title
+            created_at: time2,                               // Different created_at
+            updated_at: time2,                               // Different updated_at
+            base_branch: "different-base".to_string(),       // Different base_branch
+            target_branch: "different-target".to_string(),   // Different target_branch
         };
 
         // Should be equal because only ID matters for equality

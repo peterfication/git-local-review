@@ -323,14 +323,14 @@ mod tests {
 
         let review1 = Review::new_with_time_provider(
             "Review 1".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
             &time_provider1,
         );
         let review2 = Review::new_with_time_provider(
             "Review 2".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
             &time_provider2,
         );
         review1.save(&pool).await.unwrap();
@@ -685,8 +685,8 @@ mod tests {
 
         let review = Review::new(
             "Test Review".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
         );
         review.save(app.database.pool()).await.unwrap();
         let reviews = vec![review];
@@ -708,8 +708,8 @@ mod tests {
 
         let review = Review::new(
             "Test Review".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
         );
         review.save(app.database.pool()).await.unwrap();
 
@@ -728,8 +728,8 @@ mod tests {
 
         let review = Review::new(
             "Test Review".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
         );
         review.save(app.database.pool()).await.unwrap();
 
@@ -766,8 +766,8 @@ mod tests {
         // Create a review and a smaller reviews list (only 1 item)
         view.reviews = Arc::new([Review::new(
             "Test Review".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
         )]);
         view.update_selection_after_reviews_change();
 
@@ -785,8 +785,8 @@ mod tests {
         // Create a reviews list for testing
         view.reviews = Arc::new([Review::new(
             "Test Review".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
         )]);
         view.update_selection_after_reviews_change();
 
@@ -804,8 +804,8 @@ mod tests {
         // Create a reviews list for testing
         view.reviews = Arc::new([Review::new(
             "Test Review".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
         )]);
         view.update_selection_after_reviews_change();
 

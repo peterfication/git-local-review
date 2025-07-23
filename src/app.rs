@@ -334,8 +334,8 @@ mod tests {
         // Create a review to have data for testing
         let review = Review::new(
             "Test Review".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
         );
         review.save(app.database.pool()).await.unwrap();
         let reviews = vec![review];
@@ -367,8 +367,8 @@ mod tests {
         // Create a review to have data for testing
         let review = Review::new(
             "Test Review".to_string(),
-            Some("default".to_string()),
-            Some("default".to_string()),
+            "default".to_string(),
+            "default".to_string(),
         );
         review.save(app.database.pool()).await.unwrap();
         let reviews = vec![review];
