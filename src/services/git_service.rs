@@ -1,6 +1,7 @@
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
+use std::sync::Arc;
 
 use crate::database::Database;
 use crate::event::{AppEvent, EventHandler};
@@ -9,7 +10,7 @@ use crate::services::ServiceHandler;
 pub struct GitService;
 
 impl GitService {
-    pub fn get_branches<P: AsRef<Path>>(repo_path: P) -> color_eyre::Result<Vec<String>> {
+    pub fn get_branches<P: AsRef<Path>>(repo_path: P) -> color_eyre::Result<Arc<[String]>> {
         let repo = git2::Repository::open(repo_path)?;
         let mut branches = Vec::new();
 
@@ -25,7 +26,7 @@ impl GitService {
 
         // Sort branches alphabetically
         branches.sort();
-        Ok(branches)
+        Ok(branches.into())
     }
 }
 
@@ -103,9 +104,9 @@ mod tests {
         let branches = GitService::get_branches(temp_dir.path()).unwrap();
 
         // Should be sorted alphabetically
-        let mut sorted_branches = branches.clone();
+        let mut sorted_branches = (*branches).to_vec().clone();
         sorted_branches.sort();
-        assert_eq!(branches, sorted_branches);
+        assert_eq!(branches, Arc::from(sorted_branches));
     }
 
     #[test]

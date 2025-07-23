@@ -17,7 +17,7 @@ use crate::{
 
 #[derive(Default)]
 pub struct ReviewCreateView {
-    pub branches: Vec<String>,
+    pub branches: Arc<[String]>,
     pub base_branch_index: usize,
     pub target_branch_index: usize,
     pub current_field: InputField,
@@ -370,7 +370,8 @@ mod tests {
                 "main".to_string(),
                 "develop".to_string(),
                 "feature/test".to_string(),
-            ],
+            ]
+            .into(),
             base_branch_index: 1,
             target_branch_index: 1,
             current_field: InputField::BaseBranch,
@@ -402,7 +403,7 @@ mod tests {
     async fn test_review_create_view_handle_tab_navigation() {
         let mut app = create_test_app().await;
         let mut view = ReviewCreateView {
-            branches: vec!["main".to_string(), "develop".to_string()],
+            branches: vec!["main".to_string(), "develop".to_string()].into(),
             base_branch_index: 0,
             target_branch_index: 0,
             current_field: InputField::BaseBranch,
@@ -427,7 +428,7 @@ mod tests {
     async fn test_review_create_view_handle_up_at_bounds() {
         let mut app = create_test_app().await;
         let mut view = ReviewCreateView {
-            branches: vec!["main".to_string(), "develop".to_string()],
+            branches: vec!["main".to_string(), "develop".to_string()].into(),
             base_branch_index: 0,
             target_branch_index: 0,
             current_field: InputField::BaseBranch,
@@ -450,7 +451,7 @@ mod tests {
     async fn test_review_create_view_handle_down_at_bounds() {
         let mut app = create_test_app().await;
         let mut view = ReviewCreateView {
-            branches: vec!["main".to_string(), "develop".to_string()],
+            branches: vec!["main".to_string(), "develop".to_string()].into(),
             base_branch_index: 1,
             target_branch_index: 1,
             current_field: InputField::BaseBranch,
@@ -473,7 +474,7 @@ mod tests {
     async fn test_review_create_view_handle_esc() {
         let mut app = create_test_app().await;
         let mut view = ReviewCreateView {
-            branches: vec!["main".to_string(), "develop".to_string()],
+            branches: vec!["main".to_string(), "develop".to_string()].into(),
             base_branch_index: 1,
             target_branch_index: 1,
             current_field: InputField::TargetBranch,
@@ -510,7 +511,8 @@ mod tests {
                 "main".to_string(),
                 "develop".to_string(),
                 "feature/test".to_string(),
-            ],
+            ]
+            .into(),
             base_branch_index: 0,
             target_branch_index: 2,
             current_field: InputField::BaseBranch,
@@ -560,7 +562,7 @@ mod tests {
     async fn test_review_create_view_handle_unknown_key() {
         let mut app = create_test_app().await;
         let mut view = ReviewCreateView {
-            branches: vec!["main".to_string(), "develop".to_string()],
+            branches: vec!["main".to_string(), "develop".to_string()].into(),
             base_branch_index: 1,
             target_branch_index: 0,
             current_field: InputField::BaseBranch,
@@ -599,7 +601,8 @@ mod tests {
                 "main".to_string(),
                 "develop".to_string(),
                 "feature/new-feature".to_string(),
-            ],
+            ]
+            .into(),
             base_branch_index: 0,
             target_branch_index: 2,
             current_field: InputField::BaseBranch,
