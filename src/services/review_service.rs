@@ -50,7 +50,11 @@ impl ReviewService {
             return Err(color_eyre::eyre::eyre!("Review title cannot be empty"));
         }
 
-        let review = Review::new(data.title.trim().to_string());
+        let review = Review::new(
+            data.title.trim().to_string(),
+            Some("default".to_string()),
+            Some("default".to_string()),
+        );
         review.save(database.pool()).await?;
         log::info!("Created review: {}", review.title);
 
@@ -419,7 +423,11 @@ mod tests {
         let mut events = EventHandler::new_for_test();
 
         // Create a test review
-        let review = Review::new("Test Review".to_string());
+        let review = Review::new(
+            "Test Review".to_string(),
+            Some("default".to_string()),
+            Some("default".to_string()),
+        );
         review.save(database.pool()).await.unwrap();
 
         ReviewService::handle_app_event(&AppEvent::ReviewsLoading, &database, &mut events)
@@ -550,8 +558,16 @@ mod tests {
         let mut events = EventHandler::new_for_test();
 
         // Create two reviews
-        let review1 = Review::new("Review 1".to_string());
-        let review2 = Review::new("Review 2".to_string());
+        let review1 = Review::new(
+            "Review 1".to_string(),
+            Some("default".to_string()),
+            Some("default".to_string()),
+        );
+        let review2 = Review::new(
+            "Review 2".to_string(),
+            Some("default".to_string()),
+            Some("default".to_string()),
+        );
         review1.save(database.pool()).await.unwrap();
         review2.save(database.pool()).await.unwrap();
 
@@ -595,7 +611,11 @@ mod tests {
         let mut events = EventHandler::new_for_test();
 
         // Create a review but try to delete with non-existent ID
-        let review = Review::new("Test Review".to_string());
+        let review = Review::new(
+            "Test Review".to_string(),
+            Some("default".to_string()),
+            Some("default".to_string()),
+        );
         review.save(database.pool()).await.unwrap();
 
         // Test deletion with non-existent ID
@@ -651,7 +671,11 @@ mod tests {
         let mut events = EventHandler::new_for_test();
 
         // Create a test review
-        let review = Review::new("Test Review".to_string());
+        let review = Review::new(
+            "Test Review".to_string(),
+            Some("default".to_string()),
+            Some("default".to_string()),
+        );
         review.save(database.pool()).await.unwrap();
 
         // Test loading the review

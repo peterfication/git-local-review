@@ -1,7 +1,4 @@
-use refinery::config::{Config, ConfigDbType};
-use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
-
-use crate::migrations;
+use sqlx::{SqlitePool, migrate, sqlite::SqliteConnectOptions};
 
 pub struct Database {
     pool: SqlitePool,
@@ -17,11 +14,7 @@ impl Database {
 
         let pool = SqlitePool::connect_with(options).await?;
 
-        // Run migrations using refinery
-        let mut config = Config::new(ConfigDbType::Sqlite).set_db_path("tmp/reviews.db");
-        migrations::runner()
-            .run(&mut config)
-            .map_err(|e| color_eyre::eyre::eyre!("Migration failed: {}", e))?;
+        migrate!().run(&pool).await?;
 
         log::info!("Database initialized at tmp/reviews.db with migrations");
 

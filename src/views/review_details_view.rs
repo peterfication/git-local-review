@@ -212,7 +212,11 @@ mod tests {
 
     #[test]
     fn test_review_details_view_creation() {
-        let review = Review::new("Test Review".to_string());
+        let review = Review::new(
+            "Test Review".to_string(),
+            Some("default".to_string()),
+            Some("default".to_string()),
+        );
         let view = ReviewDetailsView::new(review.clone());
 
         assert_eq!(view.view_type(), ViewType::ReviewDetails);
@@ -237,7 +241,11 @@ mod tests {
 
     #[test]
     fn test_review_details_view_debug_state() {
-        let review = Review::new("Test Review".to_string());
+        let review = Review::new(
+            "Test Review".to_string(),
+            Some("default".to_string()),
+            Some("default".to_string()),
+        );
         let view = ReviewDetailsView::new(review.clone());
 
         let debug_state = view.debug_state();
@@ -255,7 +263,11 @@ mod tests {
 
     #[test]
     fn test_review_details_view_keybindings() {
-        let review = Review::new("Test Review".to_string());
+        let review = Review::new(
+            "Test Review".to_string(),
+            Some("default".to_string()),
+            Some("default".to_string()),
+        );
         let view = ReviewDetailsView::new(review);
 
         let keybindings = view.get_keybindings();
@@ -268,7 +280,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_review_details_view_handles_escape_key() {
-        let review = Review::new("Test Review".to_string());
+        let review = Review::new(
+            "Test Review".to_string(),
+            Some("default".to_string()),
+            Some("default".to_string()),
+        );
         let mut view = ReviewDetailsView::new(review);
         let mut app = create_test_app().await;
 
@@ -285,7 +301,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_review_details_view_handles_help_key() {
-        let review = Review::new("Test Review".to_string());
+        let review = Review::new(
+            "Test Review".to_string(),
+            Some("default".to_string()),
+            Some("default".to_string()),
+        );
         let mut view = ReviewDetailsView::new(review);
         let mut app = create_test_app().await;
 
@@ -306,7 +326,11 @@ mod tests {
     #[tokio::test]
     async fn test_review_details_view_handles_review_loaded_event() {
         let mut view = ReviewDetailsView::new_loading();
-        let review = Review::new("Loaded Review".to_string());
+        let review = Review::new(
+            "Loaded Review".to_string(),
+            Some("default".to_string()),
+            Some("default".to_string()),
+        );
         let mut app = create_test_app().await;
 
         view.handle_app_events(&mut app, &AppEvent::ReviewLoaded(Arc::from(review)));
@@ -377,7 +401,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_review_details_view_render_loaded_state() {
-        let review = Review::new("Sample Review Title".to_string());
+        let review = Review::new(
+            "Sample Review Title".to_string(),
+            Some("default".to_string()),
+            Some("default".to_string()),
+        );
         let view = ReviewDetailsView::new(review);
         let app = App {
             view_stack: vec![Box::new(view)],

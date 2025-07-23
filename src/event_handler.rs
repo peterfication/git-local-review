@@ -226,7 +226,11 @@ mod tests {
         let mut app = create_test_app().await;
 
         // Create a review
-        let review = Review::new("Test Review".to_string());
+        let review = Review::new(
+            "Test Review".to_string(),
+            Some("default".to_string()),
+            Some("default".to_string()),
+        );
         review.save(app.database.pool()).await.unwrap();
         let review_id = review.id.clone();
 
