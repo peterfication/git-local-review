@@ -5,7 +5,7 @@ use ratatui::crossterm::event::KeyEvent;
 use crate::{
     app::App,
     event::{AppEvent, Event},
-    services::{GitService, ReviewService, ServiceHandler},
+    services::{GitService, ReviewService, ServiceHandler, StateEvent},
     views::{
         ConfirmationDialogView, HelpModalView, KeyBinding, ReviewCreateView, ReviewDetailsView,
     },
@@ -27,6 +27,9 @@ impl EventProcessor {
 
                 // First let services handle the event
                 Self::handle_services(app, app_event).await?;
+
+                // Handle state service events
+                Self::handle_state_service(app, app_event).await?;
 
                 // Then let views handle the event
                 app.handle_app_events(app_event);
@@ -60,7 +63,38 @@ impl EventProcessor {
     fn init(app: &mut App) {
         // Initialize any global state or services if needed
         log::info!("App initialized");
-        app.events.send(AppEvent::ReviewsLoad);
+        // Trigger initial data loading through state service
+        app.events
+            .send(AppEvent::StateEvent(StateEvent::ReviewsRequest));
+    }
+
+    /// Handle state service events
+    async fn handle_state_service(app: &mut App, event: &AppEvent) -> color_eyre::Result<()> {
+        match event {
+            AppEvent::StateEvent(state_event) => {
+                app.state_service
+                    .handle_state_event(state_event, &app.database, &mut app.events)
+                    .await?;
+            }
+            AppEvent::ReviewsLoadingState(reviews_state) => {
+                // Update state service when loading state changes
+                let state_event = StateEvent::ReviewsLoaded(reviews_state.clone());
+                app.state_service
+                    .handle_state_event(&state_event, &app.database, &mut app.events)
+                    .await?;
+            }
+            AppEvent::GitBranchesLoadingState(branches_state) => {
+                // Update state service when git branches loading state changes
+                let state_event = StateEvent::GitBranchesLoaded(branches_state.clone());
+                app.state_service
+                    .handle_state_event(&state_event, &app.database, &mut app.events)
+                    .await?;
+            }
+            _ => {
+                // Other events are not handled by state service
+            }
+        }
+        Ok(())
     }
 
     /// Handle app events through services
@@ -79,8 +113,9 @@ impl EventProcessor {
     /// Open the review creation view
     fn review_create_open(app: &mut App) {
         app.push_view(Box::new(ReviewCreateView::default()));
-        // Trigger loading of Git branches
-        app.events.send(AppEvent::GitBranchesLoad);
+        // Trigger loading of Git branches through state service
+        app.events
+            .send(AppEvent::StateEvent(StateEvent::GitBranchesRequest));
     }
 
     /// Open delete confirmation dialog
@@ -137,6 +172,7 @@ mod tests {
             running: true,
             events: crate::event::EventHandler::new_for_test(),
             database,
+            state_service: crate::services::StateService::new(),
             view_stack: vec![Box::new(MainView::new())],
         }
     }

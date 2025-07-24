@@ -4,6 +4,7 @@ use crate::{
     database::Database,
     event::{AppEvent, EventHandler},
     event_handler::EventProcessor,
+    services::StateService,
     views::{MainView, ViewHandler},
 };
 
@@ -15,6 +16,8 @@ pub struct App {
     pub events: EventHandler,
     /// Database connection.
     pub database: Database,
+    /// State service for centralized state management.
+    pub state_service: StateService,
     /// Current view stack.
     pub view_stack: Vec<Box<dyn ViewHandler>>,
 }
@@ -34,6 +37,7 @@ impl App {
             running: true,
             events: EventHandler::new(),
             database,
+            state_service: StateService::new(),
             view_stack: vec![Box::new(MainView::new())],
         })
     }
@@ -126,6 +130,7 @@ mod tests {
             running: true,
             events: EventHandler::new_for_test(),
             database,
+            state_service: StateService::new(),
             view_stack: vec![Box::new(MainView::new())],
         }
     }
@@ -141,6 +146,7 @@ mod tests {
             running: true,
             events: EventHandler::new(),
             database,
+            state_service: StateService::new(),
             view_stack: vec![Box::new(MainView::new())],
         };
 
@@ -329,6 +335,7 @@ mod tests {
             running: true,
             events: EventHandler::new(),
             database: Database::from_pool(pool),
+            state_service: StateService::new(),
             view_stack: vec![Box::new(MainView::new())],
         };
 

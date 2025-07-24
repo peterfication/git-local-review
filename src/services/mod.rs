@@ -5,12 +5,14 @@ use crate::event::{AppEvent, EventHandler};
 
 pub mod git_service;
 pub mod review_service;
+pub mod state_service;
 
 pub use git_service::GitBranchesLoadingState;
 pub use git_service::GitService;
 pub use review_service::ReviewCreateData;
 pub use review_service::ReviewService;
 pub use review_service::ReviewsLoadingState;
+pub use state_service::{AppState, StateEvent, StateService};
 
 /// Trait for services that can handle app events
 pub trait ServiceHandler {

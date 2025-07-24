@@ -53,7 +53,13 @@ impl ViewHandler for ReviewCreateView {
             AppEvent::ReviewCreated(_review) => self.close_view(app),
             AppEvent::ReviewCreatedError(_error) => self.close_view(app),
             AppEvent::GitBranchesLoadingState(state) => {
+                // Keep handling direct loading state events for backward compatibility
                 self.handle_git_branches_loading_state(state)
+            }
+            AppEvent::StateUpdate(app_state) => {
+                // Handle centralized state updates from StateService
+                let branches_state = &app_state.git_branches;
+                self.handle_git_branches_loading_state(branches_state);
             }
             _ => (),
         }
@@ -407,6 +413,7 @@ mod tests {
             running: true,
             events: crate::event::EventHandler::new_for_test(),
             database,
+            state_service: crate::services::StateService::new(),
             view_stack: vec![],
         }
     }

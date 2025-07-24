@@ -80,8 +80,18 @@ impl ViewHandler for MainView {
     fn handle_app_events(&mut self, _app: &mut App, event: &AppEvent) {
         match event {
             AppEvent::ReviewsLoadingState(state) => {
+                // Keep handling direct loading state events for backward compatibility
                 self.reviews_loading_state = state.clone();
                 if let ReviewsLoadingState::Loaded(reviews) = state {
+                    self.reviews = Arc::clone(reviews);
+                    self.update_selection_after_reviews_change();
+                }
+            }
+            AppEvent::StateUpdate(app_state) => {
+                // Handle centralized state updates from StateService
+                let reviews_state = &app_state.reviews;
+                self.reviews_loading_state = reviews_state.clone();
+                if let ReviewsLoadingState::Loaded(reviews) = reviews_state {
                     self.reviews = Arc::clone(reviews);
                     self.update_selection_after_reviews_change();
                 }
@@ -338,6 +348,7 @@ mod tests {
             running: true,
             events: crate::event::EventHandler::new_for_test(),
             database,
+            state_service: crate::services::StateService::new(),
             view_stack: vec![Box::new(MainView::new())],
         }
     }

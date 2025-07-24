@@ -191,6 +191,7 @@ mod tests {
             running: true,
             events: crate::event::EventHandler::new_for_test(),
             database,
+            state_service: crate::services::StateService::new(),
             view_stack: vec![],
         }
     }

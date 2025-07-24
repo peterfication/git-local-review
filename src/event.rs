@@ -8,6 +8,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     models::Review,
+    services::state_service::{AppState, StateEvent},
     services::{GitBranchesLoadingState, ReviewCreateData, ReviewsLoadingState},
     views::KeyBinding,
 };
@@ -96,6 +97,11 @@ pub enum AppEvent {
     GitBranchesLoading,
     /// Propagates the current loading state of Git branches.
     GitBranchesLoadingState(GitBranchesLoadingState),
+
+    /// State service events for centralized state management.
+    StateEvent(StateEvent),
+    /// Broadcast updated application state to all views.
+    StateUpdate(Arc<AppState>),
 }
 
 /// Terminal event handler.
@@ -154,6 +160,16 @@ impl EventHandler {
         // Ignore the result as the reciever cannot be dropped while this struct still has a
         // reference to it
         let _ = self.sender.send(Event::App(app_event).into());
+    }
+
+    /// Queue an app event to be sent to the event receiver (async version).
+    ///
+    /// This is useful for sending events from async contexts where you need proper error handling.
+    pub async fn send_async(&self, app_event: AppEvent) -> color_eyre::Result<()> {
+        self.sender
+            .send(Event::App(app_event).into())
+            .map_err(|_| color_eyre::eyre::eyre!("Failed to send event"))?;
+        Ok(())
     }
 
     /// Queue a key event to be sent to the event receiver as a crossterm event.
