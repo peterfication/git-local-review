@@ -223,7 +223,7 @@ mod tests {
 
     #[test]
     fn test_help_modal_view_for_review_create_view() {
-        let review_create_view = crate::views::ReviewCreateView::new();
+        let review_create_view = crate::views::ReviewCreateView::default();
         let keybindings = review_create_view.get_keybindings();
         let view = HelpModalView::new(Arc::clone(&keybindings));
         assert_eq!(view.keybindings.len(), 4);

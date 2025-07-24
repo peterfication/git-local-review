@@ -164,7 +164,7 @@ mod tests {
         assert_eq!(app.view_stack.len(), 1);
         assert_eq!(app.view_stack.last().unwrap().view_type(), ViewType::Main);
 
-        app.push_view(Box::new(ReviewCreateView::new()));
+        app.push_view(Box::new(ReviewCreateView::default()));
 
         assert_eq!(app.view_stack.len(), 2);
         assert_eq!(
@@ -182,7 +182,7 @@ mod tests {
         assert_eq!(app.view_stack.last().unwrap().view_type(), ViewType::Main);
 
         // Add a second view (ReviewCreateView)
-        app.push_view(Box::new(ReviewCreateView::new()));
+        app.push_view(Box::new(ReviewCreateView::default()));
         assert_eq!(app.view_stack.len(), 2);
         assert_eq!(
             app.view_stack.last().unwrap().view_type(),
@@ -237,7 +237,7 @@ mod tests {
         let mut app = create_test_app().await;
 
         // Add a review create view to the stack
-        app.push_view(Box::new(ReviewCreateView::new()));
+        app.push_view(Box::new(ReviewCreateView::default()));
         assert_eq!(app.view_stack.len(), 2);
         assert_eq!(
             app.view_stack.last().unwrap().view_type(),
@@ -376,7 +376,7 @@ mod tests {
         let reviews = vec![review];
 
         // Add a ReviewCreateView to the stack
-        app.push_view(Box::new(ReviewCreateView::new()));
+        app.push_view(Box::new(ReviewCreateView::default()));
         assert_eq!(app.view_stack.len(), 2);
 
         // Verify MainView initially has no selection
@@ -407,7 +407,7 @@ mod tests {
         let mut app = create_test_app().await;
 
         // Add multiple views to the stack
-        app.push_view(Box::new(ReviewCreateView::new()));
+        app.push_view(Box::new(ReviewCreateView::default()));
         let confirmation_dialog = crate::views::confirmation_dialog::ConfirmationDialogView::new(
             "Test message".to_string(),
             AppEvent::Quit,

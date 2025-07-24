@@ -152,7 +152,7 @@ mod tests {
         let branches = GitService::get_branches(temp_dir.path()).unwrap();
 
         // Should be sorted alphabetically
-        let mut sorted_branches = (*branches).to_vec().clone();
+        let mut sorted_branches = (*branches).to_vec();
         sorted_branches.sort();
         assert_eq!(branches, Arc::from(sorted_branches));
     }

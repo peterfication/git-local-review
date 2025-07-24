@@ -78,7 +78,7 @@ impl EventProcessor {
 
     /// Open the review creation view
     fn review_create_open(app: &mut App) {
-        app.push_view(Box::new(ReviewCreateView::new()));
+        app.push_view(Box::new(ReviewCreateView::default()));
         // Trigger loading of Git branches
         app.events.send(AppEvent::GitBranchesLoad);
     }

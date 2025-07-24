@@ -287,10 +287,6 @@ impl ViewHandler for ReviewCreateView {
 }
 
 impl ReviewCreateView {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     fn close_view(&mut self, app: &mut App) {
         self.base_branch_index = 0;
         self.target_branch_index = 0;
