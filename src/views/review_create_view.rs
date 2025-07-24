@@ -38,81 +38,10 @@ impl ViewHandler for ReviewCreateView {
     fn handle_key_events(&mut self, app: &mut App, key_event: &KeyEvent) -> color_eyre::Result<()> {
         match key_event.code {
             KeyCode::Esc => self.close_view(app),
-            KeyCode::Tab => {
-                self.current_field = match self.current_field {
-                    InputField::BaseBranch => InputField::TargetBranch,
-                    InputField::TargetBranch => InputField::BaseBranch,
-                };
-            }
-            KeyCode::Up | KeyCode::Char('k') => {
-                if let GitBranchesLoadingState::Loaded(ref _branches) = self.branches_state {
-                    match self.current_field {
-                        InputField::BaseBranch => {
-                            if self.base_branch_index > 0 {
-                                self.base_branch_index -= 1;
-                            }
-                        }
-                        InputField::TargetBranch => {
-                            if self.target_branch_index > 0 {
-                                self.target_branch_index -= 1;
-                            }
-                        }
-                    }
-                }
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                if let GitBranchesLoadingState::Loaded(ref branches) = self.branches_state {
-                    match self.current_field {
-                        InputField::BaseBranch => {
-                            if self.base_branch_index < branches.len().saturating_sub(1) {
-                                self.base_branch_index += 1;
-                            }
-                        }
-                        InputField::TargetBranch => {
-                            if self.target_branch_index < branches.len().saturating_sub(1) {
-                                self.target_branch_index += 1;
-                            }
-                        }
-                    }
-                }
-            }
-            KeyCode::Enter => {
-                if let GitBranchesLoadingState::Loaded(ref branches) = self.branches_state {
-                    if branches.is_empty() {
-                        return Ok(());
-                    }
-                    let base_branch = match branches.get(self.base_branch_index) {
-                        Some(branch) => branch.clone(),
-                        None => {
-                            // This should never happen, but handle gracefully
-                            log::error!(
-                                "Base branch index {} out of bounds for branches: {:?}",
-                                self.base_branch_index,
-                                branches
-                            );
-                            return Ok(());
-                        }
-                    };
-                    let target_branch = match branches.get(self.target_branch_index) {
-                        Some(branch) => branch.clone(),
-                        None => {
-                            // This should never happen, but handle gracefully
-                            log::error!(
-                                "Target branch index {} out of bounds for branches: {:?}",
-                                self.target_branch_index,
-                                branches
-                            );
-                            return Ok(());
-                        }
-                    };
-
-                    app.events
-                        .send(AppEvent::ReviewCreateSubmit(Arc::new(ReviewCreateData {
-                            base_branch,
-                            target_branch,
-                        })));
-                }
-            }
+            KeyCode::Tab => self.review_selection_switch(),
+            KeyCode::Up | KeyCode::Char('k') => self.review_selection_up(),
+            KeyCode::Down | KeyCode::Char('j') => self.review_selection_down(),
+            KeyCode::Enter => self.submit_review(app),
             KeyCode::Char('?') => app.events.send(AppEvent::HelpOpen(self.get_keybindings())),
             _ => {}
         }
@@ -121,24 +50,12 @@ impl ViewHandler for ReviewCreateView {
 
     fn handle_app_events(&mut self, app: &mut App, event: &AppEvent) {
         match event {
-            AppEvent::ReviewCreated(_review) => {
-                app.events.send(AppEvent::ViewClose);
-            }
-            AppEvent::ReviewCreatedError(_error) => {
-                app.events.send(AppEvent::ViewClose);
-            }
+            AppEvent::ReviewCreated(_review) => self.close_view(app),
+            AppEvent::ReviewCreatedError(_error) => self.close_view(app),
             AppEvent::GitBranchesLoadingState(state) => {
-                self.branches_state = state.clone();
-                // Set default selection to main/master if available and we just loaded
-                if let GitBranchesLoadingState::Loaded(ref branches) = self.branches_state {
-                    if let Some(main_index) =
-                        branches.iter().position(|b| b == "main" || b == "master")
-                    {
-                        self.base_branch_index = main_index;
-                    }
-                }
+                self.handle_git_branches_loading_state(state)
             }
-            _ => {}
+            _ => (),
         }
     }
 
@@ -379,6 +296,97 @@ impl ReviewCreateView {
         self.target_branch_index = 0;
         self.current_field = InputField::BaseBranch;
         app.events.send(AppEvent::ViewClose);
+    }
+
+    fn submit_review(&self, app: &mut App) {
+        if let GitBranchesLoadingState::Loaded(ref branches) = self.branches_state {
+            if branches.is_empty() {
+                log::warn!("No branches available to create a review");
+                return;
+            }
+            let base_branch = match branches.get(self.base_branch_index) {
+                Some(branch) => branch.clone(),
+                None => {
+                    // This should never happen, but handle gracefully
+                    log::error!(
+                        "Base branch index {} out of bounds for branches: {:?}",
+                        self.base_branch_index,
+                        branches
+                    );
+                    return;
+                }
+            };
+            let target_branch = match branches.get(self.target_branch_index) {
+                Some(branch) => branch.clone(),
+                None => {
+                    // This should never happen, but handle gracefully
+                    log::error!(
+                        "Target branch index {} out of bounds for branches: {:?}",
+                        self.target_branch_index,
+                        branches
+                    );
+                    return;
+                }
+            };
+
+            app.events
+                .send(AppEvent::ReviewCreateSubmit(Arc::new(ReviewCreateData {
+                    base_branch,
+                    target_branch,
+                })));
+        }
+    }
+
+    fn review_selection_switch(&mut self) {
+        self.current_field = match self.current_field {
+            InputField::BaseBranch => InputField::TargetBranch,
+            InputField::TargetBranch => InputField::BaseBranch,
+        };
+    }
+
+    fn review_selection_up(&mut self) {
+        if let GitBranchesLoadingState::Loaded(ref _branches) = self.branches_state {
+            match self.current_field {
+                InputField::BaseBranch => {
+                    if self.base_branch_index > 0 {
+                        self.base_branch_index -= 1;
+                    }
+                }
+                InputField::TargetBranch => {
+                    if self.target_branch_index > 0 {
+                        self.target_branch_index -= 1;
+                    }
+                }
+            }
+        }
+    }
+
+    fn review_selection_down(&mut self) {
+        if let GitBranchesLoadingState::Loaded(ref branches) = self.branches_state {
+            match self.current_field {
+                InputField::BaseBranch => {
+                    if self.base_branch_index < branches.len().saturating_sub(1) {
+                        self.base_branch_index += 1;
+                    }
+                }
+                InputField::TargetBranch => {
+                    if self.target_branch_index < branches.len().saturating_sub(1) {
+                        self.target_branch_index += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    fn handle_git_branches_loading_state(&mut self, state: &GitBranchesLoadingState) {
+        self.branches_state = state.clone();
+
+        // Set default selection to main/master if available and we just loaded
+        if let GitBranchesLoadingState::Loaded(ref branches) = self.branches_state {
+            if let Some(main_index) = branches.iter().position(|b| b == "main" || b == "master") {
+                self.base_branch_index = main_index;
+            }
+        }
     }
 }
 
