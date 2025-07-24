@@ -11,7 +11,7 @@ expression: render_app_to_terminal_backend(app)
 "                                                                                                                                                                "
 "                                                                                                                                                                "
 "                ╭Create New Review - Select Branches───────────────────────────────────────────────────────────────────────────────────────────╮                "
-"                │No Git branches found in current directory                                                                                    │                "
+"                │Initializing...                                                                                                               │                "
 "                │                                                                                                                              │                "
 "                │                                                                                                                              │                "
 "                │                                                                                                                              │                "

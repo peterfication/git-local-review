@@ -7,6 +7,20 @@ use crate::database::Database;
 use crate::event::{AppEvent, EventHandler};
 use crate::services::ServiceHandler;
 
+/// State of Git branches loading process
+#[derive(Debug, Clone, PartialEq, Default)]
+pub enum GitBranchesLoadingState {
+    /// Initial state - no loading has been attempted
+    #[default]
+    Init,
+    /// Currently loading branches from Git repository
+    Loading,
+    /// Branches have been successfully loaded
+    Loaded(Arc<[String]>),
+    /// Error occurred during loading
+    Error(Arc<str>),
+}
+
 pub struct GitService;
 
 impl GitService {
@@ -28,16 +42,50 @@ impl GitService {
         branches.sort();
         Ok(branches.into())
     }
+
+    /// Send loading event to start the actual loading process
+    fn handle_git_branches_load(events: &mut EventHandler) {
+        events.send(AppEvent::GitBranchesLoading);
+        events.send(AppEvent::GitBranchesLoadingState(
+            GitBranchesLoadingState::Loading,
+        ));
+    }
+
+    /// Actually load Git branches from repository
+    async fn handle_git_branches_loading(events: &mut EventHandler) {
+        match Self::get_branches(".") {
+            Ok(branches) => {
+                events.send(AppEvent::GitBranchesLoadingState(
+                    GitBranchesLoadingState::Loaded(branches),
+                ));
+            }
+            Err(error) => {
+                events.send(AppEvent::GitBranchesLoadingState(
+                    GitBranchesLoadingState::Error(error.to_string().into()),
+                ));
+            }
+        }
+    }
 }
 
 impl ServiceHandler for GitService {
     fn handle_app_event<'a>(
-        _event: &'a AppEvent,
+        event: &'a AppEvent,
         _database: &'a Database,
-        _events: &'a mut EventHandler,
+        events: &'a mut EventHandler,
     ) -> Pin<Box<dyn Future<Output = color_eyre::Result<()>> + Send + 'a>> {
         Box::pin(async move {
-            // GitService doesn't handle any events currently
+            match event {
+                AppEvent::GitBranchesLoad => {
+                    Self::handle_git_branches_load(events);
+                }
+                AppEvent::GitBranchesLoading => {
+                    Self::handle_git_branches_loading(events).await;
+                }
+                _ => {
+                    // Other events are ignored
+                }
+            }
             Ok(())
         })
     }
@@ -113,5 +161,268 @@ mod tests {
     fn test_get_branches_nonexistent_repo() {
         let result = GitService::get_branches("/nonexistent/path");
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_handle_git_branches_load_event() {
+        let database = crate::database::Database::new().await.unwrap();
+        let mut events = crate::event::EventHandler::new_for_test();
+
+        // Initially no events
+        assert!(!events.has_pending_events());
+
+        // Handle GitBranchesLoad event
+        GitService::handle_app_event(&AppEvent::GitBranchesLoad, &database, &mut events)
+            .await
+            .unwrap();
+
+        // Should have sent GitBranchesLoading and GitBranchesLoadingState(Loading) events
+        assert!(events.has_pending_events());
+
+        let event1 = events.try_recv().unwrap();
+        assert!(matches!(
+            *event1,
+            crate::event::Event::App(AppEvent::GitBranchesLoading)
+        ));
+
+        let event2 = events.try_recv().unwrap();
+        assert!(matches!(
+            *event2,
+            crate::event::Event::App(AppEvent::GitBranchesLoadingState(
+                GitBranchesLoadingState::Loading
+            ))
+        ));
+
+        // No more events should be pending
+        assert!(!events.has_pending_events());
+    }
+
+    #[tokio::test]
+    async fn test_handle_git_branches_loading_event_success() {
+        let temp_dir = create_test_git_repo().unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+
+        // Change to test repo directory
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        let database = crate::database::Database::new().await.unwrap();
+        let mut events = crate::event::EventHandler::new_for_test();
+
+        // Initially no events
+        assert!(!events.has_pending_events());
+
+        // Handle GitBranchesLoading event
+        GitService::handle_app_event(&AppEvent::GitBranchesLoading, &database, &mut events)
+            .await
+            .unwrap();
+
+        // Should have sent GitBranchesLoadingState(Loaded) event
+        assert!(events.has_pending_events());
+
+        let event = events.try_recv().unwrap();
+        if let crate::event::Event::App(AppEvent::GitBranchesLoadingState(
+            GitBranchesLoadingState::Loaded(branches),
+        )) = &*event
+        {
+            // Should contain the test branches
+            assert!(branches.len() >= 3);
+            assert!(branches.contains(&"develop".to_string()));
+            assert!(branches.contains(&"feature/test".to_string()));
+            assert!(
+                branches.contains(&"main".to_string()) || branches.contains(&"master".to_string())
+            );
+        } else {
+            panic!("Expected GitBranchesLoadingState::Loaded event, got: {event:?}");
+        }
+
+        // No more events should be pending
+        assert!(!events.has_pending_events());
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_handle_git_branches_loading_event_error() {
+        let original_dir = std::env::current_dir().unwrap();
+
+        // Change to non-git directory
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        let database = crate::database::Database::new().await.unwrap();
+        let mut events = crate::event::EventHandler::new_for_test();
+
+        // Initially no events
+        assert!(!events.has_pending_events());
+
+        // Handle GitBranchesLoading event
+        GitService::handle_app_event(&AppEvent::GitBranchesLoading, &database, &mut events)
+            .await
+            .unwrap();
+
+        // Should have sent GitBranchesLoadingState(Error) event
+        assert!(events.has_pending_events());
+
+        let event = events.try_recv().unwrap();
+        if let crate::event::Event::App(AppEvent::GitBranchesLoadingState(
+            GitBranchesLoadingState::Error(error),
+        )) = &*event
+        {
+            // Should contain error message about not being a git repository
+            assert!(error.contains("repository") || error.contains("not found"));
+        } else {
+            panic!("Expected GitBranchesLoadingState::Error event, got: {event:?}");
+        }
+
+        // No more events should be pending
+        assert!(!events.has_pending_events());
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_git_branches_loading_state_default() {
+        let state = GitBranchesLoadingState::default();
+        assert_eq!(state, GitBranchesLoadingState::Init);
+    }
+
+    #[tokio::test]
+    async fn test_git_branches_loading_state_clone() {
+        let branches = vec!["main".to_string(), "develop".to_string()];
+        let state = GitBranchesLoadingState::Loaded(branches.clone().into());
+        let cloned_state = state.clone();
+
+        assert_eq!(state, cloned_state);
+
+        if let (
+            GitBranchesLoadingState::Loaded(original),
+            GitBranchesLoadingState::Loaded(cloned),
+        ) = (state, cloned_state)
+        {
+            // Arc should point to the same data
+            assert_eq!(original, cloned);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_git_branches_loading_state_debug() {
+        let state_init = GitBranchesLoadingState::Init;
+        let state_loading = GitBranchesLoadingState::Loading;
+        let state_loaded = GitBranchesLoadingState::Loaded(vec!["main".to_string()].into());
+        let state_error = GitBranchesLoadingState::Error("test error".into());
+
+        assert!(format!("{state_init:?}").contains("Init"));
+        assert!(format!("{state_loading:?}").contains("Loading"));
+        assert!(format!("{state_loaded:?}").contains("Loaded"));
+        assert!(format!("{state_error:?}").contains("Error"));
+    }
+
+    #[tokio::test]
+    async fn test_handle_git_branches_load_function() {
+        let mut events = crate::event::EventHandler::new_for_test();
+
+        // Initially no events
+        assert!(!events.has_pending_events());
+
+        // Call the private function through ServiceHandler
+        GitService::handle_git_branches_load(&mut events);
+
+        // Should have sent GitBranchesLoading and GitBranchesLoadingState(Loading) events
+        assert!(events.has_pending_events());
+
+        let event1 = events.try_recv().unwrap();
+        assert!(matches!(
+            *event1,
+            crate::event::Event::App(AppEvent::GitBranchesLoading)
+        ));
+
+        let event2 = events.try_recv().unwrap();
+        assert!(matches!(
+            *event2,
+            crate::event::Event::App(AppEvent::GitBranchesLoadingState(
+                GitBranchesLoadingState::Loading
+            ))
+        ));
+
+        // No more events should be pending
+        assert!(!events.has_pending_events());
+    }
+
+    #[tokio::test]
+    async fn test_handle_git_branches_loading_function_success() {
+        let temp_dir = create_test_git_repo().unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+
+        // Change to test repo directory
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        let mut events = crate::event::EventHandler::new_for_test();
+
+        // Initially no events
+        assert!(!events.has_pending_events());
+
+        // Call the private function
+        GitService::handle_git_branches_loading(&mut events).await;
+
+        // Should have sent GitBranchesLoadingState(Loaded) event
+        assert!(events.has_pending_events());
+
+        let event = events.try_recv().unwrap();
+        if let crate::event::Event::App(AppEvent::GitBranchesLoadingState(
+            GitBranchesLoadingState::Loaded(branches),
+        )) = &*event
+        {
+            // Should contain the test branches
+            assert!(branches.len() >= 3);
+            assert!(branches.contains(&"develop".to_string()));
+            assert!(branches.contains(&"feature/test".to_string()));
+        } else {
+            panic!("Expected GitBranchesLoadingState::Loaded event, got: {event:?}");
+        }
+
+        // No more events should be pending
+        assert!(!events.has_pending_events());
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_handle_git_branches_loading_function_error() {
+        let original_dir = std::env::current_dir().unwrap();
+
+        // Change to non-git directory
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        let mut events = crate::event::EventHandler::new_for_test();
+
+        // Initially no events
+        assert!(!events.has_pending_events());
+
+        // Call the private function
+        GitService::handle_git_branches_loading(&mut events).await;
+
+        // Should have sent GitBranchesLoadingState(Error) event
+        assert!(events.has_pending_events());
+
+        let event = events.try_recv().unwrap();
+        if let crate::event::Event::App(AppEvent::GitBranchesLoadingState(
+            GitBranchesLoadingState::Error(error),
+        )) = &*event
+        {
+            // Should contain error message
+            assert!(!error.is_empty());
+        } else {
+            panic!("Expected GitBranchesLoadingState::Error event, got: {event:?}");
+        }
+
+        // No more events should be pending
+        assert!(!events.has_pending_events());
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
     }
 }

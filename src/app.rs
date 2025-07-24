@@ -269,16 +269,17 @@ mod tests {
 
         // Create a ReviewCreateView with some initial content to track changes
         let review_create_view = ReviewCreateView {
-            branches: vec![
-                "main".to_string(),
-                "develop".to_string(),
-                "feature/test".to_string(),
-            ]
-            .into(),
+            branches_state: crate::services::GitBranchesLoadingState::Loaded(
+                vec![
+                    "main".to_string(),
+                    "develop".to_string(),
+                    "feature/test".to_string(),
+                ]
+                .into(),
+            ),
             base_branch_index: 0,
             target_branch_index: 2,
             current_field: crate::views::review_create_view::InputField::BaseBranch,
-            error_message: None,
         };
 
         // Add it to the stack
