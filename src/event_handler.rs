@@ -5,7 +5,7 @@ use ratatui::crossterm::event::KeyEvent;
 use crate::{
     app::App,
     event::{AppEvent, Event},
-    services::{ReviewService, ServiceHandler},
+    services::{GitService, ReviewService, ServiceHandler},
     views::{
         ConfirmationDialogView, HelpModalView, KeyBinding, ReviewCreateView, ReviewDetailsView,
     },
@@ -65,7 +65,10 @@ impl EventProcessor {
 
     /// Handle app events through services
     async fn handle_services(app: &mut App, event: &AppEvent) -> color_eyre::Result<()> {
-        let services = vec![ReviewService::handle_app_event];
+        let services = vec![
+            ReviewService::handle_app_event,
+            GitService::handle_app_event,
+        ];
 
         for handler in services {
             handler(event, &app.database, &mut app.events).await?;
@@ -76,6 +79,8 @@ impl EventProcessor {
     /// Open the review creation view
     fn review_create_open(app: &mut App) {
         app.push_view(Box::new(ReviewCreateView::default()));
+        // Trigger loading of Git branches
+        app.events.send(AppEvent::GitBranchesLoad);
     }
 
     /// Open delete confirmation dialog

@@ -8,7 +8,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     models::Review,
-    services::{ReviewCreateData, ReviewsLoadingState},
+    services::{GitBranchesLoadingState, ReviewCreateData, ReviewsLoadingState},
     views::KeyBinding,
 };
 
@@ -89,6 +89,13 @@ pub enum AppEvent {
 
     /// Open review details view.
     ReviewDetailsOpen(Arc<ReviewId>),
+
+    /// Trigger loading of Git branches.
+    GitBranchesLoad,
+    /// Load the Git branches
+    GitBranchesLoading,
+    /// Propagates the current loading state of Git branches.
+    GitBranchesLoadingState(GitBranchesLoadingState),
 }
 
 /// Terminal event handler.

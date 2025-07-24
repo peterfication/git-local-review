@@ -10,24 +10,24 @@ A Terminal User Interface (TUI) application for reviewing Git changes with local
 
 ## Key Bindings
 
-| View                   | Key                       | Action                                      |
-| ---------------------- | ------------------------- | ------------------------------------------- |
-| **Global**             | `?`                       | Show help modal                             |
-| **Main**               | `n`                       | Create new review                           |
-| **Main**               | `Up` / `Down` / `k` / `j` | Change review selection                     |
-| **Main**               | `o` / `Space` / `Enter`   | Open selected review                        |
-| **Main**               | `d`                       | Delete selected review                      |
-| **Main**               | `q` / `Ctrl+C`            | Quit application                            |
-| **Review create**      | `<char>`                  | Enter review title                          |
-| **Review create**      | `Backspace`               | Delete character                            |
-| **Review create**      | `Enter`                   | Submit review                               |
-| **Review create**      | `Esc`                     | Cancel and close popup                      |
-| **Review details**     | `Esc`                     | Close review details / go back to main view |
-| **ConfirmationDialog** | `y` / `Y` / `Enter`       | Confirm                                     |
-| **ConfirmationDialog** | `n` / `N` / `Esc`         | Cancel                                      |
-| **Help Modal**         | `Up` / `Down` / `k` / `j` | Navigate keybindings                        |
-| **Help Modal**         | `Enter`                   | Execute selected action                     |
-| **Help Modal**         | `Esc`                     | Close help modal                            |
+| View                   | Key                       | Action                                          |
+| ---------------------- | ------------------------- | ----------------------------------------------- |
+| **Global**             | `?`                       | Show help modal                                 |
+| **Main**               | `n`                       | Create new review                               |
+| **Main**               | `Up` / `Down` / `k` / `j` | Change review selection                         |
+| **Main**               | `o` / `Space` / `Enter`   | Open selected review                            |
+| **Main**               | `d`                       | Delete selected review                          |
+| **Main**               | `q` / `Ctrl+C`            | Quit application                                |
+| **Review create**      | `Up` / `Down` / `k` / `j` | Change branch selection                         |
+| **Review create**      | `Tab`                     | Switch between target and base branch selection |
+| **Review create**      | `Enter`                   | Submit review                                   |
+| **Review create**      | `Esc`                     | Cancel and close popup                          |
+| **Review details**     | `Esc`                     | Close review details / go back to main view     |
+| **ConfirmationDialog** | `y` / `Y` / `Enter`       | Confirm                                         |
+| **ConfirmationDialog** | `n` / `N` / `Esc`         | Cancel                                          |
+| **Help Modal**         | `Up` / `Down` / `k` / `j` | Navigate keybindings                            |
+| **Help Modal**         | `Enter`                   | Execute selected action                         |
+| **Help Modal**         | `Esc`                     | Close help modal                                |
 
 ## Installation
 
