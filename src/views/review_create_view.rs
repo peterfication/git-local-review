@@ -17,7 +17,6 @@ use crate::{
 
 #[derive(Default)]
 pub struct ReviewCreateView {
-    pub branches_state: GitBranchesLoadingState,
     pub base_branch_index: usize,
     pub target_branch_index: usize,
     pub current_field: InputField,
@@ -39,8 +38,8 @@ impl ViewHandler for ReviewCreateView {
         match key_event.code {
             KeyCode::Esc => self.close_view(app),
             KeyCode::Tab => self.review_selection_switch(),
-            KeyCode::Up | KeyCode::Char('k') => self.review_selection_up(),
-            KeyCode::Down | KeyCode::Char('j') => self.review_selection_down(),
+            KeyCode::Up | KeyCode::Char('k') => self.review_selection_up(app),
+            KeyCode::Down | KeyCode::Char('j') => self.review_selection_down(app),
             KeyCode::Enter => self.submit_review(app),
             KeyCode::Char('?') => app.events.send(AppEvent::HelpOpen(self.get_keybindings())),
             _ => {}
@@ -52,20 +51,11 @@ impl ViewHandler for ReviewCreateView {
         match event {
             AppEvent::ReviewCreated(_review) => self.close_view(app),
             AppEvent::ReviewCreatedError(_error) => self.close_view(app),
-            AppEvent::GitBranchesLoadingState(state) => {
-                // Keep handling direct loading state events for backward compatibility
-                self.handle_git_branches_loading_state(state)
-            }
-            AppEvent::StateUpdate(app_state) => {
-                // Handle centralized state updates from StateService
-                let branches_state = &app_state.git_branches;
-                self.handle_git_branches_loading_state(branches_state);
-            }
             _ => (),
         }
     }
 
-    fn render(&self, _app: &App, area: Rect, buf: &mut Buffer) {
+    fn render(&self, app: &App, area: Rect, buf: &mut Buffer) {
         let popup_area = centered_rectangle(80, 60, area);
 
         Clear.render(popup_area, buf);
@@ -78,7 +68,7 @@ impl ViewHandler for ReviewCreateView {
         let inner = block.inner(popup_area);
         block.render(popup_area, buf);
 
-        match &self.branches_state {
+        match &(app.state_service.get_state()).git_branches {
             GitBranchesLoadingState::Init => {
                 let loading =
                     Paragraph::new("Initializing...").style(Style::default().fg(Color::Yellow));
@@ -114,75 +104,73 @@ impl ViewHandler for ReviewCreateView {
             .split(inner);
 
         // Get branches from loaded state
-        let branches = match &self.branches_state {
-            GitBranchesLoadingState::Loaded(branches) => branches,
-            _ => return, // Should not reach here due to early returns above
+        if let GitBranchesLoadingState::Loaded(branches) =
+            &(app.state_service.get_state()).git_branches
+        {
+            // Base branch list
+            let base_branch_items: Vec<ListItem> = branches
+                .iter()
+                .enumerate()
+                .map(|(i, branch)| {
+                    let style = if i == self.base_branch_index {
+                        Style::default().bg(Color::Blue).fg(Color::Black)
+                    } else {
+                        Style::default()
+                    };
+                    let text = if i == self.base_branch_index {
+                        format!("> {branch}")
+                    } else {
+                        format!("  {branch}")
+                    };
+                    ListItem::new(text).style(style)
+                })
+                .collect();
+
+            let base_branch_style = if self.current_field == InputField::BaseBranch {
+                Style::default().fg(Color::Yellow)
+            } else {
+                Style::default().fg(Color::White)
+            };
+
+            let base_branch_list = List::new(base_branch_items).block(
+                Block::bordered()
+                    .title("Base Branch")
+                    .border_style(base_branch_style),
+            );
+            base_branch_list.render(chunks[0], buf);
+
+            // Target branch list
+            let target_branch_items: Vec<ListItem> = branches
+                .iter()
+                .enumerate()
+                .map(|(i, branch)| {
+                    let style = if i == self.target_branch_index {
+                        Style::default().bg(Color::Blue).fg(Color::Black)
+                    } else {
+                        Style::default()
+                    };
+                    let text = if i == self.target_branch_index {
+                        format!("> {branch}")
+                    } else {
+                        format!("  {branch}")
+                    };
+                    ListItem::new(text).style(style)
+                })
+                .collect();
+
+            let target_branch_style = if self.current_field == InputField::TargetBranch {
+                Style::default().fg(Color::Yellow)
+            } else {
+                Style::default().fg(Color::White)
+            };
+
+            let target_branch_list = List::new(target_branch_items).block(
+                Block::bordered()
+                    .title("Target Branch")
+                    .border_style(target_branch_style),
+            );
+            target_branch_list.render(chunks[1], buf);
         };
-
-        // Base branch list
-        let base_branch_items: Vec<ListItem> = branches
-            .iter()
-            .enumerate()
-            .map(|(i, branch)| {
-                let style = if i == self.base_branch_index {
-                    Style::default().bg(Color::Blue).fg(Color::Black)
-                } else {
-                    Style::default()
-                };
-                let text = if i == self.base_branch_index {
-                    format!("> {branch}")
-                } else {
-                    format!("  {branch}")
-                };
-                ListItem::new(text).style(style)
-            })
-            .collect();
-
-        let base_branch_style = if self.current_field == InputField::BaseBranch {
-            Style::default().fg(Color::Yellow)
-        } else {
-            Style::default().fg(Color::White)
-        };
-
-        let base_branch_list = List::new(base_branch_items).block(
-            Block::bordered()
-                .title("Base Branch")
-                .border_style(base_branch_style),
-        );
-        base_branch_list.render(chunks[0], buf);
-
-        // Target branch list
-        let target_branch_items: Vec<ListItem> = branches
-            .iter()
-            .enumerate()
-            .map(|(i, branch)| {
-                let style = if i == self.target_branch_index {
-                    Style::default().bg(Color::Blue).fg(Color::Black)
-                } else {
-                    Style::default()
-                };
-                let text = if i == self.target_branch_index {
-                    format!("> {branch}")
-                } else {
-                    format!("  {branch}")
-                };
-                ListItem::new(text).style(style)
-            })
-            .collect();
-
-        let target_branch_style = if self.current_field == InputField::TargetBranch {
-            Style::default().fg(Color::Yellow)
-        } else {
-            Style::default().fg(Color::White)
-        };
-
-        let target_branch_list = List::new(target_branch_items).block(
-            Block::bordered()
-                .title("Target Branch")
-                .border_style(target_branch_style),
-        );
-        target_branch_list.render(chunks[1], buf);
-
         // Help text at the bottom
         let help_area = Rect {
             x: popup_area.x + 1,
@@ -197,43 +185,10 @@ impl ViewHandler for ReviewCreateView {
 
     #[cfg(test)]
     fn debug_state(&self) -> String {
-        match &self.branches_state {
-            GitBranchesLoadingState::Init => {
-                format!(
-                    "ReviewCreateView(state: Init, current_field: {:?})",
-                    self.current_field
-                )
-            }
-            GitBranchesLoadingState::Loading => {
-                format!(
-                    "ReviewCreateView(state: Loading, current_field: {:?})",
-                    self.current_field
-                )
-            }
-            GitBranchesLoadingState::Error(error) => {
-                format!(
-                    "ReviewCreateView(state: Error({}), current_field: {:?})",
-                    error, self.current_field
-                )
-            }
-            GitBranchesLoadingState::Loaded(branches) => {
-                let base_branch = branches
-                    .get(self.base_branch_index)
-                    .map(|s| s.as_str())
-                    .unwrap_or("none");
-                let target_branch = branches
-                    .get(self.target_branch_index)
-                    .map(|s| s.as_str())
-                    .unwrap_or("none");
-                format!(
-                    "ReviewCreateView(branches: {:?}, base_branch: \"{}\", target_branch: \"{}\", current_field: {:?})",
-                    branches.as_ref(),
-                    base_branch,
-                    target_branch,
-                    self.current_field
-                )
-            }
-        }
+        format!(
+            "ReviewCreateView(current_field: {:?}, base_branch_index: {}, target_branch_index: {})",
+            self.current_field, self.base_branch_index, self.target_branch_index
+        )
     }
 
     #[cfg(test)]
@@ -301,7 +256,9 @@ impl ReviewCreateView {
     }
 
     fn submit_review(&self, app: &mut App) {
-        if let GitBranchesLoadingState::Loaded(ref branches) = self.branches_state {
+        if let GitBranchesLoadingState::Loaded(branches) =
+            &(app.state_service.get_state()).git_branches
+        {
             if branches.is_empty() {
                 log::warn!("No branches available to create a review");
                 return;
@@ -346,8 +303,10 @@ impl ReviewCreateView {
         };
     }
 
-    fn review_selection_up(&mut self) {
-        if let GitBranchesLoadingState::Loaded(ref _branches) = self.branches_state {
+    fn review_selection_up(&mut self, app: &mut App) {
+        if let GitBranchesLoadingState::Loaded(_branches) =
+            &(app.state_service.get_state()).git_branches
+        {
             match self.current_field {
                 InputField::BaseBranch => {
                     if self.base_branch_index > 0 {
@@ -363,8 +322,10 @@ impl ReviewCreateView {
         }
     }
 
-    fn review_selection_down(&mut self) {
-        if let GitBranchesLoadingState::Loaded(ref branches) = self.branches_state {
+    fn review_selection_down(&mut self, app: &mut App) {
+        if let GitBranchesLoadingState::Loaded(branches) =
+            &(app.state_service.get_state()).git_branches
+        {
             match self.current_field {
                 InputField::BaseBranch => {
                     if self.base_branch_index < branches.len().saturating_sub(1) {
@@ -379,17 +340,6 @@ impl ReviewCreateView {
             }
         }
     }
-
-    fn handle_git_branches_loading_state(&mut self, state: &GitBranchesLoadingState) {
-        self.branches_state = state.clone();
-
-        // Set default selection to main/master if available and we just loaded
-        if let GitBranchesLoadingState::Loaded(ref branches) = self.branches_state {
-            if let Some(main_index) = branches.iter().position(|b| b == "main" || b == "master") {
-                self.base_branch_index = main_index;
-            }
-        }
-    }
 }
 
 #[cfg(test)]
@@ -397,6 +347,7 @@ mod tests {
     use super::*;
     use crate::database::Database;
     use crate::event::{AppEvent, Event};
+    use crate::services::GitBranchesLoadingState;
     use crate::test_utils::render_app_to_terminal_backend;
     use insta::assert_snapshot;
     use sqlx::SqlitePool;
@@ -421,7 +372,6 @@ mod tests {
     #[test]
     fn test_review_create_view_default() {
         let view = ReviewCreateView::default();
-        assert!(matches!(view.branches_state, GitBranchesLoadingState::Init));
         assert_eq!(view.base_branch_index, 0);
         assert_eq!(view.target_branch_index, 0);
         assert_eq!(view.current_field, InputField::BaseBranch);
@@ -430,15 +380,20 @@ mod tests {
     #[tokio::test]
     async fn test_review_create_view_handle_up_down() {
         let mut app = create_test_app().await;
+        app.state_service
+            .handle_app_event(&AppEvent::GitBranchesLoadingState(
+                GitBranchesLoadingState::Loaded(
+                    vec![
+                        "main".to_string(),
+                        "develop".to_string(),
+                        "feature/test".to_string(),
+                    ]
+                    .into(),
+                ),
+            ))
+            .await
+            .unwrap();
         let mut view = ReviewCreateView {
-            branches_state: GitBranchesLoadingState::Loaded(
-                vec![
-                    "main".to_string(),
-                    "develop".to_string(),
-                    "feature/test".to_string(),
-                ]
-                .into(),
-            ),
             base_branch_index: 1,
             target_branch_index: 1,
             current_field: InputField::BaseBranch,
@@ -468,10 +423,10 @@ mod tests {
     #[tokio::test]
     async fn test_review_create_view_handle_tab_navigation() {
         let mut app = create_test_app().await;
+        app.events.send(AppEvent::GitBranchesLoadingState(
+            GitBranchesLoadingState::Loaded(vec!["main".to_string(), "develop".to_string()].into()),
+        ));
         let mut view = ReviewCreateView {
-            branches_state: GitBranchesLoadingState::Loaded(
-                vec!["main".to_string(), "develop".to_string()].into(),
-            ),
             base_branch_index: 0,
             target_branch_index: 0,
             current_field: InputField::BaseBranch,
@@ -494,10 +449,10 @@ mod tests {
     #[tokio::test]
     async fn test_review_create_view_handle_up_at_bounds() {
         let mut app = create_test_app().await;
+        app.events.send(AppEvent::GitBranchesLoadingState(
+            GitBranchesLoadingState::Loaded(vec!["main".to_string(), "develop".to_string()].into()),
+        ));
         let mut view = ReviewCreateView {
-            branches_state: GitBranchesLoadingState::Loaded(
-                vec!["main".to_string(), "develop".to_string()].into(),
-            ),
             base_branch_index: 0,
             target_branch_index: 0,
             current_field: InputField::BaseBranch,
@@ -518,10 +473,10 @@ mod tests {
     #[tokio::test]
     async fn test_review_create_view_handle_down_at_bounds() {
         let mut app = create_test_app().await;
+        app.events.send(AppEvent::GitBranchesLoadingState(
+            GitBranchesLoadingState::Loaded(vec!["main".to_string(), "develop".to_string()].into()),
+        ));
         let mut view = ReviewCreateView {
-            branches_state: GitBranchesLoadingState::Loaded(
-                vec!["main".to_string(), "develop".to_string()].into(),
-            ),
             base_branch_index: 1,
             target_branch_index: 1,
             current_field: InputField::BaseBranch,
@@ -542,10 +497,15 @@ mod tests {
     #[tokio::test]
     async fn test_review_create_view_handle_esc() {
         let mut app = create_test_app().await;
+        app.state_service
+            .handle_app_event(&AppEvent::GitBranchesLoadingState(
+                GitBranchesLoadingState::Loaded(
+                    vec!["main".to_string(), "develop".to_string()].into(),
+                ),
+            ))
+            .await
+            .unwrap();
         let mut view = ReviewCreateView {
-            branches_state: GitBranchesLoadingState::Loaded(
-                vec!["main".to_string(), "develop".to_string()].into(),
-            ),
             base_branch_index: 1,
             target_branch_index: 1,
             current_field: InputField::TargetBranch,
@@ -576,15 +536,20 @@ mod tests {
     #[tokio::test]
     async fn test_review_create_view_handle_enter() {
         let mut app = create_test_app().await;
+        app.state_service
+            .handle_app_event(&AppEvent::GitBranchesLoadingState(
+                GitBranchesLoadingState::Loaded(
+                    vec![
+                        "main".to_string(),
+                        "develop".to_string(),
+                        "feature/test".to_string(),
+                    ]
+                    .into(),
+                ),
+            ))
+            .await
+            .unwrap();
         let mut view = ReviewCreateView {
-            branches_state: GitBranchesLoadingState::Loaded(
-                vec![
-                    "main".to_string(),
-                    "develop".to_string(),
-                    "feature/test".to_string(),
-                ]
-                .into(),
-            ),
             base_branch_index: 0,
             target_branch_index: 2,
             current_field: InputField::BaseBranch,
@@ -632,10 +597,15 @@ mod tests {
     #[tokio::test]
     async fn test_review_create_view_handle_unknown_key() {
         let mut app = create_test_app().await;
+        app.state_service
+            .handle_app_event(&AppEvent::GitBranchesLoadingState(
+                GitBranchesLoadingState::Loaded(
+                    vec!["main".to_string(), "develop".to_string()].into(),
+                ),
+            ))
+            .await
+            .unwrap();
         let mut view = ReviewCreateView {
-            branches_state: GitBranchesLoadingState::Loaded(
-                vec!["main".to_string(), "develop".to_string()].into(),
-            ),
             base_branch_index: 1,
             target_branch_index: 0,
             current_field: InputField::BaseBranch,
@@ -669,22 +639,27 @@ mod tests {
     #[tokio::test]
     async fn test_review_create_view_render_with_branches() {
         let view = ReviewCreateView {
-            branches_state: GitBranchesLoadingState::Loaded(
-                vec![
-                    "main".to_string(),
-                    "develop".to_string(),
-                    "feature/new-feature".to_string(),
-                ]
-                .into(),
-            ),
             base_branch_index: 0,
             target_branch_index: 2,
             current_field: InputField::BaseBranch,
         };
-        let app = App {
+        let mut app = App {
             view_stack: vec![Box::new(view)],
             ..create_test_app().await
         };
+        app.state_service
+            .handle_app_event(&AppEvent::GitBranchesLoadingState(
+                GitBranchesLoadingState::Loaded(
+                    vec![
+                        "main".to_string(),
+                        "develop".to_string(),
+                        "feature/new-feature".to_string(),
+                    ]
+                    .into(),
+                ),
+            ))
+            .await
+            .unwrap();
 
         assert_snapshot!(render_app_to_terminal_backend(app))
     }

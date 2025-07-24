@@ -12,7 +12,7 @@ pub use git_service::GitService;
 pub use review_service::ReviewCreateData;
 pub use review_service::ReviewService;
 pub use review_service::ReviewsLoadingState;
-pub use state_service::{AppState, StateEvent, StateService};
+pub use state_service::{AppState, StateService};
 
 /// Trait for services that can handle app events
 pub trait ServiceHandler {

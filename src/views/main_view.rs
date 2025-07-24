@@ -18,8 +18,6 @@ use crate::{
 
 pub struct MainView {
     selected_review_index: Option<usize>,
-    reviews: Arc<[Review]>,
-    reviews_loading_state: ReviewsLoadingState,
 }
 
 impl Default for MainView {
@@ -40,8 +38,8 @@ impl ViewHandler for MainView {
                 app.events.send(AppEvent::Quit)
             }
             KeyCode::Char('n') => self.create_review(app),
-            KeyCode::Char('j') | KeyCode::Down => self.select_next_review(),
-            KeyCode::Char('k') | KeyCode::Up => self.select_previous_review(),
+            KeyCode::Char('j') | KeyCode::Down => self.select_next_review(app),
+            KeyCode::Char('k') | KeyCode::Up => self.select_previous_review(app),
             KeyCode::Char('d') => self.delete_selected_review(app),
             KeyCode::Char('o') | KeyCode::Char(' ') | KeyCode::Enter => {
                 self.open_review_details(app)
@@ -52,7 +50,7 @@ impl ViewHandler for MainView {
         Ok(())
     }
 
-    fn render(&self, _app: &App, area: Rect, buf: &mut Buffer) {
+    fn render(&self, app: &App, area: Rect, buf: &mut Buffer) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(3), Constraint::Min(0)])
@@ -63,10 +61,10 @@ impl ViewHandler for MainView {
             .fg(Color::Cyan);
         header.render(chunks[0], buf);
 
-        let reviews: Vec<ListItem> = match &self.reviews_loading_state {
+        let reviews: Vec<ListItem> = match &(app.state_service.get_state()).reviews {
             ReviewsLoadingState::Init => self.render_reviews_init(),
             ReviewsLoadingState::Loading => self.render_reviews_loading(),
-            ReviewsLoadingState::Loaded(_reviews) => self.render_reviews_loaded(),
+            ReviewsLoadingState::Loaded(reviews) => self.render_reviews_loaded(reviews),
             ReviewsLoadingState::Error(error) => self.render_reviews_error(error),
         };
 
@@ -77,30 +75,7 @@ impl ViewHandler for MainView {
         reviews_list.render(chunks[1], buf);
     }
 
-    fn handle_app_events(&mut self, _app: &mut App, event: &AppEvent) {
-        match event {
-            AppEvent::ReviewsLoadingState(state) => {
-                // Keep handling direct loading state events for backward compatibility
-                self.reviews_loading_state = state.clone();
-                if let ReviewsLoadingState::Loaded(reviews) = state {
-                    self.reviews = Arc::clone(reviews);
-                    self.update_selection_after_reviews_change();
-                }
-            }
-            AppEvent::StateUpdate(app_state) => {
-                // Handle centralized state updates from StateService
-                let reviews_state = &app_state.reviews;
-                self.reviews_loading_state = reviews_state.clone();
-                if let ReviewsLoadingState::Loaded(reviews) = reviews_state {
-                    self.reviews = Arc::clone(reviews);
-                    self.update_selection_after_reviews_change();
-                }
-            }
-            _ => {
-                // Ignore other events
-            }
-        }
-    }
+    fn handle_app_events(&mut self, _app: &mut App, _event: &AppEvent) {}
 
     #[cfg(test)]
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
@@ -171,24 +146,7 @@ impl ViewHandler for MainView {
 impl MainView {
     pub fn new() -> Self {
         Self {
-            selected_review_index: None,
-            reviews: Arc::new([]),
-            reviews_loading_state: ReviewsLoadingState::Init,
-        }
-    }
-
-    /// Update selection after reviews list changes (e.g., after deletion)
-    pub fn update_selection_after_reviews_change(&mut self) {
-        if self.reviews.is_empty() {
-            self.selected_review_index = None;
-        } else if let Some(index) = self.selected_review_index {
-            if index >= self.reviews.len() {
-                // If selected index is out of bounds, select the last item
-                self.selected_review_index = Some(self.reviews.len() - 1);
-            }
-        } else {
-            // If no selection and we have reviews, select first
-            self.selected_review_index = Some(0);
+            selected_review_index: Some(0),
         }
     }
 
@@ -198,51 +156,59 @@ impl MainView {
     }
 
     /// Move selection up (decrease index)
-    pub fn select_previous_review(&mut self) {
-        if self.reviews.is_empty() {
-            return;
-        }
+    pub fn select_previous_review(&mut self, app: &mut App) {
+        if let ReviewsLoadingState::Loaded(reviews) = &(app.state_service.get_state()).reviews {
+            if reviews.is_empty() {
+                return;
+            }
 
-        match self.selected_review_index {
-            None => self.selected_review_index = Some(0),
-            Some(0) => {} // Already at top
-            Some(index) => self.selected_review_index = Some(index - 1),
-        }
+            match self.selected_review_index {
+                None => self.selected_review_index = Some(0),
+                Some(0) => {} // Already at top
+                Some(index) => self.selected_review_index = Some(index - 1),
+            }
+        };
     }
 
     /// Move selection down (increase index)
-    pub fn select_next_review(&mut self) {
-        if self.reviews.is_empty() {
-            return;
-        }
+    pub fn select_next_review(&mut self, app: &mut App) {
+        if let ReviewsLoadingState::Loaded(reviews) = &(app.state_service.get_state()).reviews {
+            if reviews.is_empty() {
+                return;
+            }
 
-        match self.selected_review_index {
-            None => self.selected_review_index = Some(0),
-            Some(index) if index >= self.reviews.len() - 1 => {} // Already at bottom
-            Some(index) => self.selected_review_index = Some(index + 1),
+            match self.selected_review_index {
+                None => self.selected_review_index = Some(0),
+                Some(index) if index >= reviews.len() - 1 => {} // Already at bottom
+                Some(index) => self.selected_review_index = Some(index + 1),
+            }
         }
     }
 
     /// Delete the currently selected review
     pub fn delete_selected_review(&self, app: &mut App) {
-        if let Some(index) = self.selected_review_index {
-            if index < self.reviews.len() {
-                let review_id = self.reviews[index].id.clone();
-                app.events
-                    .send(AppEvent::ReviewDeleteConfirm(Arc::from(review_id)));
+        if let ReviewsLoadingState::Loaded(reviews) = &(app.state_service.get_state()).reviews {
+            if let Some(index) = self.selected_review_index {
+                if index < reviews.len() {
+                    let review_id = reviews[index].id.clone();
+                    app.events
+                        .send(AppEvent::ReviewDeleteConfirm(Arc::from(review_id)));
+                }
             }
-        }
+        };
     }
 
     /// Open review details for the currently selected review
     pub fn open_review_details(&self, app: &mut App) {
-        if let Some(index) = self.selected_review_index {
-            if index < self.reviews.len() {
-                let review_id = self.reviews[index].id.clone();
-                app.events
-                    .send(AppEvent::ReviewDetailsOpen(Arc::from(review_id)));
+        if let ReviewsLoadingState::Loaded(reviews) = &(app.state_service.get_state()).reviews {
+            if let Some(index) = self.selected_review_index {
+                if index < reviews.len() {
+                    let review_id = reviews[index].id.clone();
+                    app.events
+                        .send(AppEvent::ReviewDetailsOpen(Arc::from(review_id)));
+                }
             }
-        }
+        };
     }
 
     fn render_reviews_init(&self) -> Vec<ListItem> {
@@ -253,14 +219,14 @@ impl MainView {
         vec![ListItem::new("Loading reviews...").style(Style::default().fg(Color::Yellow))]
     }
 
-    fn render_reviews_loaded(&self) -> Vec<ListItem> {
-        if self.reviews.is_empty() {
+    fn render_reviews_loaded(&self, reviews: &Arc<[Review]>) -> Vec<ListItem> {
+        if reviews.is_empty() {
             vec![
                 ListItem::new("No reviews found - Press 'n' to create a new review")
                     .style(Style::default().fg(Color::Yellow)),
             ]
         } else {
-            self.reviews
+            reviews
                 .iter()
                 .enumerate()
                 .map(|(index, review)| {
@@ -287,7 +253,7 @@ impl MainView {
         ListItem::new(content).style(style)
     }
 
-    fn render_reviews_error(&self, error: &str) -> Vec<ListItem> {
+    fn render_reviews_error(&self, error: &Arc<str>) -> Vec<ListItem> {
         vec![
             ListItem::new(format!("Error loading reviews: {error}"))
                 .style(Style::default().fg(Color::Red)),
@@ -299,12 +265,6 @@ impl MainView {
     pub fn selected_review_index(&self) -> Option<usize> {
         self.selected_review_index
     }
-
-    /// Get the reviews loading state (for testing)
-    #[cfg(test)]
-    pub fn reviews_loading_state(&self) -> &ReviewsLoadingState {
-        &self.reviews_loading_state
-    }
 }
 
 #[cfg(test)]
@@ -313,7 +273,6 @@ mod tests {
     use crate::database::Database;
     use crate::event::{AppEvent, Event};
     use crate::models::review::{Review, TestReviewParams};
-    use crate::services::review_service::ReviewCreateData;
     use crate::test_utils::{fixed_time, render_app_to_terminal_backend};
     use crate::time_provider::MockTimeProvider;
     use insta::assert_snapshot;
@@ -453,7 +412,12 @@ mod tests {
 
         // Populate the view with reviews first
         let reviews = Review::list_all(app.database.pool()).await.unwrap();
-        view.reviews = reviews.into();
+        app.state_service
+            .handle_app_event(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(
+                reviews.into(),
+            )))
+            .await
+            .unwrap();
 
         let key_event = KeyEvent {
             code: KeyCode::Char('j'),
@@ -464,8 +428,8 @@ mod tests {
 
         view.handle_key_events(&mut app, &key_event).unwrap();
 
-        // Should select first review (index 0)
-        assert_eq!(view.selected_review_index, Some(0));
+        // Should select second review (index 1)
+        assert_eq!(view.selected_review_index, Some(1));
     }
 
     #[tokio::test]
@@ -475,7 +439,12 @@ mod tests {
 
         // Populate the view with reviews first
         let reviews = Review::list_all(app.database.pool()).await.unwrap();
-        view.reviews = reviews.into();
+        app.state_service
+            .handle_app_event(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(
+                reviews.into(),
+            )))
+            .await
+            .unwrap();
 
         // Start with second review selected
         view.selected_review_index = Some(1);
@@ -500,7 +469,12 @@ mod tests {
 
         // Populate the view with reviews first
         let reviews = Review::list_all(app.database.pool()).await.unwrap();
-        view.reviews = reviews.into();
+        app.state_service
+            .handle_app_event(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(
+                reviews.into(),
+            )))
+            .await
+            .unwrap();
 
         // Start with first review selected
         view.selected_review_index = Some(0);
@@ -525,7 +499,12 @@ mod tests {
 
         // Populate the view with reviews first
         let reviews = Review::list_all(app.database.pool()).await.unwrap();
-        view.reviews = reviews.into();
+        app.state_service
+            .handle_app_event(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(
+                reviews.into(),
+            )))
+            .await
+            .unwrap();
 
         // Start with second review selected
         view.selected_review_index = Some(1);
@@ -546,9 +525,12 @@ mod tests {
     #[tokio::test]
     async fn test_main_view_render_reviews_loading_state_init() {
         let mut app = create_test_app_with_reviews().await;
+        app.state_service
+            .handle_app_event(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Init))
+            .await
+            .unwrap();
         // Create a MainView with Init state
-        let mut main_view = MainView::new();
-        main_view.reviews_loading_state = ReviewsLoadingState::Init;
+        let main_view = MainView::new();
         app.view_stack = vec![Box::new(main_view)];
         assert_snapshot!(render_app_to_terminal_backend(app))
     }
@@ -556,9 +538,12 @@ mod tests {
     #[tokio::test]
     async fn test_main_view_render_reviews_loading_state_loading() {
         let mut app = create_test_app_with_reviews().await;
+        app.state_service
+            .handle_app_event(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loading))
+            .await
+            .unwrap();
         // Create a MainView with Loading state
-        let mut main_view = MainView::new();
-        main_view.reviews_loading_state = ReviewsLoadingState::Loading;
+        let main_view = MainView::new();
         app.view_stack = vec![Box::new(main_view)];
         assert_snapshot!(render_app_to_terminal_backend(app))
     }
@@ -567,18 +552,26 @@ mod tests {
     async fn test_main_view_render_reviews_loading_state_loaded_with_reviews() {
         let mut app = create_test_app_with_reviews().await;
         let reviews = Review::list_all(app.database.pool()).await.unwrap();
-        app.handle_app_events(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(
-            reviews.into(),
-        )));
+        app.state_service
+            .handle_app_event(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(
+                reviews.into(),
+            )))
+            .await
+            .unwrap();
         assert_snapshot!(render_app_to_terminal_backend(app))
     }
 
     #[tokio::test]
     async fn test_main_view_render_reviews_loading_state_loaded_no_reviews() {
         let mut app = create_test_app_with_reviews().await;
+        app.state_service
+            .handle_app_event(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(
+                Arc::new([]),
+            )))
+            .await
+            .unwrap();
         // Create a MainView with Loaded state but no reviews
-        let mut main_view = MainView::new();
-        main_view.reviews_loading_state = ReviewsLoadingState::Loaded(Arc::new([]));
+        let main_view = MainView::new();
         app.view_stack = vec![Box::new(main_view)];
         assert_snapshot!(render_app_to_terminal_backend(app))
     }
@@ -586,9 +579,14 @@ mod tests {
     #[tokio::test]
     async fn test_main_view_render_reviews_loading_state_error() {
         let mut app = create_test_app_with_reviews().await;
+        app.state_service
+            .handle_app_event(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Error(
+                Arc::from("Test error"),
+            )))
+            .await
+            .unwrap();
         // Create a MainView with Error state
-        let mut main_view = MainView::new();
-        main_view.reviews_loading_state = ReviewsLoadingState::Error(Arc::from("Test error"));
+        let main_view = MainView::new();
         app.view_stack = vec![Box::new(main_view)];
         assert_snapshot!(render_app_to_terminal_backend(app))
     }
@@ -596,11 +594,15 @@ mod tests {
     #[tokio::test]
     async fn test_main_view_render_with_selected_review() {
         let mut app = create_test_app_with_reviews().await;
+        let reviews = Review::list_all(app.database.pool()).await.unwrap();
+        app.state_service
+            .handle_app_event(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(
+                reviews.into(),
+            )))
+            .await
+            .unwrap();
         // Create a MainView with first review selected
         let mut main_view = MainView::new();
-        let reviews = Review::list_all(app.database.pool()).await.unwrap();
-        main_view.reviews_loading_state = ReviewsLoadingState::Loaded(reviews.clone().into());
-        main_view.reviews = reviews.into();
         main_view.selected_review_index = Some(0);
         app.view_stack = vec![Box::new(main_view)];
 
@@ -614,7 +616,12 @@ mod tests {
 
         // Populate the view with reviews first
         let reviews = Review::list_all(app.database.pool()).await.unwrap();
-        view.reviews = reviews.into();
+        app.state_service
+            .handle_app_event(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(
+                reviews.into(),
+            )))
+            .await
+            .unwrap();
 
         // Select first review
         view.selected_review_index = Some(0);
@@ -666,7 +673,13 @@ mod tests {
         let mut view = MainView::new();
 
         // Empty reviews list
-        view.reviews = Arc::new([]);
+        app.state_service
+            .handle_app_event(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(
+                Arc::new([]),
+            )))
+            .await
+            .unwrap();
+
         view.selected_review_index = Some(0); // Invalid selection
         assert!(!app.events.has_pending_events());
 
@@ -684,127 +697,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_main_view_handle_app_events_reviews_loaded() {
-        let mut app = create_test_app_with_reviews().await;
-        let mut view = MainView::new();
-
-        view.selected_review_index = None;
-
-        let review = Review::test_review(());
-        review.save(app.database.pool()).await.unwrap();
-        let reviews = vec![review];
-
-        view.handle_app_events(
-            &mut app,
-            &AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(reviews.into())),
-        );
-
-        assert_eq!(view.selected_review_index, Some(0));
-    }
-
-    #[tokio::test]
-    async fn test_main_view_handle_app_events_review_delete() {
-        let mut app = create_test_app_with_reviews().await;
-        let mut view = MainView::new();
-
-        view.selected_review_index = None;
-
-        let review = Review::test_review(());
-        review.save(app.database.pool()).await.unwrap();
-
-        view.handle_app_events(&mut app, &AppEvent::ReviewDelete("some_id".into()));
-
-        // Selection should not change until ReviewsLoadingState::Loaded is received
-        assert_eq!(view.selected_review_index, None);
-    }
-
-    #[tokio::test]
-    async fn test_main_view_handle_app_events_review_create_submit() {
-        let mut app = create_test_app_with_reviews().await;
-        let mut view = MainView::new();
-
-        view.selected_review_index = None;
-
-        let review = Review::test_review(());
-        review.save(app.database.pool()).await.unwrap();
-
-        view.handle_app_events(
-            &mut app,
-            &AppEvent::ReviewCreateSubmit(Arc::new(ReviewCreateData {
-                base_branch: "main".to_string(),
-                target_branch: "feature/new-review".to_string(),
-            })),
-        );
-
-        // Selection should not change until ReviewsLoadingState::Loaded is received
-        assert_eq!(view.selected_review_index, None);
-    }
-
-    #[tokio::test]
-    async fn test_main_view_update_selection_after_reviews_change_empty() {
-        let mut view = MainView::new();
-        view.selected_review_index = Some(0);
-
-        view.reviews = Arc::new([]);
-        view.update_selection_after_reviews_change();
-
-        // Should clear selection for empty reviews
-        assert_eq!(view.selected_review_index, None);
-    }
-
-    #[tokio::test]
-    async fn test_main_view_update_selection_after_reviews_change_out_of_bounds() {
-        let mut view = MainView::new();
-
-        // Set selection to last item (index 1)
-        view.selected_review_index = Some(1);
-
-        // Create a review and a smaller reviews list (only 1 item)
-        view.reviews = Arc::new([Review::test_review(())]);
-        view.update_selection_after_reviews_change();
-
-        // Should adjust selection to last valid index (0)
-        assert_eq!(view.selected_review_index, Some(0));
-    }
-
-    #[tokio::test]
-    async fn test_main_view_update_selection_after_reviews_change_valid_selection() {
-        let mut view = MainView::new();
-
-        // Set selection to first item
-        view.selected_review_index = Some(0);
-
-        // Create a reviews list for testing
-        view.reviews = Arc::new([Review::test_review(())]);
-        view.update_selection_after_reviews_change();
-
-        // Should preserve valid selection
-        assert_eq!(view.selected_review_index, Some(0));
-    }
-
-    #[tokio::test]
-    async fn test_main_view_update_selection_after_reviews_change_no_selection() {
-        let mut view = MainView::new();
-
-        // No selection initially
-        assert_eq!(view.selected_review_index, None);
-
-        // Create a reviews list for testing
-        view.reviews = Arc::new([Review::test_review(())]);
-        view.update_selection_after_reviews_change();
-
-        // Should select first review
-        assert_eq!(view.selected_review_index, Some(0));
-    }
-
-    #[tokio::test]
     async fn test_main_view_handle_open_review_details_key_with_selection() {
         let mut app = create_test_app_with_reviews().await;
         let mut view = MainView::new();
 
         // Populate the view with reviews first
         let reviews = Review::list_all(app.database.pool()).await.unwrap();
-        view.reviews = reviews.into();
+        app.state_service
+            .handle_app_event(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(
+                reviews.clone().into(),
+            )))
+            .await
+            .unwrap();
 
         // Select first review
         view.selected_review_index = Some(0);
@@ -825,7 +729,7 @@ mod tests {
         match &*event {
             Event::App(AppEvent::ReviewDetailsOpen(review_id)) => {
                 // Should be the ID of the first review
-                assert_eq!(review_id.as_ref(), view.reviews[0].id);
+                assert_eq!(review_id.as_ref(), reviews[0].id);
             }
             _ => panic!("Expected ReviewDetailsOpen event, got: {event:?}"),
         }
@@ -859,7 +763,13 @@ mod tests {
         let mut view = MainView::new();
 
         // Empty reviews list
-        view.reviews = Arc::new([]);
+        app.state_service
+            .handle_app_event(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(
+                Arc::new([]),
+            )))
+            .await
+            .unwrap();
+
         view.selected_review_index = Some(0); // Invalid selection
         assert!(!app.events.has_pending_events());
 
@@ -883,7 +793,12 @@ mod tests {
 
         // Populate the view with reviews first
         let reviews = Review::list_all(app.database.pool()).await.unwrap();
-        view.reviews = reviews.into();
+        app.state_service
+            .handle_app_event(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(
+                reviews.clone().into(),
+            )))
+            .await
+            .unwrap();
 
         // Select first review
         view.selected_review_index = Some(0);
@@ -897,7 +812,7 @@ mod tests {
         match &*event {
             Event::App(AppEvent::ReviewDetailsOpen(review_id)) => {
                 // Should be the ID of the first review
-                assert_eq!(review_id.as_ref(), view.reviews[0].id);
+                assert_eq!(review_id.as_ref(), reviews[0].id);
             }
             _ => panic!("Expected ReviewDetailsOpen event, got: {event:?}"),
         }
