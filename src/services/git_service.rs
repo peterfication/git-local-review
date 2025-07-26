@@ -68,6 +68,43 @@ impl GitService {
         format!("refs/heads/{branch_name}")
     }
 
+    /// Get the diff between two SHAs
+    pub fn get_diff_between_shas<PathRef: AsRef<Path>>(
+        repo_path: PathRef,
+        base_sha: &str,
+        target_sha: &str,
+    ) -> color_eyre::Result<String> {
+        let repo = git2::Repository::open(repo_path)?;
+
+        // Parse SHAs to git2::Oid
+        let base_oid = git2::Oid::from_str(base_sha)?;
+        let target_oid = git2::Oid::from_str(target_sha)?;
+
+        // Get commit objects
+        let base_commit = repo.find_commit(base_oid)?;
+        let target_commit = repo.find_commit(target_oid)?;
+
+        // Get trees from commits
+        let base_tree = base_commit.tree()?;
+        let target_tree = target_commit.tree()?;
+
+        // Create diff between trees
+        let diff = repo.diff_tree_to_tree(Some(&base_tree), Some(&target_tree), None)?;
+
+        // Format diff as string
+        let mut diff_str = String::new();
+        diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
+            match line.origin() {
+                '+' | '-' | ' ' => diff_str.push(line.origin()),
+                _ => {}
+            }
+            diff_str.push_str(std::str::from_utf8(line.content()).unwrap_or(""));
+            true
+        })?;
+
+        Ok(diff_str)
+    }
+
     /// Send loading event to start the actual loading process
     fn handle_git_branches_load(events: &mut EventHandler) {
         events.send(AppEvent::GitBranchesLoading);
@@ -218,6 +255,113 @@ mod tests {
     #[test]
     fn test_sha_methods_nonexistent_repo() {
         let result = GitService::get_branch_sha("/nonexistent/path", "main");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_diff_between_shas() {
+        let temp_dir = create_test_git_repo().unwrap();
+        let repo_path = temp_dir.path();
+
+        // Get SHAs for the initial commit and a branch
+        let main_sha = GitService::get_branch_sha(repo_path, "main")
+            .unwrap()
+            .or_else(|| GitService::get_branch_sha(repo_path, "master").unwrap())
+            .expect("Neither main nor master branch found");
+        let feature_sha = GitService::get_branch_sha(repo_path, "feature/test")
+            .unwrap()
+            .expect("feature/test branch not found");
+
+        // Get diff between the same commit (should be empty)
+        let diff_same = GitService::get_diff_between_shas(repo_path, &main_sha, &main_sha).unwrap();
+        assert!(diff_same.is_empty());
+
+        // Note: Since we created branches from the same commit, the diff will be empty
+        // In a real scenario with different commits, this would show actual changes
+        let diff_between =
+            GitService::get_diff_between_shas(repo_path, &main_sha, &feature_sha).unwrap();
+        assert!(diff_between.is_empty()); // Expected since both point to same commit
+    }
+
+    #[test]
+    fn test_get_diff_with_actual_changes() {
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = temp_dir.path();
+
+        // Initialize git repo
+        let repo = git2::Repository::init(repo_path).unwrap();
+        let signature = git2::Signature::now("Test User", "test@example.com").unwrap();
+
+        // Create initial commit
+        let initial_sha = {
+            let mut index = repo.index().unwrap();
+            let file_path = repo_path.join("file.txt");
+            fs::write(&file_path, b"initial content").unwrap();
+            index.add_path(Path::new("file.txt")).unwrap();
+            index.write().unwrap();
+            let tree_id = index.write_tree().unwrap();
+            let tree = repo.find_tree(tree_id).unwrap();
+            let commit_id = repo
+                .commit(
+                    Some("HEAD"),
+                    &signature,
+                    &signature,
+                    "Initial commit",
+                    &tree,
+                    &[],
+                )
+                .unwrap();
+            commit_id.to_string()
+        };
+
+        // Create second commit with changes
+        let second_sha = {
+            let mut index = repo.index().unwrap();
+            let file_path = repo_path.join("file.txt");
+            fs::write(&file_path, b"modified content").unwrap();
+            index.add_path(Path::new("file.txt")).unwrap();
+            index.write().unwrap();
+            let tree_id = index.write_tree().unwrap();
+            let tree = repo.find_tree(tree_id).unwrap();
+            let parent_commit = repo
+                .find_commit(git2::Oid::from_str(&initial_sha).unwrap())
+                .unwrap();
+            let commit_id = repo
+                .commit(
+                    Some("HEAD"),
+                    &signature,
+                    &signature,
+                    "Second commit",
+                    &tree,
+                    &[&parent_commit],
+                )
+                .unwrap();
+            commit_id.to_string()
+        };
+
+        // Get diff between commits
+        let diff = GitService::get_diff_between_shas(repo_path, &initial_sha, &second_sha).unwrap();
+
+        // Should contain diff showing the change
+        assert!(diff.contains("file.txt"));
+        assert!(diff.contains("-initial content"));
+        assert!(diff.contains("+modified content"));
+    }
+
+    #[test]
+    fn test_get_diff_invalid_sha() {
+        let temp_dir = create_test_git_repo().unwrap();
+        let repo_path = temp_dir.path();
+
+        // Test with invalid SHA
+        let result =
+            GitService::get_diff_between_shas(repo_path, "invalid_sha", "another_invalid_sha");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_diff_nonexistent_repo() {
+        let result = GitService::get_diff_between_shas("/nonexistent/path", "sha1", "sha2");
         assert!(result.is_err());
     }
 
