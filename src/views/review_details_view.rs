@@ -3,15 +3,16 @@ use std::sync::Arc;
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{KeyCode, KeyEvent},
-    layout::{Constraint, Direction, Layout, Margin, Rect},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
-    widgets::{Block, Borders, Clear, Paragraph, Widget},
+    widgets::{Block, Borders, Clear, Paragraph, Widget, Wrap},
 };
 
 use crate::{
     app::App,
     event::AppEvent,
     models::Review,
+    services::GitDiffLoadingState,
     views::{KeyBinding, ViewHandler, ViewType},
 };
 
@@ -24,18 +25,36 @@ enum ReviewDetailsState {
 
 pub struct ReviewDetailsView {
     state: ReviewDetailsState,
+    diff_state: GitDiffLoadingState,
+    scroll_offset: usize,
 }
 
 impl ReviewDetailsView {
     pub fn new(review: Review) -> Self {
         Self {
             state: ReviewDetailsState::Loaded(Arc::from(review)),
+            diff_state: GitDiffLoadingState::Init,
+            scroll_offset: 0,
         }
+    }
+
+    pub fn new_with_diff_loading(review: Review, app: &mut App) -> Self {
+        let view = Self::new(review.clone());
+        // Trigger git diff loading if both SHAs are available
+        if let (Some(base_sha), Some(target_sha)) = (&review.base_sha, &review.target_sha) {
+            app.events.send(AppEvent::GitDiffLoad(
+                base_sha.clone().into(),
+                target_sha.clone().into(),
+            ));
+        }
+        view
     }
 
     pub fn new_loading() -> Self {
         Self {
             state: ReviewDetailsState::Loading,
+            diff_state: GitDiffLoadingState::Init,
+            scroll_offset: 0,
         }
     }
 }
@@ -69,21 +88,46 @@ impl ViewHandler for ReviewDetailsView {
         match key_event.code {
             KeyCode::Esc => app.events.send(AppEvent::ViewClose),
             KeyCode::Char('?') => app.events.send(AppEvent::HelpOpen(self.get_keybindings())),
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.scroll_offset = self.scroll_offset.saturating_sub(1);
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.scroll_offset = self.scroll_offset.saturating_add(1);
+            }
+            KeyCode::PageUp => {
+                self.scroll_offset = self.scroll_offset.saturating_sub(10);
+            }
+            KeyCode::PageDown => {
+                self.scroll_offset = self.scroll_offset.saturating_add(10);
+            }
+            KeyCode::Home => {
+                self.scroll_offset = 0;
+            }
             _ => {}
         }
         Ok(())
     }
 
-    fn handle_app_events(&mut self, _app: &mut App, event: &AppEvent) {
+    fn handle_app_events(&mut self, app: &mut App, event: &AppEvent) {
         match event {
             AppEvent::ReviewLoaded(review) => {
                 self.state = ReviewDetailsState::Loaded(Arc::clone(review));
+                // Trigger git diff loading if both SHAs are available
+                if let (Some(base_sha), Some(target_sha)) = (&review.base_sha, &review.target_sha) {
+                    app.events.send(AppEvent::GitDiffLoad(
+                        base_sha.clone().into(),
+                        target_sha.clone().into(),
+                    ));
+                }
             }
             AppEvent::ReviewNotFound(review_id) => {
                 self.state = ReviewDetailsState::Error(format!("Review not found: {review_id}"));
             }
             AppEvent::ReviewLoadError(error) => {
                 self.state = ReviewDetailsState::Error(error.to_string());
+            }
+            AppEvent::GitDiffLoadingState(diff_state) => {
+                self.diff_state = diff_state.clone();
             }
             _ => {
                 // Other events are not handled by this view
@@ -113,18 +157,51 @@ impl ViewHandler for ReviewDetailsView {
                     state: ratatui::crossterm::event::KeyEventState::empty(),
                 },
             },
+            KeyBinding {
+                key: "↑/k".to_string(),
+                description: "Scroll up".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Up,
+                    modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
+                    kind: ratatui::crossterm::event::KeyEventKind::Press,
+                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                },
+            },
+            KeyBinding {
+                key: "↓/j".to_string(),
+                description: "Scroll down".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Down,
+                    modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
+                    kind: ratatui::crossterm::event::KeyEventKind::Press,
+                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                },
+            },
+            KeyBinding {
+                key: "Home".to_string(),
+                description: "Scroll to top".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Home,
+                    modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
+                    kind: ratatui::crossterm::event::KeyEventKind::Press,
+                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                },
+            },
         ])
     }
 
     #[cfg(test)]
     fn debug_state(&self) -> String {
-        match &self.state {
+        let state_str = match &self.state {
             ReviewDetailsState::Loading => "state: Loading".to_string(),
             ReviewDetailsState::Error(error) => format!("state: Error(\"{error}\")"),
             ReviewDetailsState::Loaded(review) => {
                 format!("state: Loaded(review_id: \"{}\")", review.id)
             }
-        }
+        };
+        let diff_state_str = format!("diff_state: {:?}", self.diff_state);
+        let scroll_str = format!("scroll_offset: {}", self.scroll_offset);
+        format!("{state_str}, {diff_state_str}, {scroll_str}")
     }
 
     #[cfg(test)]
@@ -164,7 +241,7 @@ impl ReviewDetailsView {
 
         // Title section
         let title_block = Block::default()
-            .title(" Title ")
+            .title(" Review Details ")
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Gray));
 
@@ -175,16 +252,55 @@ impl ReviewDetailsView {
 
         title_content.render(layout[0], buf);
 
-        // Content section
-        let content = Paragraph::new("<...>")
-            .style(Style::default().fg(Color::Gray))
+        // Content section - Git Diff
+        self.render_diff_content(review, layout[1], buf);
+    }
+
+    fn render_diff_content(&self, review: &Review, area: Rect, buf: &mut Buffer) {
+        let diff_block = Block::default()
+            .title(" Git Diff ")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Blue));
+
+        let inner_area = diff_block.inner(area);
+        diff_block.render(area, buf);
+
+        let content = match (&review.base_sha, &review.target_sha, &self.diff_state) {
+            (Some(_), Some(_), GitDiffLoadingState::Loading) => "Loading git diff...".to_string(),
+            (Some(_), Some(_), GitDiffLoadingState::Loaded(diff)) => {
+                let lines: Vec<&str> = diff.lines().collect();
+                let max_scroll = lines.len().saturating_sub(inner_area.height as usize);
+                let actual_scroll = self.scroll_offset.min(max_scroll);
+
+                lines
+                    .iter()
+                    .skip(actual_scroll)
+                    .take(inner_area.height as usize)
+                    .copied()
+                    .collect::<Vec<&str>>()
+                    .join("\n")
+            }
+            (Some(_), Some(_), GitDiffLoadingState::Error(error)) => {
+                format!("Error loading git diff: {error}")
+            }
+            (None, _, _) | (_, None, _) => {
+                "No git SHAs available for diff. SHAs are required to show git diff.".to_string()
+            }
+            (Some(_), Some(_), GitDiffLoadingState::Init) => "Initializing git diff...".to_string(),
+        };
+
+        let style = match (&review.base_sha, &review.target_sha, &self.diff_state) {
+            (Some(_), Some(_), GitDiffLoadingState::Error(_)) => Style::default().fg(Color::Red),
+            (None, _, _) | (_, None, _) => Style::default().fg(Color::Yellow),
+            _ => Style::default().fg(Color::White),
+        };
+
+        let paragraph = Paragraph::new(content)
+            .style(style)
+            .wrap(Wrap { trim: false })
             .block(Block::default().borders(Borders::NONE));
 
-        let content_area = layout[1].inner(Margin {
-            vertical: 1,
-            horizontal: 1,
-        });
-        content.render(content_area, buf);
+        paragraph.render(inner_area, buf);
     }
 }
 
@@ -254,7 +370,10 @@ mod tests {
         let view = ReviewDetailsView::new_loading();
 
         let debug_state = view.debug_state();
-        assert_eq!(debug_state, "state: Loading");
+        assert_eq!(
+            debug_state,
+            "state: Loading, diff_state: Init, scroll_offset: 0"
+        );
     }
 
     #[test]
@@ -263,11 +382,17 @@ mod tests {
         let view = ReviewDetailsView::new(review);
 
         let keybindings = view.get_keybindings();
-        assert_eq!(keybindings.len(), 2);
+        assert_eq!(keybindings.len(), 5);
         assert_eq!(keybindings[0].key, "Esc");
         assert_eq!(keybindings[0].description, "Go back");
         assert_eq!(keybindings[1].key, "?");
         assert_eq!(keybindings[1].description, "Help");
+        assert_eq!(keybindings[2].key, "↑/k");
+        assert_eq!(keybindings[2].description, "Scroll up");
+        assert_eq!(keybindings[3].key, "↓/j");
+        assert_eq!(keybindings[3].description, "Scroll down");
+        assert_eq!(keybindings[4].key, "Home");
+        assert_eq!(keybindings[4].description, "Scroll to top");
     }
 
     #[tokio::test]

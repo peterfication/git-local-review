@@ -21,6 +21,20 @@ pub enum GitBranchesLoadingState {
     Error(Arc<str>),
 }
 
+/// State of Git diff loading process
+#[derive(Debug, Clone, PartialEq, Default)]
+pub enum GitDiffLoadingState {
+    /// Initial state - no loading has been attempted
+    #[default]
+    Init,
+    /// Currently loading diff from Git repository
+    Loading,
+    /// Diff has been successfully loaded
+    Loaded(Arc<str>),
+    /// Error occurred during loading
+    Error(Arc<str>),
+}
+
 pub struct GitService;
 
 impl GitService {
@@ -68,12 +82,44 @@ impl GitService {
         format!("refs/heads/{branch_name}")
     }
 
+    /// Get git diff between two SHAs
+    pub async fn get_diff<PathRef: AsRef<Path>>(
+        repo_path: PathRef,
+        base_sha: &str,
+        target_sha: &str,
+    ) -> color_eyre::Result<String> {
+        let output = tokio::process::Command::new("git")
+            .args([
+                "-C",
+                repo_path.as_ref().to_str().unwrap_or("."),
+                "diff",
+                base_sha,
+                target_sha,
+            ])
+            .output()
+            .await?;
+
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            return Err(color_eyre::eyre::eyre!("Git diff failed: {}", error));
+        }
+
+        let diff_output = String::from_utf8_lossy(&output.stdout).to_string();
+        Ok(diff_output)
+    }
+
     /// Send loading event to start the actual loading process
     fn handle_git_branches_load(events: &mut EventHandler) {
         events.send(AppEvent::GitBranchesLoading);
         events.send(AppEvent::GitBranchesLoadingState(
             GitBranchesLoadingState::Loading,
         ));
+    }
+
+    /// Send loading event to start the git diff loading process
+    fn handle_git_diff_load(base_sha: Arc<str>, target_sha: Arc<str>, events: &mut EventHandler) {
+        events.send(AppEvent::GitDiffLoading(base_sha, target_sha));
+        events.send(AppEvent::GitDiffLoadingState(GitDiffLoadingState::Loading));
     }
 
     /// Actually load Git branches from repository
@@ -88,6 +134,26 @@ impl GitService {
                 events.send(AppEvent::GitBranchesLoadingState(
                     GitBranchesLoadingState::Error(error.to_string().into()),
                 ));
+            }
+        }
+    }
+
+    /// Actually load Git diff from repository
+    async fn handle_git_diff_loading(
+        base_sha: Arc<str>,
+        target_sha: Arc<str>,
+        events: &mut EventHandler,
+    ) {
+        match Self::get_diff(".", &base_sha, &target_sha).await {
+            Ok(diff) => {
+                events.send(AppEvent::GitDiffLoadingState(GitDiffLoadingState::Loaded(
+                    diff.into(),
+                )));
+            }
+            Err(error) => {
+                events.send(AppEvent::GitDiffLoadingState(GitDiffLoadingState::Error(
+                    error.to_string().into(),
+                )));
             }
         }
     }
@@ -106,6 +172,21 @@ impl ServiceHandler for GitService {
                 }
                 AppEvent::GitBranchesLoading => {
                     Self::handle_git_branches_loading(events).await;
+                }
+                AppEvent::GitDiffLoad(base_sha, target_sha) => {
+                    Self::handle_git_diff_load(
+                        Arc::clone(base_sha),
+                        Arc::clone(target_sha),
+                        events,
+                    );
+                }
+                AppEvent::GitDiffLoading(base_sha, target_sha) => {
+                    Self::handle_git_diff_loading(
+                        Arc::clone(base_sha),
+                        Arc::clone(target_sha),
+                        events,
+                    )
+                    .await;
                 }
                 _ => {
                     // Other events are ignored
@@ -475,6 +556,150 @@ mod tests {
             assert!(!error.is_empty());
         } else {
             panic!("Expected GitBranchesLoadingState::Error event, got: {event:?}");
+        }
+
+        // No more events should be pending
+        assert!(!events.has_pending_events());
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_diff_valid_shas() {
+        let temp_dir = create_test_git_repo().unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+
+        // Change to test repo directory
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        // Get the SHA of the main/master branch
+        let main_sha = GitService::get_branch_sha(".", "main")
+            .unwrap_or_else(|_| GitService::get_branch_sha(".", "master").unwrap())
+            .unwrap();
+
+        let feature_sha = GitService::get_branch_sha(".", "feature/test")
+            .unwrap()
+            .unwrap();
+
+        // Get diff between main and feature branch
+        let diff = GitService::get_diff(".", &main_sha, &feature_sha).await;
+        assert!(diff.is_ok());
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_diff_invalid_shas() {
+        let temp_dir = create_test_git_repo().unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+
+        // Change to test repo directory
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        // Try diff with invalid SHAs
+        let diff = GitService::get_diff(".", "invalid_sha_1", "invalid_sha_2").await;
+        assert!(diff.is_err());
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_diff_nonexistent_repo() {
+        let diff = GitService::get_diff("/nonexistent/path", "sha1", "sha2").await;
+        assert!(diff.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_handle_git_diff_load_event() {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
+        let database = crate::database::Database::from_pool(pool);
+        let mut events = crate::event::EventHandler::new_for_test();
+
+        let base_sha: Arc<str> = "base123".into();
+        let target_sha: Arc<str> = "target456".into();
+
+        // Initially no events
+        assert!(!events.has_pending_events());
+
+        // Handle GitDiffLoad event
+        GitService::handle_app_event(
+            &AppEvent::GitDiffLoad(base_sha.clone(), target_sha.clone()),
+            &database,
+            &mut events,
+        )
+        .await
+        .unwrap();
+
+        // Should have sent GitDiffLoading and GitDiffLoadingState(Loading) events
+        assert!(events.has_pending_events());
+
+        let event1 = events.try_recv().unwrap();
+        if let crate::event::Event::App(AppEvent::GitDiffLoading(base, target)) = &*event1 {
+            assert_eq!(*base, base_sha);
+            assert_eq!(*target, target_sha);
+        } else {
+            panic!("Expected GitDiffLoading event, got: {event1:?}");
+        }
+
+        let event2 = events.try_recv().unwrap();
+        assert!(matches!(
+            *event2,
+            crate::event::Event::App(AppEvent::GitDiffLoadingState(GitDiffLoadingState::Loading))
+        ));
+
+        // No more events should be pending
+        assert!(!events.has_pending_events());
+    }
+
+    #[tokio::test]
+    async fn test_handle_git_diff_loading_event_error() {
+        let original_dir = std::env::current_dir().unwrap();
+
+        // Change to non-git directory
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
+        let database = crate::database::Database::from_pool(pool);
+        let mut events = crate::event::EventHandler::new_for_test();
+
+        let base_sha: Arc<str> = "base123".into();
+        let target_sha: Arc<str> = "target456".into();
+
+        // Initially no events
+        assert!(!events.has_pending_events());
+
+        // Handle GitDiffLoading event
+        GitService::handle_app_event(
+            &AppEvent::GitDiffLoading(base_sha, target_sha),
+            &database,
+            &mut events,
+        )
+        .await
+        .unwrap();
+
+        // Should have sent GitDiffLoadingState(Error) event
+        assert!(events.has_pending_events());
+
+        let event = events.try_recv().unwrap();
+        if let crate::event::Event::App(AppEvent::GitDiffLoadingState(
+            GitDiffLoadingState::Error(error),
+        )) = &*event
+        {
+            // Should contain error message about git command or invalid SHAs
+            assert!(!error.is_empty());
+            assert!(
+                error.contains("Git diff failed")
+                    || error.contains("No such file")
+                    || error.contains("failed")
+            );
+        } else {
+            panic!("Expected GitDiffLoadingState::Error event, got: {event:?}");
         }
 
         // No more events should be pending
