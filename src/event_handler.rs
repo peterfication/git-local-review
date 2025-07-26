@@ -60,7 +60,9 @@ impl EventProcessor {
     fn init(app: &mut App) {
         // Initialize any global state or services if needed
         log::info!("App initialized");
+        // Trigger initial data loading through state service
         app.events.send(AppEvent::ReviewsLoad);
+        app.events.send(AppEvent::GitBranchesLoad);
     }
 
     /// Handle app events through services
@@ -73,6 +75,8 @@ impl EventProcessor {
         for handler in services {
             handler(event, &app.database, &mut app.events).await?;
         }
+        app.state_service.handle_app_event(event).await?;
+
         Ok(())
     }
 
@@ -137,6 +141,7 @@ mod tests {
             running: true,
             events: crate::event::EventHandler::new_for_test(),
             database,
+            state_service: crate::services::StateService::new(),
             view_stack: vec![Box::new(MainView::new())],
         }
     }

@@ -4,6 +4,7 @@ use crate::{
     database::Database,
     event::{AppEvent, EventHandler},
     event_handler::EventProcessor,
+    services::StateService,
     views::{MainView, ViewHandler},
 };
 
@@ -15,6 +16,8 @@ pub struct App {
     pub events: EventHandler,
     /// Database connection.
     pub database: Database,
+    /// State service for centralized state management.
+    pub state_service: StateService,
     /// Current view stack.
     pub view_stack: Vec<Box<dyn ViewHandler>>,
 }
@@ -34,6 +37,7 @@ impl App {
             running: true,
             events: EventHandler::new(),
             database,
+            state_service: StateService::new(),
             view_stack: vec![Box::new(MainView::new())],
         })
     }
@@ -111,7 +115,6 @@ mod tests {
 
     use crate::{
         event::{AppEvent, Event},
-        models::Review,
         services::ReviewsLoadingState,
         views::{MainView, ReviewCreateView, ViewType},
     };
@@ -126,6 +129,7 @@ mod tests {
             running: true,
             events: EventHandler::new_for_test(),
             database,
+            state_service: StateService::new(),
             view_stack: vec![Box::new(MainView::new())],
         }
     }
@@ -141,6 +145,7 @@ mod tests {
             running: true,
             events: EventHandler::new(),
             database,
+            state_service: StateService::new(),
             view_stack: vec![Box::new(MainView::new())],
         };
 
@@ -266,17 +271,22 @@ mod tests {
     #[tokio::test]
     async fn test_handle_key_events_only_top_view_responds() {
         let mut app = create_test_app().await;
+        app.state_service
+            .handle_app_event(&AppEvent::GitBranchesLoadingState(
+                crate::services::GitBranchesLoadingState::Loaded(
+                    vec![
+                        "main".to_string(),
+                        "develop".to_string(),
+                        "feature/test".to_string(),
+                    ]
+                    .into(),
+                ),
+            ))
+            .await
+            .unwrap();
 
         // Create a ReviewCreateView with some initial content to track changes
         let review_create_view = ReviewCreateView {
-            branches_state: crate::services::GitBranchesLoadingState::Loaded(
-                vec![
-                    "main".to_string(),
-                    "develop".to_string(),
-                    "feature/test".to_string(),
-                ]
-                .into(),
-            ),
             base_branch_index: 0,
             target_branch_index: 2,
             current_field: crate::views::review_create_view::InputField::BaseBranch,
@@ -294,7 +304,7 @@ mod tests {
         // Verify initial state
         assert_eq!(
             app.view_stack.last().unwrap().debug_state(),
-            "ReviewCreateView(branches: [\"main\", \"develop\", \"feature/test\"], base_branch: \"main\", target_branch: \"feature/test\", current_field: BaseBranch)"
+            "ReviewCreateView(current_field: BaseBranch, base_branch_index: 0, target_branch_index: 2)"
         );
 
         // Send a Down key that would change branch selection in ReviewCreateView
@@ -316,7 +326,7 @@ mod tests {
         // Verify that the ReviewCreateView's base_branch_index has been updated from 0 to 1 (develop)
         assert_eq!(
             app.view_stack.last().unwrap().debug_state(),
-            "ReviewCreateView(branches: [\"main\", \"develop\", \"feature/test\"], base_branch: \"develop\", target_branch: \"feature/test\", current_field: BaseBranch)"
+            "ReviewCreateView(current_field: BaseBranch, base_branch_index: 1, target_branch_index: 2)"
         );
     }
 
@@ -329,77 +339,13 @@ mod tests {
             running: true,
             events: EventHandler::new(),
             database: Database::from_pool(pool),
+            state_service: StateService::new(),
             view_stack: vec![Box::new(MainView::new())],
         };
 
         // Tick should not change anything
         app.tick();
         // Since tick() is a no-op, there's nothing to assert
-    }
-
-    #[tokio::test]
-    async fn test_handle_app_events() {
-        let mut app = create_test_app().await;
-
-        // Create a review to have data for testing
-        let review = Review::test_review(());
-        review.save(app.database.pool()).await.unwrap();
-        let reviews = vec![review];
-
-        // Verify MainView initially has no selection
-        if let Some(main_view) = app.view_stack.get_mut(0) {
-            if let Some(main_view) = main_view.as_any_mut().downcast_mut::<MainView>() {
-                assert_eq!(main_view.selected_review_index(), None);
-            }
-        }
-
-        // Call handle_app_events with ReviewsLoadingState event
-        app.handle_app_events(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(
-            reviews.into(),
-        )));
-
-        // Verify MainView now has the first review selected
-        if let Some(main_view) = app.view_stack.get_mut(0) {
-            if let Some(main_view) = main_view.as_any_mut().downcast_mut::<MainView>() {
-                assert_eq!(main_view.selected_review_index(), Some(0));
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn test_handle_app_events_with_multiple_views() {
-        let mut app = create_test_app().await;
-
-        // Create a review to have data for testing
-        let review = Review::test_review(());
-        review.save(app.database.pool()).await.unwrap();
-        let reviews = vec![review];
-
-        // Add a ReviewCreateView to the stack
-        app.push_view(Box::new(ReviewCreateView::default()));
-        assert_eq!(app.view_stack.len(), 2);
-
-        // Verify MainView initially has no selection
-        if let Some(main_view) = app.view_stack.get_mut(0) {
-            if let Some(main_view) = main_view.as_any_mut().downcast_mut::<MainView>() {
-                assert_eq!(main_view.selected_review_index(), None);
-            }
-        }
-
-        // Call handle_app_events with ReviewsLoadingState::Loaded event
-        app.handle_app_events(&AppEvent::ReviewsLoadingState(ReviewsLoadingState::Loaded(
-            reviews.into(),
-        )));
-
-        // Verify MainView now has the first review selected (all views should have received the event)
-        if let Some(main_view) = app.view_stack.get_mut(0) {
-            if let Some(main_view) = main_view.as_any_mut().downcast_mut::<MainView>() {
-                assert_eq!(main_view.selected_review_index(), Some(0));
-            }
-        }
-
-        // View stack should remain unchanged
-        assert_eq!(app.view_stack.len(), 2);
     }
 
     #[tokio::test]
