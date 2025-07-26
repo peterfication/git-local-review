@@ -43,6 +43,31 @@ impl GitService {
         Ok(branches.into())
     }
 
+    /// Get the SHA of a specific branch
+    pub fn get_branch_sha<PathRef: AsRef<Path>>(
+        repo_path: PathRef,
+        branch_name: &str,
+    ) -> color_eyre::Result<Option<String>> {
+        let repo = git2::Repository::open(repo_path)?;
+
+        // Try to find the branch reference
+        match repo.find_reference(&Self::get_branch_reference_name(branch_name)) {
+            Ok(reference) => {
+                if let Some(oid) = reference.target() {
+                    Ok(Some(oid.to_string()))
+                } else {
+                    Ok(None)
+                }
+            }
+            Err(_) => Ok(None), // Branch doesn't exist
+        }
+    }
+
+    /// Get the full reference name for a branch
+    fn get_branch_reference_name(branch_name: &str) -> String {
+        format!("refs/heads/{branch_name}")
+    }
+
     /// Send loading event to start the actual loading process
     fn handle_git_branches_load(events: &mut EventHandler) {
         events.send(AppEvent::GitBranchesLoading);
@@ -160,6 +185,39 @@ mod tests {
     #[test]
     fn test_get_branches_nonexistent_repo() {
         let result = GitService::get_branches("/nonexistent/path");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_branch_sha() {
+        let temp_dir = create_test_git_repo().unwrap();
+
+        // Test getting SHA for main/master branch
+        let main_sha = GitService::get_branch_sha(temp_dir.path(), "main");
+        let master_sha = GitService::get_branch_sha(temp_dir.path(), "master");
+
+        // Either main or master should exist and have a SHA
+        assert!(
+            main_sha.is_ok() && main_sha.unwrap().is_some()
+                || master_sha.is_ok() && master_sha.unwrap().is_some()
+        );
+
+        // Test getting SHA for feature branch
+        let feature_sha = GitService::get_branch_sha(temp_dir.path(), "feature/test").unwrap();
+        assert!(feature_sha.is_some());
+
+        // Test getting SHA for develop branch
+        let develop_sha = GitService::get_branch_sha(temp_dir.path(), "develop").unwrap();
+        assert!(develop_sha.is_some());
+
+        // Test non-existent branch
+        let nonexistent_sha = GitService::get_branch_sha(temp_dir.path(), "nonexistent").unwrap();
+        assert!(nonexistent_sha.is_none());
+    }
+
+    #[test]
+    fn test_sha_methods_nonexistent_repo() {
+        let result = GitService::get_branch_sha("/nonexistent/path", "main");
         assert!(result.is_err());
     }
 

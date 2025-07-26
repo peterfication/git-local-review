@@ -329,6 +329,8 @@ impl ReviewCreateView {
                 .send(AppEvent::ReviewCreateSubmit(Arc::new(ReviewCreateData {
                     base_branch,
                     target_branch,
+                    base_sha: None,
+                    target_sha: None,
                 })));
         }
     }
