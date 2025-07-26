@@ -322,11 +322,15 @@ mod tests {
         let time_provider2 = MockTimeProvider::new(time2);
 
         let review1 = Review::test_review_with_time_provider(
-            TestReviewParams::default().base_branch("main"),
+            TestReviewParams::default()
+                .base_branch("main")
+                .base_sha("abcd1234"),
             &time_provider1,
         );
         let review2 = Review::test_review_with_time_provider(
-            TestReviewParams::default().base_branch("dev"),
+            TestReviewParams::default()
+                .base_branch("dev")
+                .base_sha("bbcd1234"),
             &time_provider2,
         );
         review1.save(&pool).await.unwrap();
@@ -722,6 +726,8 @@ mod tests {
             &AppEvent::ReviewCreateSubmit(Arc::new(ReviewCreateData {
                 base_branch: "main".to_string(),
                 target_branch: "feature/new-review".to_string(),
+                base_sha: None,
+                target_sha: None,
             })),
         );
 

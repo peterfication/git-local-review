@@ -6,12 +6,15 @@ use crate::{
     database::Database,
     event::{AppEvent, EventHandler},
     models::Review,
+    services::git_service::GitService,
 };
 
 #[derive(Clone, Debug)]
 pub struct ReviewCreateData {
     pub base_branch: String,
     pub target_branch: String,
+    pub base_sha: Option<String>,
+    pub target_sha: Option<String>,
 }
 
 /// State of reviews loading process
@@ -54,9 +57,35 @@ impl ReviewService {
             return Err(color_eyre::eyre::eyre!("Target branch cannot be empty"));
         }
 
-        let review = Review::new(
+        // Get SHAs from Git if not provided in the data
+        let base_sha = if data.base_sha.is_some() {
+            data.base_sha
+        } else {
+            match GitService::get_branch_sha(".", &data.base_branch) {
+                Ok(base) => base,
+                Err(error) => {
+                    log::warn!("Failed to get Git SHAs: {error}");
+                    None
+                }
+            }
+        };
+        let target_sha = if data.target_sha.is_some() {
+            data.target_sha
+        } else {
+            match GitService::get_branch_sha(".", &data.target_branch) {
+                Ok(target) => target,
+                Err(error) => {
+                    log::warn!("Failed to get Git SHAs: {error}");
+                    None
+                }
+            }
+        };
+
+        let review = Review::new_with_shas(
             data.base_branch.trim().to_string(),
             data.target_branch.trim().to_string(),
+            base_sha,
+            target_sha,
         );
         review.save(database.pool()).await?;
         log::info!("Created review: {}", review.title());
@@ -222,6 +251,8 @@ mod tests {
         let data = ReviewCreateData {
             base_branch: "main".to_string(),
             target_branch: "feature/test".to_string(),
+            base_sha: None,
+            target_sha: None,
         };
 
         ReviewService::create_review(&database, data, &mut events)
@@ -247,6 +278,8 @@ mod tests {
         let data = ReviewCreateData {
             base_branch: "".to_string(),
             target_branch: "feature/test".to_string(),
+            base_sha: None,
+            target_sha: None,
         };
 
         match ReviewService::create_review(&database, data, &mut events).await {
@@ -267,6 +300,8 @@ mod tests {
         let data = ReviewCreateData {
             base_branch: "main".to_string(),
             target_branch: "".to_string(),
+            base_sha: None,
+            target_sha: None,
         };
 
         match ReviewService::create_review(&database, data, &mut events).await {
@@ -287,6 +322,8 @@ mod tests {
         let data = ReviewCreateData {
             base_branch: "  main  ".to_string(),
             target_branch: "  feature/test  ".to_string(),
+            base_sha: None,
+            target_sha: None,
         };
 
         ReviewService::create_review(&database, data, &mut events)
@@ -323,10 +360,14 @@ mod tests {
         let data1 = ReviewCreateData {
             base_branch: "main".to_string(),
             target_branch: "feature/review-1".to_string(),
+            base_sha: None,
+            target_sha: None,
         };
         let data2 = ReviewCreateData {
             base_branch: "main".to_string(),
             target_branch: "feature/review-2".to_string(),
+            base_sha: None,
+            target_sha: None,
         };
 
         ReviewService::create_review(&database, data1, &mut events)
@@ -353,10 +394,14 @@ mod tests {
         let data1 = ReviewCreateData {
             base_branch: "main".to_string(),
             target_branch: "feature/review-1".to_string(),
+            base_sha: None,
+            target_sha: None,
         };
         let data2 = ReviewCreateData {
             base_branch: "main".to_string(),
             target_branch: "feature/review-2".to_string(),
+            base_sha: None,
+            target_sha: None,
         };
 
         ReviewService::create_review(&database, data1, &mut events)
@@ -394,6 +439,8 @@ mod tests {
         let data = ReviewCreateData {
             base_branch: "main".to_string(),
             target_branch: "feature/review-1".to_string(),
+            base_sha: None,
+            target_sha: None,
         };
         ReviewService::create_review(&database, data, &mut events)
             .await
@@ -501,6 +548,8 @@ mod tests {
         let data = ReviewCreateData {
             base_branch: "main".to_string(),
             target_branch: "feature/created".to_string(),
+            base_sha: None,
+            target_sha: None,
         };
 
         ReviewService::handle_app_event(
@@ -536,6 +585,8 @@ mod tests {
         let data = ReviewCreateData {
             base_branch: "".to_string(),
             target_branch: "feature/test".to_string(),
+            base_sha: None,
+            target_sha: None,
         };
 
         // Test empty branches submission

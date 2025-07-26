@@ -10,4 +10,4 @@ CREATE TABLE reviews (
     id TEXT PRIMARY KEY,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
-, base_branch TEXT NOT NULL, target_branch TEXT NOT NULL);
+, base_branch TEXT NOT NULL, target_branch TEXT NOT NULL, base_sha TEXT, target_sha TEXT);
