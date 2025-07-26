@@ -4,7 +4,8 @@ use ratatui::{
     buffer::Buffer,
     crossterm::event::{KeyCode, KeyEvent},
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Widget},
 };
 
@@ -26,13 +27,17 @@ enum ReviewDetailsState {
 pub struct ReviewDetailsView {
     state: ReviewDetailsState,
     scroll_offset: usize,
+    current_line: usize,
 }
+
+const CONTENT_HEIGHT: usize = 30; // Default content height for scrolling
 
 impl ReviewDetailsView {
     pub fn new(review: Review) -> Self {
         Self {
             state: ReviewDetailsState::Loaded(Arc::from(review)),
             scroll_offset: 0,
+            current_line: 0,
         }
     }
 
@@ -40,6 +45,7 @@ impl ReviewDetailsView {
         Self {
             state: ReviewDetailsState::Loading,
             scroll_offset: 0,
+            current_line: 0,
         }
     }
 }
@@ -71,22 +77,10 @@ impl ViewHandler for ReviewDetailsView {
 
     fn handle_key_events(&mut self, app: &mut App, key_event: &KeyEvent) -> color_eyre::Result<()> {
         match key_event.code {
-            KeyCode::Esc => app.events.send(AppEvent::ViewClose),
-            KeyCode::Char('?') => app.events.send(AppEvent::HelpOpen(self.get_keybindings())),
-            KeyCode::Up | KeyCode::Char('k') => {
-                if self.scroll_offset > 0 {
-                    self.scroll_offset -= 1;
-                }
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                // Use a reasonable estimate for content height (will be fine-tuned in render)
-                // This is just to prevent excessive scrolling
-                let estimated_height = 30; // Reasonable terminal height minus borders
-                let max_offset = self.get_max_scroll_offset(estimated_height);
-                if self.scroll_offset < max_offset {
-                    self.scroll_offset += 1;
-                }
-            }
+            KeyCode::Esc => self.close(app),
+            KeyCode::Char('?') => self.help(app),
+            KeyCode::Up | KeyCode::Char('k') => self.go_up(),
+            KeyCode::Down | KeyCode::Char('j') => self.go_down(),
             _ => {}
         }
         Ok(())
@@ -94,18 +88,9 @@ impl ViewHandler for ReviewDetailsView {
 
     fn handle_app_events(&mut self, _app: &mut App, event: &AppEvent) {
         match event {
-            AppEvent::ReviewLoaded(review) => {
-                self.state = ReviewDetailsState::Loaded(Arc::clone(review));
-                self.scroll_offset = 0; // Reset scroll when new review is loaded
-            }
-            AppEvent::ReviewNotFound(review_id) => {
-                self.state = ReviewDetailsState::Error(format!("Review not found: {review_id}"));
-                self.scroll_offset = 0; // Reset scroll on error
-            }
-            AppEvent::ReviewLoadError(error) => {
-                self.state = ReviewDetailsState::Error(error.to_string());
-                self.scroll_offset = 0; // Reset scroll on error
-            }
+            AppEvent::ReviewLoaded(review) => self.handle_review_loaded(review),
+            AppEvent::ReviewNotFound(review_id) => self.handle_review_not_found(review_id),
+            AppEvent::ReviewLoadError(error) => self.handle_review_load_error(error),
             _ => {
                 // Other events are not handled by this view
             }
@@ -160,10 +145,19 @@ impl ViewHandler for ReviewDetailsView {
     #[cfg(test)]
     fn debug_state(&self) -> String {
         match &self.state {
-            ReviewDetailsState::Loading => "state: Loading".to_string(),
-            ReviewDetailsState::Error(error) => format!("state: Error(\"{error}\")"),
+            ReviewDetailsState::Loading => format!(
+                "state: Loading, current_line: {}, scroll_offset: {}",
+                self.current_line, self.scroll_offset
+            ),
+            ReviewDetailsState::Error(error) => format!(
+                "state: Error(\"{error}\"), current_line: {}, scroll_offset: {}",
+                self.current_line, self.scroll_offset
+            ),
             ReviewDetailsState::Loaded(review) => {
-                format!("state: Loaded(review_id: \"{}\")", review.id)
+                format!(
+                    "state: Loaded(review_id: \"{}\"), current_line: {}, scroll_offset: {}",
+                    review.id, self.current_line, self.scroll_offset
+                )
             }
         }
     }
@@ -180,6 +174,56 @@ impl ViewHandler for ReviewDetailsView {
 }
 
 impl ReviewDetailsView {
+    /// Close the view by sending a ViewClose event
+    fn close(&self, app: &mut App) {
+        app.events.send(AppEvent::ViewClose);
+    }
+
+    /// Open help dialog with the keybindings of this view
+    fn help(&self, app: &mut App) {
+        app.events.send(AppEvent::HelpOpen(self.get_keybindings()));
+    }
+
+    /// Navigate to the previous line
+    fn go_up(&mut self) {
+        if self.current_line > 0 {
+            self.current_line -= 1;
+            // Update scroll to follow current line (estimated content height)
+            self.update_scroll_to_follow_current_line(CONTENT_HEIGHT);
+        }
+    }
+
+    /// Navigate to the next line
+    fn go_down(&mut self) {
+        let total_lines = self.get_total_lines();
+        if total_lines > 0 && self.current_line < total_lines.saturating_sub(1) {
+            self.current_line += 1;
+            // Update scroll to follow current line
+            self.update_scroll_to_follow_current_line(CONTENT_HEIGHT);
+        }
+    }
+
+    /// Reset the current line and scroll offset to 0 and set the review
+    fn handle_review_loaded(&mut self, review: &Arc<Review>) {
+        self.state = ReviewDetailsState::Loaded(Arc::clone(review));
+        self.scroll_offset = 0; // Reset scroll when new review is loaded
+        self.current_line = 0; // Reset current line when new review is loaded
+    }
+
+    /// Reset the current line and scroll offset to 0 and set the state
+    fn handle_review_not_found(&mut self, review_id: &str) {
+        self.state = ReviewDetailsState::Error(format!("Review not found: {review_id}"));
+        self.scroll_offset = 0; // Reset scroll on error
+        self.current_line = 0; // Reset current line on error
+    }
+
+    /// Reset the current line and scroll offset to 0 and set the state
+    fn handle_review_load_error(&mut self, error: &str) {
+        self.state = ReviewDetailsState::Error(error.to_string());
+        self.scroll_offset = 0; // Reset scroll on error
+        self.current_line = 0; // Reset current line on error
+    }
+
     /// Get the diff content for the current review
     fn get_diff_content(&self, review: &Review) -> String {
         if let (Some(base_sha), Some(target_sha)) = (&review.base_sha, &review.target_sha) {
@@ -198,20 +242,49 @@ impl ReviewDetailsView {
         }
     }
 
-    /// Get the maximum allowed scroll offset based on content
-    fn get_max_scroll_offset(&self, content_height: usize) -> usize {
+    /// Get the total number of lines in the content
+    fn get_total_lines(&self) -> usize {
         match &self.state {
             ReviewDetailsState::Loaded(review) => {
                 let content = self.get_diff_content(review);
-                let total_lines = content.lines().count();
-                if total_lines > content_height {
-                    total_lines.saturating_sub(content_height)
-                } else {
-                    0
-                }
+                content.lines().count()
             }
             _ => 0,
         }
+    }
+
+    /// Get the maximum allowed scroll offset based on content
+    fn get_max_scroll_offset(&self, content_height: usize) -> usize {
+        let total_lines = self.get_total_lines();
+        if total_lines > content_height {
+            total_lines.saturating_sub(content_height)
+        } else {
+            0
+        }
+    }
+
+    /// Update scroll offset to ensure current line is visible
+    fn update_scroll_to_follow_current_line(&mut self, content_height: usize) {
+        if content_height == 0 {
+            return;
+        }
+
+        // If current line is above the viewport, scroll up
+        if self.current_line < self.scroll_offset {
+            self.scroll_offset = self.current_line;
+        }
+
+        // If current line is below the viewport, scroll down
+        let viewport_bottom = self.scroll_offset + content_height.saturating_sub(1);
+        if self.current_line > viewport_bottom {
+            self.scroll_offset = self
+                .current_line
+                .saturating_sub(content_height.saturating_sub(1));
+        }
+
+        // Ensure scroll offset doesn't exceed bounds
+        let max_offset = self.get_max_scroll_offset(content_height);
+        self.scroll_offset = self.scroll_offset.min(max_offset);
     }
 
     fn render_loading(&self, area: Rect, buf: &mut Buffer) {
@@ -253,21 +326,12 @@ impl ReviewDetailsView {
         // Content section - show diff if SHAs are available
         let content_text = self.get_diff_content(review);
 
-        // Split content into lines and apply scrolling
+        // Split content into lines and apply scrolling with highlighting
         let content_lines: Vec<&str> = content_text.lines().collect();
         let content_height = layout[1].height.saturating_sub(2) as usize; // Account for borders
 
-        // Ensure scroll offset is within bounds
-        let total_lines = content_lines.len();
-        let max_offset = if total_lines > content_height {
-            total_lines.saturating_sub(content_height)
-        } else {
-            0
-        };
-        let actual_scroll_offset = self.scroll_offset.min(max_offset);
-
         // Calculate the visible lines based on scroll offset
-        let start_line = actual_scroll_offset;
+        let start_line = self.scroll_offset;
         let end_line = (start_line + content_height).min(content_lines.len());
         let visible_lines = if start_line < content_lines.len() {
             &content_lines[start_line..end_line]
@@ -275,23 +339,58 @@ impl ReviewDetailsView {
             &[]
         };
 
-        let scrolled_content = visible_lines.join("\n");
+        // Create styled lines with highlighting for current line
+        let styled_lines: Vec<Line> = visible_lines
+            .iter()
+            .enumerate()
+            .map(|(idx, line_text)| {
+                let absolute_line_idx = start_line + idx;
+                let is_current_line = absolute_line_idx == self.current_line;
 
-        // Show scroll indicator in title if content is scrollable
-        let title_text = if total_lines > content_height {
-            format!(" Diff ({}/{}) ", start_line + 1, total_lines)
+                if is_current_line {
+                    // Highlight current line with inverted colors
+                    Line::from(Span::styled(
+                        *line_text,
+                        Style::default()
+                            .fg(Color::Black)
+                            .bg(Color::White)
+                            .add_modifier(Modifier::BOLD),
+                    ))
+                } else {
+                    // Regular styling for other lines with diff colors
+                    let style = match line_text.chars().next() {
+                        Some('+') => Style::default().fg(Color::Green),
+                        Some('-') => Style::default().fg(Color::Red),
+                        Some('@') => Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                        _ => Style::default().fg(Color::White),
+                    };
+                    Line::from(Span::styled(*line_text, style))
+                }
+            })
+            .collect();
+
+        // Show scroll and line indicator in title
+        let total_lines = content_lines.len();
+        let title_text = if total_lines > 0 {
+            format!(
+                " Diff (line {}/{}, scroll {}/{}) ",
+                self.current_line + 1,
+                total_lines,
+                start_line + 1,
+                total_lines
+            )
         } else {
             " Diff ".to_string()
         };
 
-        let content = Paragraph::new(scrolled_content)
-            .style(Style::default().fg(Color::White))
-            .block(
-                Block::default()
-                    .title(title_text)
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Gray)),
-            );
+        let content = Paragraph::new(styled_lines).block(
+            Block::default()
+                .title(title_text)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Gray)),
+        );
 
         content.render(layout[1], buf);
     }
@@ -363,7 +462,10 @@ mod tests {
         let view = ReviewDetailsView::new_loading();
 
         let debug_state = view.debug_state();
-        assert_eq!(debug_state, "state: Loading");
+        assert_eq!(
+            debug_state,
+            "state: Loading, current_line: 0, scroll_offset: 0"
+        );
     }
 
     #[test]
@@ -381,6 +483,109 @@ mod tests {
         assert_eq!(keybindings[2].description, "Scroll down");
         assert_eq!(keybindings[3].key, "?");
         assert_eq!(keybindings[3].description, "Help");
+    }
+
+    #[test]
+    fn test_review_details_view_line_navigation() {
+        let review = Review::test_review(());
+        let mut view = ReviewDetailsView::new(review);
+
+        // Initial current line should be 0
+        assert_eq!(view.current_line, 0);
+
+        // Test direct line manipulation
+        view.current_line = 5;
+        assert_eq!(view.current_line, 5);
+
+        // Test reset behavior
+        view.current_line = 0;
+        assert_eq!(view.current_line, 0);
+    }
+
+    #[tokio::test]
+    async fn test_review_details_view_line_navigation_keys() {
+        let review = Review::test_review(
+            TestReviewParams::new()
+                .base_sha("abc123")
+                .target_sha("def456"),
+        );
+        let mut view = ReviewDetailsView::new(review);
+        let mut app = create_test_app().await;
+
+        // Initial current line should be 0
+        assert_eq!(view.current_line, 0);
+
+        // Check total lines - with error message, there should be 1 line
+        let total_lines = view.get_total_lines();
+        assert_eq!(total_lines, 1);
+
+        // Try to navigate down with 'j' - should not increment since we only have 1 line (index 0)
+        let key_event = KeyEvent::new(
+            KeyCode::Char('j'),
+            ratatui::crossterm::event::KeyModifiers::NONE,
+        );
+        view.handle_key_events(&mut app, &key_event).unwrap();
+        // Should stay at 0 since there's only 1 line (max index is 0)
+        assert_eq!(view.current_line, 0);
+
+        // Navigate up with 'k' - should stay at 0
+        let key_event = KeyEvent::new(
+            KeyCode::Char('k'),
+            ratatui::crossterm::event::KeyModifiers::NONE,
+        );
+        view.handle_key_events(&mut app, &key_event).unwrap();
+        assert_eq!(view.current_line, 0);
+
+        // Try to navigate up from 0 - should stay at 0
+        let key_event = KeyEvent::new(KeyCode::Up, ratatui::crossterm::event::KeyModifiers::NONE);
+        view.handle_key_events(&mut app, &key_event).unwrap();
+        assert_eq!(view.current_line, 0);
+    }
+
+    #[tokio::test]
+    async fn test_review_details_view_line_reset_on_new_review() {
+        let mut view = ReviewDetailsView::new_loading();
+        let mut app = create_test_app().await;
+
+        // Set some current line
+        view.current_line = 5;
+
+        // Load a new review - should reset current line
+        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        view.handle_app_events(&mut app, &AppEvent::ReviewLoaded(Arc::from(review)));
+
+        assert_eq!(view.current_line, 0);
+    }
+
+    #[test]
+    fn test_get_total_lines() {
+        let review = Review::test_review(());
+        let view = ReviewDetailsView::new(review);
+
+        // Should return 1 for the "Missing SHA information" message
+        let total_lines = view.get_total_lines();
+        assert_eq!(total_lines, 1);
+    }
+
+    #[test]
+    fn test_update_scroll_to_follow_current_line() {
+        let review = Review::test_review(());
+        let mut view = ReviewDetailsView::new(review);
+
+        // Test with small content height, but limited by total lines (1 line for this review)
+        view.current_line = 0; // Only line available
+        view.scroll_offset = 0;
+        view.update_scroll_to_follow_current_line(3);
+
+        // Should stay at 0 since we only have 1 line
+        assert_eq!(view.scroll_offset, 0);
+
+        // Test with artificially high current line (will be bounded)
+        view.current_line = 10; // Way beyond available content
+        view.update_scroll_to_follow_current_line(3);
+
+        // Should be bounded by max offset (0 since only 1 line)
+        assert_eq!(view.scroll_offset, 0);
     }
 
     #[tokio::test]
@@ -555,21 +760,22 @@ mod tests {
         let mut view = ReviewDetailsView::new(review);
         let mut app = create_test_app().await;
 
-        // Set initial scroll offset
+        // Set initial current line and scroll offset to test navigation
+        view.current_line = 3;
         view.scroll_offset = 3;
 
-        // Scroll up with 'k'
+        // Navigate up with 'k' - should move current line up
         let key_event = KeyEvent::new(
             KeyCode::Char('k'),
             ratatui::crossterm::event::KeyModifiers::NONE,
         );
         view.handle_key_events(&mut app, &key_event).unwrap();
-        assert_eq!(view.scroll_offset, 2);
+        assert_eq!(view.current_line, 2);
 
-        // Scroll up with arrow key
+        // Navigate up with arrow key
         let key_event = KeyEvent::new(KeyCode::Up, ratatui::crossterm::event::KeyModifiers::NONE);
         view.handle_key_events(&mut app, &key_event).unwrap();
-        assert_eq!(view.scroll_offset, 1);
+        assert_eq!(view.current_line, 1);
     }
 
     #[tokio::test]
