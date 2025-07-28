@@ -6,9 +6,11 @@ use crate::time_provider::{SystemTimeProvider, TimeProvider};
 
 const SHORT_SHA_LENGTH: usize = 7;
 
+pub type ReviewId = String;
+
 #[derive(Debug, Clone, FromRow)]
 pub struct Review {
-    pub id: String,
+    pub id: ReviewId,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub base_branch: String,

@@ -10,6 +10,7 @@ pub use git_service::GitBranchesLoadingState;
 pub use git_service::GitDiffLoadingState;
 pub use git_service::GitService;
 pub use review_service::ReviewCreateData;
+pub use review_service::ReviewLoadingState;
 pub use review_service::ReviewService;
 pub use review_service::ReviewsLoadingState;
 

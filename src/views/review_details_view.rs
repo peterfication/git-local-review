@@ -13,16 +13,9 @@ use crate::{
     app::App,
     event::AppEvent,
     models::{Diff, Review},
-    services::GitDiffLoadingState,
+    services::{GitDiffLoadingState, ReviewLoadingState},
     views::{KeyBinding, ViewHandler, ViewType},
 };
-
-#[derive(Debug, Clone)]
-enum ReviewDetailsState {
-    Loading,
-    Loaded(Arc<Review>),
-    Error(String),
-}
 
 #[derive(Debug, Clone)]
 pub enum NavigationMode {
@@ -31,8 +24,10 @@ pub enum NavigationMode {
 }
 
 pub struct ReviewDetailsView {
-    /// Current state of the review details view
-    state: ReviewDetailsState,
+    /// Current state of the review loading
+    review_state: ReviewLoadingState,
+    /// Current review being displayed if loaded
+    review: Option<Arc<Review>>,
     /// Current state of the git diff loading
     diff_state: GitDiffLoadingState,
     /// Current git diff if loaded
@@ -51,8 +46,10 @@ const CONTENT_HEIGHT: usize = 15; // Default content height for scrolling
 
 impl ReviewDetailsView {
     pub fn new(review: Review) -> Self {
+        let review_arc = Arc::from(review);
         Self {
-            state: ReviewDetailsState::Loaded(Arc::from(review)),
+            review_state: ReviewLoadingState::Loaded(review_arc.clone()),
+            review: Some(review_arc.clone()),
             diff_state: GitDiffLoadingState::Init,
             diff: Arc::new(Diff::default()),
             scroll_offset: 0,
@@ -64,7 +61,8 @@ impl ReviewDetailsView {
 
     pub fn new_loading() -> Self {
         Self {
-            state: ReviewDetailsState::Loading,
+            review_state: ReviewLoadingState::Loading,
+            review: None,
             diff_state: GitDiffLoadingState::Init,
             diff: Arc::new(Diff::default()),
             scroll_offset: 0,
@@ -93,10 +91,14 @@ impl ViewHandler for ReviewDetailsView {
         let inner_area = block.inner(area);
         block.render(area, buf);
 
-        match &self.state {
-            ReviewDetailsState::Loading => self.render_loading(inner_area, buf),
-            ReviewDetailsState::Error(error) => self.render_error(error, inner_area, buf),
-            ReviewDetailsState::Loaded(review) => self.render_loaded(review, inner_area, buf),
+        match &self.review_state {
+            ReviewLoadingState::Init => self.render_init(inner_area, buf),
+            ReviewLoadingState::Loading => self.render_loading(inner_area, buf),
+            ReviewLoadingState::Error(error) => self.render_error(error, inner_area, buf),
+            ReviewLoadingState::NotFound(review_id) => {
+                self.render_not_found(review_id, inner_area, buf)
+            }
+            ReviewLoadingState::Loaded(_review) => self.render_loaded(inner_area, buf),
         }
     }
 
@@ -114,9 +116,9 @@ impl ViewHandler for ReviewDetailsView {
 
     fn handle_app_events(&mut self, app: &mut App, event: &AppEvent) {
         match event {
-            AppEvent::ReviewLoaded(review) => self.handle_review_loaded(app, review),
-            AppEvent::ReviewNotFound(review_id) => self.handle_review_not_found(review_id),
-            AppEvent::ReviewLoadError(error) => self.handle_review_load_error(error),
+            AppEvent::ReviewLoadingState(review_loading_state) => {
+                self.handle_review_loading_state(app, review_loading_state);
+            }
             AppEvent::GitDiffLoadingState(diff_loading_state) => {
                 self.handle_git_diff_loading_state(diff_loading_state);
             }
@@ -183,35 +185,16 @@ impl ViewHandler for ReviewDetailsView {
 
     #[cfg(test)]
     fn debug_state(&self) -> String {
-        match &self.state {
-            ReviewDetailsState::Loading => format!(
-                "state: Loading, diff_state: {:?}, scroll_offset: {}, selected_file_index: {}, selected_line_index: {}, navigation_mode: {:?}",
-                self.diff_state,
-                self.scroll_offset,
-                self.selected_file_index,
-                self.selected_line_index,
-                self.navigation_mode
-            ),
-            ReviewDetailsState::Error(error) => format!(
-                "state: Error(\"{error}\"), diff_state: {:?}, scroll_offset: {}, selected_file_index: {}, selected_line_index: {}, navigation_mode: {:?}",
-                self.diff_state,
-                self.scroll_offset,
-                self.selected_file_index,
-                self.selected_line_index,
-                self.navigation_mode
-            ),
-            ReviewDetailsState::Loaded(review) => {
-                format!(
-                    "state: Loaded(review_id: \"{}\"), diff_state: {:?}, scroll_offset: {}, selected_file_index: {}, selected_line_index: {}, navigation_mode: {:?}",
-                    review.id,
-                    self.diff_state,
-                    self.scroll_offset,
-                    self.selected_file_index,
-                    self.selected_line_index,
-                    self.navigation_mode
-                )
-            }
-        }
+        format!(
+            "review_state: {:?}, review: {:?}, diff_state: {:?}, scroll_offset: {}, selected_file_index: {}, selected_line_index: {}, navigation_mode: {:?}",
+            self.review_state,
+            self.review,
+            self.diff_state,
+            self.scroll_offset,
+            self.selected_file_index,
+            self.selected_line_index,
+            self.navigation_mode
+        )
     }
 
     #[cfg(test)]
@@ -301,34 +284,27 @@ impl ReviewDetailsView {
         }
     }
 
-    /// Reset the current line and scroll offset to 0 and set the review
-    fn handle_review_loaded(&mut self, app: &mut App, review: &Arc<Review>) {
-        self.state = ReviewDetailsState::Loaded(Arc::clone(review));
+    /// Handle review loading state changes
+    fn handle_review_loading_state(&mut self, app: &mut App, loading_state: &ReviewLoadingState) {
+        self.review_state = loading_state.clone();
+        self.review = None;
         self.reset_diff_state();
 
-        // Request git diff if SHAs are available
-        if let (Some(base_sha), Some(target_sha)) = (&review.base_sha, &review.target_sha) {
-            app.events.send(AppEvent::GitDiffLoad {
-                base_sha: base_sha.clone().into(),
-                target_sha: target_sha.clone().into(),
-            });
-        } else {
-            self.diff_state = GitDiffLoadingState::Error(
-                "Missing SHA information - cannot generate diff.".into(),
-            );
+        if let ReviewLoadingState::Loaded(review) = loading_state {
+            self.review = Some(review.clone());
+
+            // Request git diff if SHAs are available
+            if let (Some(base_sha), Some(target_sha)) = (&review.base_sha, &review.target_sha) {
+                app.events.send(AppEvent::GitDiffLoad {
+                    base_sha: base_sha.clone().into(),
+                    target_sha: target_sha.clone().into(),
+                });
+            } else {
+                self.diff_state = GitDiffLoadingState::Error(
+                    "Missing SHA information - cannot generate diff.".into(),
+                );
+            }
         }
-    }
-
-    /// Reset the current line and scroll offset to 0 and set the state
-    fn handle_review_not_found(&mut self, review_id: &str) {
-        self.state = ReviewDetailsState::Error(format!("Review not found: {review_id}"));
-        self.reset_diff_state();
-    }
-
-    /// Reset the current line and scroll offset to 0 and set the state
-    fn handle_review_load_error(&mut self, error: &str) {
-        self.state = ReviewDetailsState::Error(error.to_string());
-        self.reset_diff_state();
     }
 
     /// Reset all state related to the diff view
@@ -392,11 +368,25 @@ impl ReviewDetailsView {
         self.scroll_offset = self.scroll_offset.min(max_offset);
     }
 
+    fn render_init(&self, area: Rect, buf: &mut Buffer) {
+        let loading_text = Paragraph::new("Init review...")
+            .style(Style::default().fg(Color::Yellow))
+            .block(Block::default().borders(Borders::NONE));
+        loading_text.render(area, buf);
+    }
+
     fn render_loading(&self, area: Rect, buf: &mut Buffer) {
         let loading_text = Paragraph::new("Loading review...")
             .style(Style::default().fg(Color::Yellow))
             .block(Block::default().borders(Borders::NONE));
         loading_text.render(area, buf);
+    }
+
+    fn render_not_found(&self, review_id: &str, area: Rect, buf: &mut Buffer) {
+        let error_text = Paragraph::new(format!("Review with ID '{review_id}' not found."))
+            .style(Style::default().fg(Color::Red))
+            .block(Block::default().borders(Borders::NONE));
+        error_text.render(area, buf);
     }
 
     fn render_error(&self, error: &str, area: Rect, buf: &mut Buffer) {
@@ -406,7 +396,9 @@ impl ReviewDetailsView {
         error_text.render(area, buf);
     }
 
-    fn render_loaded(&self, review: &Review, area: Rect, buf: &mut Buffer) {
+    fn render_loaded(&self, area: Rect, buf: &mut Buffer) {
+        let review = self.review.as_ref().expect("Review should be loaded");
+
         let layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -688,8 +680,8 @@ mod tests {
         let view = ReviewDetailsView::new(review.clone());
 
         assert_eq!(view.view_type(), ViewType::ReviewDetails);
-        match &view.state {
-            ReviewDetailsState::Loaded(loaded_review) => {
+        match &view.review_state {
+            ReviewLoadingState::Loaded(loaded_review) => {
                 assert_eq!(loaded_review.base_branch, "default");
             }
             _ => panic!("Expected loaded state"),
@@ -701,8 +693,8 @@ mod tests {
         let view = ReviewDetailsView::new_loading();
 
         assert_eq!(view.view_type(), ViewType::ReviewDetails);
-        match &view.state {
-            ReviewDetailsState::Loading => {}
+        match &view.review_state {
+            ReviewLoadingState::Loading => {}
             _ => panic!("Expected loading state"),
         }
     }
@@ -714,7 +706,7 @@ mod tests {
 
         let debug_state = view.debug_state();
         assert!(debug_state.contains(&review.id));
-        assert!(debug_state.starts_with("state: Loaded(review_id: \""));
+        assert!(debug_state.starts_with("review_state: Loaded"));
     }
 
     #[test]
@@ -724,7 +716,7 @@ mod tests {
         let debug_state = view.debug_state();
         assert_eq!(
             debug_state,
-            "state: Loading, diff_state: Init, scroll_offset: 0, selected_file_index: 0, selected_line_index: 0, navigation_mode: Files"
+            "review_state: Loading, review: None, diff_state: Init, scroll_offset: 0, selected_file_index: 0, selected_line_index: 0, navigation_mode: Files"
         );
     }
 
@@ -794,7 +786,10 @@ mod tests {
 
         // Load a new review - should reset current line
         let review = Review::test_review(TestReviewParams::new().base_branch("main"));
-        view.handle_app_events(&mut app, &AppEvent::ReviewLoaded(Arc::from(review)));
+        view.handle_app_events(
+            &mut app,
+            &AppEvent::ReviewLoadingState(ReviewLoadingState::Loaded(Arc::from(review))),
+        );
 
         assert_eq!(view.selected_line_index, 0);
     }
@@ -856,15 +851,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_review_details_view_handles_review_loaded_event() {
+    async fn test_review_details_view_handles_review_loading_state_loaded_event() {
         let mut view = ReviewDetailsView::new_loading();
         let review = Review::test_review(TestReviewParams::new().base_branch("main"));
         let mut app = create_test_app().await;
 
-        view.handle_app_events(&mut app, &AppEvent::ReviewLoaded(Arc::from(review)));
+        view.handle_app_events(
+            &mut app,
+            &AppEvent::ReviewLoadingState(ReviewLoadingState::Loaded(Arc::from(review))),
+        );
 
-        match &view.state {
-            ReviewDetailsState::Loaded(loaded_review) => {
+        match &view.review_state {
+            ReviewLoadingState::Loaded(loaded_review) => {
                 assert_eq!(loaded_review.base_branch, "main");
             }
             _ => panic!("Expected loaded state"),
@@ -872,33 +870,38 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_review_details_view_handles_review_load_error_event() {
+    async fn test_review_details_view_handles_review_loading_state_error_event() {
         let mut view = ReviewDetailsView::new_loading();
         let mut app = create_test_app().await;
 
         view.handle_app_events(
             &mut app,
-            &AppEvent::ReviewLoadError("Database error".into()),
+            &AppEvent::ReviewLoadingState(ReviewLoadingState::Error("Database error".into())),
         );
 
-        match &view.state {
-            ReviewDetailsState::Error(error) => {
-                assert_eq!(error, "Database error");
+        match &view.review_state {
+            ReviewLoadingState::Error(error) => {
+                assert_eq!(error.to_string(), "Database error");
             }
             _ => panic!("Expected error state"),
         }
     }
 
     #[tokio::test]
-    async fn test_review_details_view_handles_review_not_found_event() {
+    async fn test_review_details_view_handles_review_loading_state_not_found_event() {
         let mut view = ReviewDetailsView::new_loading();
         let mut app = create_test_app().await;
 
-        view.handle_app_events(&mut app, &AppEvent::ReviewNotFound("test-id".into()));
+        view.handle_app_events(
+            &mut app,
+            &AppEvent::ReviewLoadingState(ReviewLoadingState::NotFound(Arc::from(
+                "test-id".to_string(),
+            ))),
+        );
 
-        match &view.state {
-            ReviewDetailsState::Error(error) => {
-                assert_eq!(error, "Review not found: test-id");
+        match &view.review_state {
+            ReviewLoadingState::NotFound(review_id) => {
+                assert_eq!(review_id.to_string(), "test-id");
             }
             _ => panic!("Expected error state"),
         }
@@ -998,7 +1001,10 @@ mod tests {
 
         // Load a new review - should reset scroll
         let review = Review::test_review(TestReviewParams::new().base_branch("main"));
-        view.handle_app_events(&mut app, &AppEvent::ReviewLoaded(Arc::from(review)));
+        view.handle_app_events(
+            &mut app,
+            &AppEvent::ReviewLoadingState(ReviewLoadingState::Loaded(Arc::from(review))),
+        );
 
         assert_eq!(view.scroll_offset, 0);
     }
@@ -1015,7 +1021,7 @@ mod tests {
         // Trigger an error - should reset scroll
         view.handle_app_events(
             &mut app,
-            &AppEvent::ReviewLoadError("Database error".into()),
+            &AppEvent::ReviewLoadingState(ReviewLoadingState::Error("Database error".into())),
         );
 
         assert_eq!(view.scroll_offset, 0);
@@ -1034,12 +1040,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_review_details_view_render_error_state() {
-        let mut view = ReviewDetailsView::new_loading();
-        view.state = ReviewDetailsState::Error("Database connection failed".to_string());
-        let app = App {
+        let view = ReviewDetailsView::new_loading();
+        let mut app = App {
             view_stack: vec![Box::new(view)],
             ..create_test_app().await
         };
+        app.handle_app_events(&AppEvent::ReviewLoadingState(ReviewLoadingState::Error(
+            "Database connection failed".into(),
+        )));
 
         assert_snapshot!(render_app_to_terminal_backend(app))
     }
