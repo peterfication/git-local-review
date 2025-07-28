@@ -227,7 +227,11 @@ impl GitService {
             })
             .collect();
 
-        Ok(Diff::from_files(diff_files))
+        // Sort files by path
+        let mut sorted_diff_files = diff_files;
+        sorted_diff_files.sort_by(|a, b| a.path.cmp(&b.path));
+
+        Ok(Diff::from_files(sorted_diff_files))
     }
 
     /// Send loading event to start the actual loading process
