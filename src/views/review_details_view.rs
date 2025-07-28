@@ -392,6 +392,23 @@ impl ReviewDetailsView {
 
     /// Render the files list panel
     fn render_files_list(&self, area: Rect, buf: &mut Buffer) {
+        if let GitDiffLoadingState::Loaded(diff) = &self.diff_state {
+            if diff.is_empty() {
+                // Show empty state when no files are available
+                let empty_text = Paragraph::new("No files to display")
+                    .style(Style::default().fg(Color::Gray))
+                    .block(
+                        Block::default()
+                            .title(" Files ")
+                            .borders(Borders::ALL)
+                            .border_style(Style::default().fg(Color::Gray)),
+                    );
+
+                empty_text.render(area, buf);
+                return;
+            }
+        }
+
         let files_lines: Vec<Line> = self
             .files
             .iter()
@@ -440,6 +457,23 @@ impl ReviewDetailsView {
 
     /// Render the diff content panel
     fn render_diff_content(&self, area: Rect, buf: &mut Buffer) {
+        if let GitDiffLoadingState::Loaded(diff) = &self.diff_state {
+            if diff.is_empty() {
+                // Show empty state when no files are available
+                let empty_text = Paragraph::new("No diff to display")
+                    .style(Style::default().fg(Color::Gray))
+                    .block(
+                        Block::default()
+                            .title(" Files ")
+                            .borders(Borders::ALL)
+                            .border_style(Style::default().fg(Color::Gray)),
+                    );
+
+                empty_text.render(area, buf);
+                return;
+            }
+        }
+
         let content_text = if let Some(file) = self.files.get(self.selected_file_index) {
             &file.content
         } else {

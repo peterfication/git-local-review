@@ -246,17 +246,8 @@ impl GitService {
     ) {
         match Self::get_diff_between_shas(".", base_sha, target_sha) {
             Ok(diff) => {
-                let final_diff = if diff.is_empty() {
-                    // Create a single file with no-differences message
-                    Diff::from_files(vec![DiffFile {
-                        path: "No changes".to_string(),
-                        content: "No differences found between the two commits.".to_string(),
-                    }])
-                } else {
-                    diff
-                };
                 events.send(AppEvent::GitDiffLoadingState(GitDiffLoadingState::Loaded(
-                    Arc::new(final_diff),
+                    Arc::new(diff),
                 )));
             }
             Err(error) => {
