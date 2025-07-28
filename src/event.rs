@@ -8,7 +8,9 @@ use tokio::sync::mpsc;
 
 use crate::{
     models::Review,
-    services::{GitBranchesLoadingState, ReviewCreateData, ReviewsLoadingState},
+    services::{
+        GitBranchesLoadingState, GitDiffLoadingState, ReviewCreateData, ReviewsLoadingState,
+    },
     views::KeyBinding,
 };
 
@@ -96,6 +98,19 @@ pub enum AppEvent {
     GitBranchesLoading,
     /// Propagates the current loading state of Git branches.
     GitBranchesLoadingState(GitBranchesLoadingState),
+
+    /// Trigger loading of Git diff between two SHAs.
+    GitDiffLoad {
+        base_sha: Arc<str>,
+        target_sha: Arc<str>,
+    },
+    /// Load the Git diff
+    GitDiffLoading {
+        base_sha: Arc<str>,
+        target_sha: Arc<str>,
+    },
+    /// Propagates the current loading state of Git diff.
+    GitDiffLoadingState(GitDiffLoadingState),
 }
 
 /// Terminal event handler.
