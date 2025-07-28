@@ -428,45 +428,53 @@ impl ReviewDetailsView {
 
         title_content.render(layout[0], buf);
 
+        self.render_loaded_diff_state(layout[1], buf);
+    }
+
+    /// Render the diff content based on the current diff state
+    fn render_loaded_diff_state(&self, area: Rect, buf: &mut Buffer) {
         match &self.diff_state {
             GitDiffLoadingState::Init => {
                 // Show loading state for diff
                 let loading_text = Paragraph::new("Init diff...")
                     .style(Style::default().fg(Color::Yellow))
                     .block(Block::default().borders(Borders::ALL));
-                loading_text.render(layout[1], buf);
+                loading_text.render(area, buf);
             }
             GitDiffLoadingState::Loading => {
                 // Show loading state for diff
                 let loading_text = Paragraph::new("Loading diff...")
                     .style(Style::default().fg(Color::Yellow))
                     .block(Block::default().borders(Borders::ALL));
-                loading_text.render(layout[1], buf);
+                loading_text.render(area, buf);
             }
-            GitDiffLoadingState::Loaded(_diff) => {
-                // Split content area into files list (20%) and diff content (80%)
-                let content_layout = Layout::default()
-                    .direction(Direction::Horizontal)
-                    .constraints([
-                        Constraint::Percentage(20), // Files list
-                        Constraint::Percentage(80), // Diff content
-                    ])
-                    .split(layout[1]);
-
-                // Render files list
-                self.render_files_list(content_layout[0], buf);
-
-                // Render diff content
-                self.render_diff_content(content_layout[1], buf);
-            }
+            GitDiffLoadingState::Loaded(_diff) => self.render_loaded_diff_state_loaded(area, buf),
             GitDiffLoadingState::Error(error) => {
                 // Show error state for diff
                 let error_text = Paragraph::new(format!("Diff error: {error}"))
                     .style(Style::default().fg(Color::Red))
                     .block(Block::default().borders(Borders::ALL));
-                error_text.render(layout[1], buf);
+                error_text.render(area, buf);
             }
         }
+    }
+
+    /// Render the loaded diff content (file list, file content) when the diff is fully loaded
+    fn render_loaded_diff_state_loaded(&self, area: Rect, buf: &mut Buffer) {
+        // Split content area into files list (20%) and diff content (80%)
+        let content_layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(20), // Files list
+                Constraint::Percentage(80), // Diff content
+            ])
+            .split(area);
+
+        // Render files list
+        self.render_files_list(content_layout[0], buf);
+
+        // Render diff content
+        self.render_diff_content(content_layout[1], buf);
     }
 
     /// Render the files list panel
