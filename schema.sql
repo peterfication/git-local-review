@@ -11,3 +11,14 @@ CREATE TABLE reviews (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 , base_branch TEXT NOT NULL, target_branch TEXT NOT NULL, base_sha TEXT, target_sha TEXT);
+CREATE TABLE file_views (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    review_id TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE,
+    UNIQUE(review_id, file_path)
+);
+CREATE TABLE sqlite_sequence(name,seq);
+CREATE INDEX idx_file_views_review_id ON file_views(review_id);
+CREATE INDEX idx_file_views_review_file ON file_views(review_id, file_path);

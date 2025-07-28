@@ -114,6 +114,38 @@ pub enum AppEvent {
     },
     /// Propagates the current loading state of Git diff.
     GitDiffLoadingState(GitDiffLoadingState),
+
+    /// Toggle the view status of a file for a review.
+    FileViewToggle {
+        review_id: Arc<ReviewId>,
+        file_path: Arc<str>,
+    },
+    /// File view status was toggled successfully.
+    FileViewToggled {
+        review_id: Arc<ReviewId>,
+        file_path: Arc<str>,
+        is_viewed: bool,
+    },
+    /// Error occurred while toggling file view status.
+    FileViewToggleError {
+        review_id: Arc<ReviewId>,
+        file_path: Arc<str>,
+        error: Arc<str>,
+    },
+    /// Load the viewed files for a review.
+    FileViewsLoad { review_id: Arc<ReviewId> },
+    /// File views are being loaded.
+    FileViewsLoading { review_id: Arc<ReviewId> },
+    /// File views were loaded successfully.
+    FileViewsLoaded {
+        review_id: Arc<ReviewId>,
+        viewed_files: Arc<Vec<String>>,
+    },
+    /// Error occurred while loading file views.
+    FileViewsLoadError {
+        review_id: Arc<ReviewId>,
+        error: Arc<str>,
+    },
 }
 
 /// Terminal event handler.

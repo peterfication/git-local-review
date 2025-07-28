@@ -5,7 +5,7 @@ use ratatui::crossterm::event::KeyEvent;
 use crate::{
     app::App,
     event::{AppEvent, Event},
-    services::{GitService, ReviewService, ServiceHandler},
+    services::{FileViewService, GitService, ReviewService, ServiceHandler},
     views::{
         ConfirmationDialogView, HelpModalView, KeyBinding, ReviewCreateView, ReviewDetailsView,
     },
@@ -68,6 +68,7 @@ impl EventProcessor {
         let services = vec![
             ReviewService::handle_app_event,
             GitService::handle_app_event,
+            FileViewService::handle_app_event,
         ];
 
         for handler in services {

@@ -3,9 +3,11 @@ use std::future::Future;
 use crate::database::Database;
 use crate::event::{AppEvent, EventHandler};
 
+pub mod file_view_service;
 pub mod git_service;
 pub mod review_service;
 
+pub use file_view_service::FileViewService;
 pub use git_service::GitBranchesLoadingState;
 pub use git_service::GitDiffLoadingState;
 pub use git_service::GitService;
