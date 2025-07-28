@@ -882,4 +882,66 @@ mod tests {
         // Since the content is a single line, max offset should be 0
         assert_eq!(max_offset, 0);
     }
+
+    #[tokio::test]
+    async fn test_review_details_view_render_with_diff_content() {
+        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let mut view = ReviewDetailsView::new(review);
+
+        // Simulate diff content being loaded
+        let diff_content = r#"@@ -1,3 +1,4 @@
+ # Test Repository
++
+ This is a test file
+-Old line to remove
++New line to add"#;
+        view.diff_state = GitDiffLoadingState::Loaded(diff_content.into());
+
+        let app = App {
+            view_stack: vec![Box::new(view)],
+            ..create_test_app().await
+        };
+
+        assert_snapshot!(render_app_to_terminal_backend(app))
+    }
+
+    #[tokio::test]
+    async fn test_review_details_view_render_with_diff_loading() {
+        let review = Review::test_review(
+            TestReviewParams::new()
+                .base_branch("develop")
+                .base_sha("asdf1234"),
+        );
+        let mut view = ReviewDetailsView::new(review);
+
+        // Simulate diff loading state
+        view.diff_state = GitDiffLoadingState::Loading;
+
+        let app = App {
+            view_stack: vec![Box::new(view)],
+            ..create_test_app().await
+        };
+
+        assert_snapshot!(render_app_to_terminal_backend(app))
+    }
+
+    #[tokio::test]
+    async fn test_review_details_view_render_with_diff_error() {
+        let review = Review::test_review(
+            TestReviewParams::new()
+                .base_branch("feature")
+                .base_sha("jkl09876"),
+        );
+        let mut view = ReviewDetailsView::new(review);
+
+        // Simulate diff error state
+        view.diff_state = GitDiffLoadingState::Error("Repository not found".into());
+
+        let app = App {
+            view_stack: vec![Box::new(view)],
+            ..create_test_app().await
+        };
+
+        assert_snapshot!(render_app_to_terminal_backend(app))
+    }
 }
