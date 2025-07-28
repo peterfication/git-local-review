@@ -13,7 +13,7 @@ use crate::{
     app::App,
     event::AppEvent,
     models::Review,
-    services::GitService,
+    services::GitDiffLoadingState,
     views::{KeyBinding, ViewHandler, ViewType},
 };
 
@@ -26,6 +26,7 @@ enum ReviewDetailsState {
 
 pub struct ReviewDetailsView {
     state: ReviewDetailsState,
+    diff_state: GitDiffLoadingState,
     scroll_offset: usize,
     current_line: usize,
 }
@@ -36,6 +37,7 @@ impl ReviewDetailsView {
     pub fn new(review: Review) -> Self {
         Self {
             state: ReviewDetailsState::Loaded(Arc::from(review)),
+            diff_state: GitDiffLoadingState::Init,
             scroll_offset: 0,
             current_line: 0,
         }
@@ -44,6 +46,7 @@ impl ReviewDetailsView {
     pub fn new_loading() -> Self {
         Self {
             state: ReviewDetailsState::Loading,
+            diff_state: GitDiffLoadingState::Init,
             scroll_offset: 0,
             current_line: 0,
         }
@@ -86,11 +89,14 @@ impl ViewHandler for ReviewDetailsView {
         Ok(())
     }
 
-    fn handle_app_events(&mut self, _app: &mut App, event: &AppEvent) {
+    fn handle_app_events(&mut self, app: &mut App, event: &AppEvent) {
         match event {
-            AppEvent::ReviewLoaded(review) => self.handle_review_loaded(review),
+            AppEvent::ReviewLoaded(review) => self.handle_review_loaded(app, review),
             AppEvent::ReviewNotFound(review_id) => self.handle_review_not_found(review_id),
             AppEvent::ReviewLoadError(error) => self.handle_review_load_error(error),
+            AppEvent::GitDiffLoadingState(diff_loading_state) => {
+                self.handle_git_diff_loading_state(diff_loading_state);
+            }
             _ => {
                 // Other events are not handled by this view
             }
@@ -146,17 +152,17 @@ impl ViewHandler for ReviewDetailsView {
     fn debug_state(&self) -> String {
         match &self.state {
             ReviewDetailsState::Loading => format!(
-                "state: Loading, current_line: {}, scroll_offset: {}",
-                self.current_line, self.scroll_offset
+                "state: Loading, diff_state: {:?}, current_line: {}, scroll_offset: {}",
+                self.diff_state, self.current_line, self.scroll_offset
             ),
             ReviewDetailsState::Error(error) => format!(
-                "state: Error(\"{error}\"), current_line: {}, scroll_offset: {}",
-                self.current_line, self.scroll_offset
+                "state: Error(\"{error}\"), diff_state: {:?}, current_line: {}, scroll_offset: {}",
+                self.diff_state, self.current_line, self.scroll_offset
             ),
             ReviewDetailsState::Loaded(review) => {
                 format!(
-                    "state: Loaded(review_id: \"{}\"), current_line: {}, scroll_offset: {}",
-                    review.id, self.current_line, self.scroll_offset
+                    "state: Loaded(review_id: \"{}\"), diff_state: {:?}, current_line: {}, scroll_offset: {}",
+                    review.id, self.diff_state, self.current_line, self.scroll_offset
                 )
             }
         }
@@ -204,15 +210,29 @@ impl ReviewDetailsView {
     }
 
     /// Reset the current line and scroll offset to 0 and set the review
-    fn handle_review_loaded(&mut self, review: &Arc<Review>) {
+    fn handle_review_loaded(&mut self, app: &mut App, review: &Arc<Review>) {
         self.state = ReviewDetailsState::Loaded(Arc::clone(review));
         self.scroll_offset = 0; // Reset scroll when new review is loaded
         self.current_line = 0; // Reset current line when new review is loaded
+        self.diff_state = GitDiffLoadingState::Init; // Reset diff state
+
+        // Request git diff if SHAs are available
+        if let (Some(base_sha), Some(target_sha)) = (&review.base_sha, &review.target_sha) {
+            app.events.send(AppEvent::GitDiffLoad {
+                base_sha: base_sha.clone().into(),
+                target_sha: target_sha.clone().into(),
+            });
+        } else {
+            self.diff_state = GitDiffLoadingState::Error(
+                "Missing SHA information - cannot generate diff.".into(),
+            );
+        }
     }
 
     /// Reset the current line and scroll offset to 0 and set the state
     fn handle_review_not_found(&mut self, review_id: &str) {
         self.state = ReviewDetailsState::Error(format!("Review not found: {review_id}"));
+        self.diff_state = GitDiffLoadingState::Init;
         self.scroll_offset = 0; // Reset scroll on error
         self.current_line = 0; // Reset current line on error
     }
@@ -220,33 +240,31 @@ impl ReviewDetailsView {
     /// Reset the current line and scroll offset to 0 and set the state
     fn handle_review_load_error(&mut self, error: &str) {
         self.state = ReviewDetailsState::Error(error.to_string());
+        self.diff_state = GitDiffLoadingState::Init;
         self.scroll_offset = 0; // Reset scroll on error
         self.current_line = 0; // Reset current line on error
     }
 
-    /// Get the diff content for the current review
-    fn get_diff_content(&self, review: &Review) -> String {
-        if let (Some(base_sha), Some(target_sha)) = (&review.base_sha, &review.target_sha) {
-            match GitService::get_diff_between_shas(".", base_sha, target_sha) {
-                Ok(diff) => {
-                    if diff.is_empty() {
-                        "No differences found between the two commits.".to_string()
-                    } else {
-                        diff
-                    }
-                }
-                Err(err) => format!("Error generating diff: {err}"),
-            }
-        } else {
-            "Missing SHA information - cannot generate diff.".to_string()
+    /// Handle git diff loading state changes
+    fn handle_git_diff_loading_state(&mut self, loading_state: &GitDiffLoadingState) {
+        self.diff_state = loading_state.clone();
+    }
+
+    /// Get the diff content for the current diff state
+    fn get_diff_content(&self) -> String {
+        match &self.diff_state {
+            GitDiffLoadingState::Init => "Initializing diff...".to_string(),
+            GitDiffLoadingState::Loading => "Loading diff...".to_string(),
+            GitDiffLoadingState::Loaded(diff) => diff.to_string(),
+            GitDiffLoadingState::Error(error) => error.to_string(),
         }
     }
 
     /// Get the total number of lines in the content
     fn get_total_lines(&self) -> usize {
         match &self.state {
-            ReviewDetailsState::Loaded(review) => {
-                let content = self.get_diff_content(review);
+            ReviewDetailsState::Loaded(_) => {
+                let content = self.get_diff_content();
                 content.lines().count()
             }
             _ => 0,
@@ -323,8 +341,8 @@ impl ReviewDetailsView {
 
         title_content.render(layout[0], buf);
 
-        // Content section - show diff if SHAs are available
-        let content_text = self.get_diff_content(review);
+        // Content section - show diff
+        let content_text = self.get_diff_content();
 
         // Split content into lines and apply scrolling with highlighting
         let content_lines: Vec<&str> = content_text.lines().collect();
@@ -464,7 +482,7 @@ mod tests {
         let debug_state = view.debug_state();
         assert_eq!(
             debug_state,
-            "state: Loading, current_line: 0, scroll_offset: 0"
+            "state: Loading, diff_state: Init, current_line: 0, scroll_offset: 0"
         );
     }
 
@@ -835,9 +853,9 @@ mod tests {
         );
         let view = ReviewDetailsView::new(review);
 
-        // This will return an error since we're not in a git repo, but we can test the structure
-        let content = view.get_diff_content(view.state.as_ref().unwrap());
-        assert!(content.contains("Error generating diff"));
+        // This will show "Missing SHA information" since we don't have SHAs set up for diff loading
+        let content = view.get_diff_content();
+        assert!(content.contains("Initializing diff"));
     }
 
     #[test]
@@ -846,9 +864,9 @@ mod tests {
         let view = ReviewDetailsView::new(review);
 
         match &view.state {
-            ReviewDetailsState::Loaded(review) => {
-                let content = view.get_diff_content(review);
-                assert_eq!(content, "Missing SHA information - cannot generate diff.");
+            ReviewDetailsState::Loaded(_) => {
+                let content = view.get_diff_content();
+                assert_eq!(content, "Initializing diff...");
             }
             _ => panic!("Expected loaded state"),
         }
@@ -863,15 +881,5 @@ mod tests {
         let max_offset = view.get_max_scroll_offset(5);
         // Since the content is a single line, max offset should be 0
         assert_eq!(max_offset, 0);
-    }
-
-    impl ReviewDetailsState {
-        #[cfg(test)]
-        fn as_ref(&self) -> Option<&Arc<Review>> {
-            match self {
-                ReviewDetailsState::Loaded(review) => Some(review),
-                _ => None,
-            }
-        }
     }
 }

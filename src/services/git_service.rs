@@ -21,6 +21,20 @@ pub enum GitBranchesLoadingState {
     Error(Arc<str>),
 }
 
+/// State of Git diff loading process
+#[derive(Debug, Clone, PartialEq, Default)]
+pub enum GitDiffLoadingState {
+    /// Initial state - no loading has been attempted
+    #[default]
+    Init,
+    /// Currently loading diff from Git repository
+    Loading,
+    /// Diff has been successfully loaded
+    Loaded(Arc<str>),
+    /// Error occurred during loading
+    Error(Arc<str>),
+}
+
 pub struct GitService;
 
 impl GitService {
@@ -113,6 +127,15 @@ impl GitService {
         ));
     }
 
+    /// Send loading event to start the diff loading process
+    fn handle_git_diff_load(base_sha: &Arc<str>, target_sha: &Arc<str>, events: &mut EventHandler) {
+        events.send(AppEvent::GitDiffLoading {
+            base_sha: Arc::clone(base_sha),
+            target_sha: Arc::clone(target_sha),
+        });
+        events.send(AppEvent::GitDiffLoadingState(GitDiffLoadingState::Loading));
+    }
+
     /// Actually load Git branches from repository
     async fn handle_git_branches_loading(events: &mut EventHandler) {
         match Self::get_branches(".") {
@@ -125,6 +148,31 @@ impl GitService {
                 events.send(AppEvent::GitBranchesLoadingState(
                     GitBranchesLoadingState::Error(error.to_string().into()),
                 ));
+            }
+        }
+    }
+
+    /// Actually load Git diff from repository
+    async fn handle_git_diff_loading(
+        base_sha: &Arc<str>,
+        target_sha: &Arc<str>,
+        events: &mut EventHandler,
+    ) {
+        match Self::get_diff_between_shas(".", base_sha, target_sha) {
+            Ok(diff) => {
+                let diff_content = if diff.is_empty() {
+                    "No differences found between the two commits.".to_string()
+                } else {
+                    diff
+                };
+                events.send(AppEvent::GitDiffLoadingState(GitDiffLoadingState::Loaded(
+                    diff_content.into(),
+                )));
+            }
+            Err(error) => {
+                events.send(AppEvent::GitDiffLoadingState(GitDiffLoadingState::Error(
+                    format!("Error generating diff: {error}").into(),
+                )));
             }
         }
     }
@@ -143,6 +191,18 @@ impl ServiceHandler for GitService {
                 }
                 AppEvent::GitBranchesLoading => {
                     Self::handle_git_branches_loading(events).await;
+                }
+                AppEvent::GitDiffLoad {
+                    base_sha,
+                    target_sha,
+                } => {
+                    Self::handle_git_diff_load(base_sha, target_sha, events);
+                }
+                AppEvent::GitDiffLoading {
+                    base_sha,
+                    target_sha,
+                } => {
+                    Self::handle_git_diff_loading(base_sha, target_sha, events).await;
                 }
                 _ => {
                     // Other events are ignored

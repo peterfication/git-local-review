@@ -7,6 +7,7 @@ pub mod git_service;
 pub mod review_service;
 
 pub use git_service::GitBranchesLoadingState;
+pub use git_service::GitDiffLoadingState;
 pub use git_service::GitService;
 pub use review_service::ReviewCreateData;
 pub use review_service::ReviewService;
