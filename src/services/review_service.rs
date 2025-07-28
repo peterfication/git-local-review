@@ -5,7 +5,7 @@ use super::ServiceHandler;
 use crate::{
     database::Database,
     event::{AppEvent, EventHandler},
-    models::Review,
+    models::{Review, ReviewId},
     services::git_service::GitService,
 };
 
@@ -26,6 +26,21 @@ pub enum ReviewsLoadingState {
     Loading,
     /// Reviews have been successfully loaded
     Loaded(Arc<[Review]>),
+    /// Error occurred during loading
+    Error(Arc<str>),
+}
+
+/// State of single review loading process
+#[derive(Debug, Clone, PartialEq)]
+pub enum ReviewLoadingState {
+    /// Initial state - no loading has been attempted
+    Init,
+    /// Currently loading review from database
+    Loading,
+    /// Review has been successfully loaded
+    Loaded(Arc<Review>),
+    /// Review was not found
+    NotFound(Arc<ReviewId>),
     /// Error occurred during loading
     Error(Arc<str>),
 }
@@ -186,18 +201,26 @@ impl ReviewService {
 
     /// Handle loading a single review by ID
     async fn handle_review_load(review_id: &str, database: &Database, events: &mut EventHandler) {
+        events.send(AppEvent::ReviewLoadingState(ReviewLoadingState::Loading));
+
         match Review::find_by_id(database.pool(), review_id).await {
             Ok(Some(review)) => {
                 log::debug!("Loaded review with ID {}", review.id);
-                events.send(AppEvent::ReviewLoaded(Arc::from(review)));
+                events.send(AppEvent::ReviewLoadingState(ReviewLoadingState::Loaded(
+                    Arc::from(review),
+                )));
             }
             Ok(None) => {
                 log::warn!("No review found with ID: {review_id}");
-                events.send(AppEvent::ReviewNotFound(review_id.into()));
+                events.send(AppEvent::ReviewLoadingState(ReviewLoadingState::NotFound(
+                    Arc::from(review_id.to_string()),
+                )));
             }
             Err(error) => {
                 log::error!("Error loading review by ID: {error}");
-                events.send(AppEvent::ReviewLoadError(error.to_string().into()));
+                events.send(AppEvent::ReviewLoadingState(ReviewLoadingState::Error(
+                    error.to_string().into(),
+                )));
             }
         }
     }
@@ -735,15 +758,24 @@ mod tests {
         .await
         .unwrap();
 
-        // Should send ReviewLoaded event
+        // Should send ReviewLoadingState events
         assert!(events.has_pending_events());
-        let event = events.try_recv().unwrap();
-        match &*event {
-            Event::App(AppEvent::ReviewLoaded(loaded_review)) => {
+
+        // First event should be Loading
+        let event1 = events.try_recv().unwrap();
+        match &*event1 {
+            Event::App(AppEvent::ReviewLoadingState(ReviewLoadingState::Loading)) => {}
+            _ => panic!("Expected ReviewLoadingState::Loading event, got: {event1:?}"),
+        }
+
+        // Second event should be Loaded with the review
+        let event2 = events.try_recv().unwrap();
+        match &*event2 {
+            Event::App(AppEvent::ReviewLoadingState(ReviewLoadingState::Loaded(loaded_review))) => {
                 assert_eq!(loaded_review.id, review.id);
                 assert_eq!(loaded_review.base_branch, "default");
             }
-            _ => panic!("Expected ReviewLoaded event"),
+            _ => panic!("Expected ReviewLoadingState::Loaded event, got: {event2:?}"),
         }
     }
 
@@ -762,14 +794,23 @@ mod tests {
         .await
         .unwrap();
 
-        // Should send ReviewNotFound event
+        // Should send ReviewLoadingState events
         assert!(events.has_pending_events());
-        let event = events.try_recv().unwrap();
-        match &*event {
-            Event::App(AppEvent::ReviewNotFound(review_id)) => {
+
+        // First event should be Loading
+        let event1 = events.try_recv().unwrap();
+        match &*event1 {
+            Event::App(AppEvent::ReviewLoadingState(ReviewLoadingState::Loading)) => {}
+            _ => panic!("Expected ReviewLoadingState::Loading event, got: {event1:?}"),
+        }
+
+        // Second event should be NotFound
+        let event2 = events.try_recv().unwrap();
+        match &*event2 {
+            Event::App(AppEvent::ReviewLoadingState(ReviewLoadingState::NotFound(review_id))) => {
                 assert_eq!(review_id.as_ref(), non_existent_id);
             }
-            _ => panic!("Expected ReviewNotFound event"),
+            _ => panic!("Expected ReviewLoadingState::NotFound event, got: {event2:?}"),
         }
     }
 
@@ -789,14 +830,23 @@ mod tests {
         .await
         .unwrap();
 
-        // Should send ReviewLoadError event
+        // Should send ReviewLoadingState events
         assert!(events.has_pending_events());
-        let event = events.try_recv().unwrap();
-        match &*event {
-            Event::App(AppEvent::ReviewLoadError(error)) => {
+
+        // First event should be Loading
+        let event1 = events.try_recv().unwrap();
+        match &*event1 {
+            Event::App(AppEvent::ReviewLoadingState(ReviewLoadingState::Loading)) => {}
+            _ => panic!("Expected ReviewLoadingState::Loading event, got: {event1:?}"),
+        }
+
+        // Second event should be Error
+        let event2 = events.try_recv().unwrap();
+        match &*event2 {
+            Event::App(AppEvent::ReviewLoadingState(ReviewLoadingState::Error(error))) => {
                 assert!(error.contains("no such table: reviews"));
             }
-            _ => panic!("Expected ReviewLoadError event"),
+            _ => panic!("Expected ReviewLoadingState::Error event, got: {event2:?}"),
         }
     }
 }

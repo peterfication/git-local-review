@@ -9,7 +9,8 @@ use tokio::sync::mpsc;
 use crate::{
     models::Review,
     services::{
-        GitBranchesLoadingState, GitDiffLoadingState, ReviewCreateData, ReviewsLoadingState,
+        GitBranchesLoadingState, GitDiffLoadingState, ReviewCreateData, ReviewLoadingState,
+        ReviewsLoadingState,
     },
     views::KeyBinding,
 };
@@ -59,6 +60,8 @@ pub enum AppEvent {
     ReviewsLoadingState(ReviewsLoadingState),
     /// Load a single review by ID.
     ReviewLoad(Arc<ReviewId>),
+    /// Propagates the current loading state of a single review.
+    ReviewLoadingState(ReviewLoadingState),
     /// Single review loaded successfully.
     ReviewLoaded(Arc<Review>),
     /// Review was not found.
