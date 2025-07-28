@@ -23,6 +23,12 @@ pub enum NavigationMode {
     Lines,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum FileListType {
+    NotViewed,
+    Viewed,
+}
+
 pub struct ReviewDetailsView {
     /// Current state of the review loading
     review_state: ReviewLoadingState,
@@ -40,6 +46,10 @@ pub struct ReviewDetailsView {
     selected_line_index: usize,
     /// Current navigation mode (content box)
     navigation_mode: NavigationMode,
+    /// Currently active file list (not viewed or viewed)
+    active_file_list: FileListType,
+    /// List of viewed file paths for the current review
+    viewed_files: Arc<Vec<String>>,
 }
 
 const CONTENT_HEIGHT: usize = 15; // Default content height for scrolling
@@ -56,6 +66,8 @@ impl ReviewDetailsView {
             selected_file_index: 0,
             selected_line_index: 0,
             navigation_mode: NavigationMode::Files,
+            active_file_list: FileListType::NotViewed,
+            viewed_files: Arc::new(vec![]),
         }
     }
 
@@ -69,6 +81,8 @@ impl ReviewDetailsView {
             selected_file_index: 0,
             selected_line_index: 0,
             navigation_mode: NavigationMode::Files,
+            active_file_list: FileListType::NotViewed,
+            viewed_files: Arc::new(vec![]),
         }
     }
 }
@@ -106,7 +120,10 @@ impl ViewHandler for ReviewDetailsView {
         match key_event.code {
             KeyCode::Up | KeyCode::Char('k') => self.go_up(),
             KeyCode::Down | KeyCode::Char('j') => self.go_down(),
+            KeyCode::Left | KeyCode::Char('h') => self.switch_file_list_left(),
+            KeyCode::Right | KeyCode::Char('l') => self.switch_file_list_right(),
             KeyCode::Enter => self.toggle_navigation_mode(),
+            KeyCode::Char(' ') => self.toggle_file_view_status(app),
             KeyCode::Esc => self.handle_esc(app),
             KeyCode::Char('?') => self.help(app),
             _ => {}
@@ -121,6 +138,19 @@ impl ViewHandler for ReviewDetailsView {
             }
             AppEvent::GitDiffLoadingState(diff_loading_state) => {
                 self.handle_git_diff_loading_state(diff_loading_state);
+            }
+            AppEvent::FileViewsLoaded {
+                review_id,
+                viewed_files,
+            } => {
+                self.handle_file_views_loaded(review_id, viewed_files);
+            }
+            AppEvent::FileViewToggled {
+                review_id: _,
+                file_path: _,
+                is_viewed: _,
+            } => {
+                // File view status changed, file views will be reloaded automatically
             }
             _ => {
                 // Other events are not handled by this view
@@ -145,6 +175,36 @@ impl ViewHandler for ReviewDetailsView {
                 description: "Scroll down".to_string(),
                 key_event: KeyEvent {
                     code: KeyCode::Down,
+                    modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
+                    kind: ratatui::crossterm::event::KeyEventKind::Press,
+                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                },
+            },
+            KeyBinding {
+                key: "←/h".to_string(),
+                description: "Switch to not viewed files".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Left,
+                    modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
+                    kind: ratatui::crossterm::event::KeyEventKind::Press,
+                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                },
+            },
+            KeyBinding {
+                key: "→/l".to_string(),
+                description: "Switch to viewed files".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Right,
+                    modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
+                    kind: ratatui::crossterm::event::KeyEventKind::Press,
+                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                },
+            },
+            KeyBinding {
+                key: "Space".to_string(),
+                description: "Toggle file view status".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Char(' '),
                     modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
                     kind: ratatui::crossterm::event::KeyEventKind::Press,
                     state: ratatui::crossterm::event::KeyEventState::empty(),
@@ -186,14 +246,16 @@ impl ViewHandler for ReviewDetailsView {
     #[cfg(test)]
     fn debug_state(&self) -> String {
         format!(
-            "review_state: {:?}, review: {:?}, diff_state: {:?}, scroll_offset: {}, selected_file_index: {}, selected_line_index: {}, navigation_mode: {:?}",
+            "review_state: {:?}, review: {:?}, diff_state: {:?}, scroll_offset: {}, selected_file_index: {}, selected_line_index: {}, navigation_mode: {:?}, active_file_list: {:?}, viewed_files: {:?}",
             self.review_state,
             self.review,
             self.diff_state,
             self.scroll_offset,
             self.selected_file_index,
             self.selected_line_index,
-            self.navigation_mode
+            self.navigation_mode,
+            self.active_file_list,
+            self.viewed_files
         )
     }
 
@@ -237,7 +299,8 @@ impl ReviewDetailsView {
     fn go_down(&mut self) {
         match self.navigation_mode {
             NavigationMode::Files => {
-                if self.selected_file_index < self.diff.files.len().saturating_sub(1) {
+                let current_files = self.get_current_file_list();
+                if self.selected_file_index < current_files.len().saturating_sub(1) {
                     self.selected_file_index += 1;
                     self.selected_line_index = 0;
                     self.scroll_offset = 0;
@@ -257,7 +320,8 @@ impl ReviewDetailsView {
     fn toggle_navigation_mode(&mut self) {
         match self.navigation_mode {
             NavigationMode::Files => {
-                if !self.diff.files.is_empty() {
+                let current_files = self.get_current_file_list();
+                if !current_files.is_empty() {
                     self.navigation_mode = NavigationMode::Lines;
                     self.selected_line_index = 0;
                 }
@@ -304,6 +368,11 @@ impl ReviewDetailsView {
                     "Missing SHA information - cannot generate diff.".into(),
                 );
             }
+
+            // Load file views for this review
+            app.events.send(AppEvent::FileViewsLoad {
+                review_id: review.id.clone().into(),
+            });
         }
     }
 
@@ -315,6 +384,8 @@ impl ReviewDetailsView {
         self.selected_file_index = 0;
         self.selected_line_index = 0;
         self.navigation_mode = NavigationMode::Files;
+        self.active_file_list = FileListType::NotViewed;
+        self.viewed_files = Arc::new(vec![]);
     }
 
     /// Handle git diff loading state changes
@@ -332,7 +403,7 @@ impl ReviewDetailsView {
 
     /// Get the number of lines in the currently selected file
     fn get_current_file_lines(&self) -> usize {
-        if let Some(file) = self.diff.files.get(self.selected_file_index) {
+        if let Some(file) = self.get_selected_file() {
             file.content.lines().count()
         } else {
             0
@@ -366,6 +437,76 @@ impl ReviewDetailsView {
             0
         };
         self.scroll_offset = self.scroll_offset.min(max_offset);
+    }
+
+    /// Switch to the left file list (not viewed files)
+    fn switch_file_list_left(&mut self) {
+        if matches!(self.navigation_mode, NavigationMode::Files)
+            && self.active_file_list != FileListType::NotViewed
+        {
+            self.active_file_list = FileListType::NotViewed;
+            self.selected_file_index = 0;
+            self.selected_line_index = 0;
+            self.scroll_offset = 0;
+        }
+    }
+
+    /// Switch to the right file list (viewed files)
+    fn switch_file_list_right(&mut self) {
+        if matches!(self.navigation_mode, NavigationMode::Files)
+            && self.active_file_list != FileListType::Viewed
+        {
+            self.active_file_list = FileListType::Viewed;
+            self.selected_file_index = 0;
+            self.selected_line_index = 0;
+            self.scroll_offset = 0;
+        }
+    }
+
+    /// Toggle the view status of the currently selected file
+    fn toggle_file_view_status(&mut self, app: &mut App) {
+        if let Some(review) = &self.review {
+            let current_files = self.get_current_file_list();
+            if let Some(file) = current_files.get(self.selected_file_index) {
+                app.events.send(AppEvent::FileViewToggle {
+                    review_id: review.id.clone().into(),
+                    file_path: file.path.clone().into(),
+                });
+            }
+        }
+    }
+
+    /// Handle file views loaded event
+    fn handle_file_views_loaded(&mut self, _review_id: &str, viewed_files: &Arc<Vec<String>>) {
+        self.viewed_files = viewed_files.clone();
+        // Reset selection when file views change
+        self.selected_file_index = 0;
+        self.selected_line_index = 0;
+        self.scroll_offset = 0;
+    }
+
+    /// Get the current file list based on the active file list type
+    fn get_current_file_list(&self) -> Vec<&crate::models::DiffFile> {
+        match self.active_file_list {
+            FileListType::NotViewed => self
+                .diff
+                .files
+                .iter()
+                .filter(|file| !self.viewed_files.contains(&file.path))
+                .collect(),
+            FileListType::Viewed => self
+                .diff
+                .files
+                .iter()
+                .filter(|file| self.viewed_files.contains(&file.path))
+                .collect(),
+        }
+    }
+
+    /// Get the currently selected file from the active file list
+    fn get_selected_file(&self) -> Option<&crate::models::DiffFile> {
+        let current_files = self.get_current_file_list();
+        current_files.get(self.selected_file_index).copied()
     }
 
     fn render_init(&self, area: Rect, buf: &mut Buffer) {
@@ -451,71 +592,105 @@ impl ReviewDetailsView {
         }
     }
 
-    /// Render the loaded diff content (file list, file content) when the diff is fully loaded
+    /// Render the loaded diff content (file lists, file content) when the diff is fully loaded
     fn render_loaded_diff_state_loaded(&self, area: Rect, buf: &mut Buffer) {
-        // Split content area into files list (20%) and diff content (80%)
+        // Split content area into files lists (20%) and diff content (80%)
         let content_layout = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Percentage(20), // Files list
+                Constraint::Percentage(20), // Files lists
                 Constraint::Percentage(80), // Diff content
             ])
             .split(area);
 
-        // Render files list
-        self.render_files_list(content_layout[0], buf);
+        // Render both file lists
+        self.render_file_lists(content_layout[0], buf);
 
         // Render diff content
         self.render_diff_content(content_layout[1], buf);
     }
 
-    /// Render the files list panel
-    fn render_files_list(&self, area: Rect, buf: &mut Buffer) {
-        // Show empty state when no files are available
-        if let GitDiffLoadingState::Loaded(diff) = &self.diff_state {
-            if diff.is_empty() {
-                let empty_text = Paragraph::new("No files to display")
-                    .style(Style::default().fg(Color::Gray))
-                    .block(
-                        Block::default()
-                            .title(" Files ")
-                            .borders(Borders::ALL)
-                            .border_style(Style::default().fg(Color::Gray)),
-                    );
+    /// Render both file lists (not viewed and viewed) side by side
+    fn render_file_lists(&self, area: Rect, buf: &mut Buffer) {
+        // Split the file lists area into two equal parts vertically
+        let lists_layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Percentage(50), // Not viewed files
+                Constraint::Percentage(50), // Viewed files
+            ])
+            .split(area);
 
-                empty_text.render(area, buf);
-                return;
-            }
-        }
+        // Render not viewed files list
+        self.render_single_file_list(lists_layout[0], buf, FileListType::NotViewed, "Not Viewed");
 
-        let files_lines: Vec<ListItem> = self
-            .diff
-            .files
-            .iter()
-            .enumerate()
-            .map(|(index, diff_file)| self.render_file_line(index, diff_file))
-            .collect();
+        // Render viewed files list
+        self.render_single_file_list(lists_layout[1], buf, FileListType::Viewed, "Viewed");
+    }
 
-        let files_title = match self.navigation_mode {
-            NavigationMode::Files => " Files [ACTIVE] ",
-            NavigationMode::Lines => " Files ",
+    /// Render a single file list (either not viewed or viewed)
+    fn render_single_file_list(
+        &self,
+        area: Rect,
+        buf: &mut Buffer,
+        list_type: FileListType,
+        title: &str,
+    ) {
+        // Get the files for this list type
+        let files: Vec<&DiffFile> = match list_type {
+            FileListType::NotViewed => self
+                .diff
+                .files
+                .iter()
+                .filter(|file| !self.viewed_files.contains(&file.path))
+                .collect(),
+            FileListType::Viewed => self
+                .diff
+                .files
+                .iter()
+                .filter(|file| self.viewed_files.contains(&file.path))
+                .collect(),
         };
 
+        // Create list items
+        let files_lines: Vec<ListItem> = files
+            .iter()
+            .enumerate()
+            .map(|(index, diff_file)| self.render_file_line_for_list(index, diff_file, &list_type))
+            .collect();
+
+        // Determine if this list is active
+        let is_active = matches!(self.navigation_mode, NavigationMode::Files)
+            && self.active_file_list == list_type;
+
+        // Create title with active indicator
+        let list_title = if is_active {
+            format!(" {title} [ACTIVE] ")
+        } else {
+            format!(" {title} ")
+        };
+
+        // Choose border color
+        let border_color = if is_active { Color::Blue } else { Color::Gray };
+
         let files_list = List::new(files_lines)
-            .block(Block::bordered().title(files_title).border_style(
-                if matches!(self.navigation_mode, NavigationMode::Files) {
-                    Color::Blue
-                } else {
-                    Color::Gray
-                },
-            ))
+            .block(
+                Block::bordered()
+                    .title(list_title)
+                    .border_style(border_color),
+            )
             .style(Style::default().fg(Color::White));
 
         files_list.render(area, buf);
     }
 
-    fn render_file_line(&self, index: usize, diff_file: &DiffFile) -> ListItem {
-        let is_selected = index == self.selected_file_index;
+    fn render_file_line_for_list(
+        &self,
+        index: usize,
+        diff_file: &DiffFile,
+        list_type: &FileListType,
+    ) -> ListItem {
+        let is_selected = index == self.selected_file_index && self.active_file_list == *list_type;
         let is_files_mode = matches!(self.navigation_mode, NavigationMode::Files);
 
         let style = if is_selected && is_files_mode {
@@ -548,7 +723,7 @@ impl ReviewDetailsView {
             return;
         }
 
-        let content_text = if let Some(file) = self.diff.files.get(self.selected_file_index) {
+        let content_text = if let Some(file) = self.get_selected_file() {
             &file.content
         } else {
             // Show error when no files are available
@@ -613,9 +788,7 @@ impl ReviewDetailsView {
         // Show file info and navigation mode in title
         let total_lines = content_lines.len();
         let current_file_name = self
-            .diff
-            .files
-            .get(self.selected_file_index)
+            .get_selected_file()
             .map(|f| f.path.as_str())
             .unwrap_or("Unknown");
 
@@ -712,7 +885,7 @@ mod tests {
         let debug_state = view.debug_state();
         assert_eq!(
             debug_state,
-            "review_state: Loading, review: None, diff_state: Init, scroll_offset: 0, selected_file_index: 0, selected_line_index: 0, navigation_mode: Files"
+            "review_state: Loading, review: None, diff_state: Init, scroll_offset: 0, selected_file_index: 0, selected_line_index: 0, navigation_mode: Files, active_file_list: NotViewed, viewed_files: []"
         );
     }
 
@@ -722,17 +895,23 @@ mod tests {
         let view = ReviewDetailsView::new(review);
 
         let keybindings = view.get_keybindings();
-        assert_eq!(keybindings.len(), 5);
+        assert_eq!(keybindings.len(), 8);
         assert_eq!(keybindings[0].key, "↑/k");
         assert_eq!(keybindings[0].description, "Scroll up");
         assert_eq!(keybindings[1].key, "↓/j");
         assert_eq!(keybindings[1].description, "Scroll down");
-        assert_eq!(keybindings[2].key, "Enter");
-        assert_eq!(keybindings[2].description, "Toggle navigation mode");
-        assert_eq!(keybindings[3].key, "Esc");
-        assert_eq!(keybindings[3].description, "Go back / Switch to Files mode");
-        assert_eq!(keybindings[4].key, "?");
-        assert_eq!(keybindings[4].description, "Help");
+        assert_eq!(keybindings[2].key, "←/h");
+        assert_eq!(keybindings[2].description, "Switch to not viewed files");
+        assert_eq!(keybindings[3].key, "→/l");
+        assert_eq!(keybindings[3].description, "Switch to viewed files");
+        assert_eq!(keybindings[4].key, "Space");
+        assert_eq!(keybindings[4].description, "Toggle file view status");
+        assert_eq!(keybindings[5].key, "Enter");
+        assert_eq!(keybindings[5].description, "Toggle navigation mode");
+        assert_eq!(keybindings[6].key, "Esc");
+        assert_eq!(keybindings[6].description, "Go back / Switch to Files mode");
+        assert_eq!(keybindings[7].key, "?");
+        assert_eq!(keybindings[7].description, "Help");
     }
 
     #[tokio::test]
