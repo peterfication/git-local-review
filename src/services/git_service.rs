@@ -112,7 +112,13 @@ impl GitService {
                 '+' | '-' | ' ' => diff_str.push(line.origin()),
                 _ => {}
             }
-            diff_str.push_str(std::str::from_utf8(line.content()).unwrap_or(""));
+            match std::str::from_utf8(line.content()) {
+                Ok(content) => diff_str.push_str(content),
+                Err(error) => {
+                    eprintln!("UTF-8 conversion error: {error}");
+                    diff_str.push_str("[INVALID UTF-8]");
+                }
+            }
             true
         })?;
 
