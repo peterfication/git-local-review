@@ -1,11 +1,5 @@
 use std::sync::Arc;
 
-#[derive(Debug, Clone)]
-pub enum NavigationMode {
-    Files,
-    Lines,
-}
-
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{KeyCode, KeyEvent},
@@ -30,13 +24,26 @@ enum ReviewDetailsState {
     Error(String),
 }
 
+#[derive(Debug, Clone)]
+pub enum NavigationMode {
+    Files,
+    Lines,
+}
+
 pub struct ReviewDetailsView {
+    /// Current state of the review details view
     state: ReviewDetailsState,
+    /// Current state of the git diff loading
     diff_state: GitDiffLoadingState,
+    /// Current scroll offset for the diff content
     scroll_offset: usize,
+    /// List of files in the diff if loaded
     files: Vec<DiffFile>,
+    /// Index of the currently selected file
     selected_file_index: usize,
+    /// Index of the currently selected line in the diff content
     selected_line_index: usize,
+    /// Current navigation mode (content box)
     navigation_mode: NavigationMode,
 }
 
@@ -95,22 +102,11 @@ impl ViewHandler for ReviewDetailsView {
 
     fn handle_key_events(&mut self, app: &mut App, key_event: &KeyEvent) -> color_eyre::Result<()> {
         match key_event.code {
-            KeyCode::Esc => {
-                match self.navigation_mode {
-                    NavigationMode::Lines => {
-                        // Switch back to Files mode instead of closing
-                        self.navigation_mode = NavigationMode::Files;
-                    }
-                    NavigationMode::Files => {
-                        // Close the view when already in Files mode
-                        self.close(app);
-                    }
-                }
-            }
-            KeyCode::Char('?') => self.help(app),
             KeyCode::Up | KeyCode::Char('k') => self.go_up(),
             KeyCode::Down | KeyCode::Char('j') => self.go_down(),
             KeyCode::Enter => self.toggle_navigation_mode(),
+            KeyCode::Esc => self.handle_esc(app),
+            KeyCode::Char('?') => self.help(app),
             _ => {}
         }
         Ok(())
@@ -133,16 +129,6 @@ impl ViewHandler for ReviewDetailsView {
     fn get_keybindings(&self) -> Arc<[KeyBinding]> {
         Arc::new([
             KeyBinding {
-                key: "Esc".to_string(),
-                description: "Go back / Switch to Files mode".to_string(),
-                key_event: KeyEvent {
-                    code: KeyCode::Esc,
-                    modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
-                    kind: ratatui::crossterm::event::KeyEventKind::Press,
-                    state: ratatui::crossterm::event::KeyEventState::empty(),
-                },
-            },
-            KeyBinding {
                 key: "↑/k".to_string(),
                 description: "Scroll up".to_string(),
                 key_event: KeyEvent {
@@ -163,20 +149,30 @@ impl ViewHandler for ReviewDetailsView {
                 },
             },
             KeyBinding {
-                key: "?".to_string(),
-                description: "Help".to_string(),
+                key: "Enter".to_string(),
+                description: "Toggle navigation mode".to_string(),
                 key_event: KeyEvent {
-                    code: KeyCode::Char('?'),
+                    code: KeyCode::Enter,
                     modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
                     kind: ratatui::crossterm::event::KeyEventKind::Press,
                     state: ratatui::crossterm::event::KeyEventState::empty(),
                 },
             },
             KeyBinding {
-                key: "Enter".to_string(),
-                description: "Toggle navigation mode".to_string(),
+                key: "Esc".to_string(),
+                description: "Go back / Switch to Files mode".to_string(),
                 key_event: KeyEvent {
-                    code: KeyCode::Enter,
+                    code: KeyCode::Esc,
+                    modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
+                    kind: ratatui::crossterm::event::KeyEventKind::Press,
+                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                },
+            },
+            KeyBinding {
+                key: "?".to_string(),
+                description: "Help".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Char('?'),
                     modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
                     kind: ratatui::crossterm::event::KeyEventKind::Press,
                     state: ratatui::crossterm::event::KeyEventState::empty(),
@@ -230,17 +226,12 @@ impl ViewHandler for ReviewDetailsView {
 }
 
 impl ReviewDetailsView {
-    /// Close the view by sending a ViewClose event
-    fn close(&self, app: &mut App) {
-        app.events.send(AppEvent::ViewClose);
-    }
-
     /// Open help dialog with the keybindings of this view
     fn help(&self, app: &mut App) {
         app.events.send(AppEvent::HelpOpen(self.get_keybindings()));
     }
 
-    /// Navigate to the previous line
+    /// Navigate to the previous line in the respective navigation mode
     fn go_up(&mut self) {
         match self.navigation_mode {
             NavigationMode::Files => {
@@ -259,7 +250,7 @@ impl ReviewDetailsView {
         }
     }
 
-    /// Navigate to the next line
+    /// Navigate to the next line in the respective navigation mode
     fn go_down(&mut self) {
         match self.navigation_mode {
             NavigationMode::Files => {
@@ -275,6 +266,37 @@ impl ReviewDetailsView {
                     self.selected_line_index += 1;
                     self.update_scroll_to_follow_selected_line(CONTENT_HEIGHT);
                 }
+            }
+        }
+    }
+
+    /// Toggle between file navigation and line navigation modes
+    fn toggle_navigation_mode(&mut self) {
+        match self.navigation_mode {
+            NavigationMode::Files => {
+                if !self.files.is_empty() {
+                    self.navigation_mode = NavigationMode::Lines;
+                    self.selected_line_index = 0;
+                }
+            }
+            NavigationMode::Lines => {
+                self.navigation_mode = NavigationMode::Files;
+            }
+        }
+    }
+
+    /// Handle the Escape key based on the current navigation mode
+    /// If in Lines mode, switch to Files mode.
+    /// If already in Files mode, close the view.
+    fn handle_esc(&mut self, app: &mut App) {
+        match self.navigation_mode {
+            NavigationMode::Lines => {
+                // Switch back to Files mode instead of closing
+                self.navigation_mode = NavigationMode::Files;
+            }
+            NavigationMode::Files => {
+                // Close the view when already in Files mode
+                app.events.send(AppEvent::ViewClose);
             }
         }
     }
@@ -337,21 +359,6 @@ impl ReviewDetailsView {
         }
     }
 
-    /// Toggle between file navigation and line navigation modes
-    fn toggle_navigation_mode(&mut self) {
-        match self.navigation_mode {
-            NavigationMode::Files => {
-                if !self.files.is_empty() {
-                    self.navigation_mode = NavigationMode::Lines;
-                    self.selected_line_index = 0;
-                }
-            }
-            NavigationMode::Lines => {
-                self.navigation_mode = NavigationMode::Files;
-            }
-        }
-    }
-
     /// Get the number of lines in the currently selected file
     fn get_current_file_lines(&self) -> usize {
         if let Some(file) = self.files.get(self.selected_file_index) {
@@ -390,11 +397,88 @@ impl ReviewDetailsView {
         self.scroll_offset = self.scroll_offset.min(max_offset);
     }
 
+    fn render_loading(&self, area: Rect, buf: &mut Buffer) {
+        let loading_text = Paragraph::new("Loading review...")
+            .style(Style::default().fg(Color::Yellow))
+            .block(Block::default().borders(Borders::NONE));
+        loading_text.render(area, buf);
+    }
+
+    fn render_error(&self, error: &str, area: Rect, buf: &mut Buffer) {
+        let error_text = Paragraph::new(format!("Error: {error}"))
+            .style(Style::default().fg(Color::Red))
+            .block(Block::default().borders(Borders::NONE));
+        error_text.render(area, buf);
+    }
+
+    fn render_loaded(&self, review: &Review, area: Rect, buf: &mut Buffer) {
+        let layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3), // Title section
+                Constraint::Min(1),    // Content area
+            ])
+            .split(area);
+
+        // Title section
+        let title_block = Block::default()
+            .title(" Title ")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Gray));
+
+        let title = review.title().clone();
+        let title_content = Paragraph::new(title.as_str())
+            .block(title_block)
+            .style(Style::default().fg(Color::White));
+
+        title_content.render(layout[0], buf);
+
+        match &self.diff_state {
+            GitDiffLoadingState::Init => {
+                // Show loading state for diff
+                let loading_text = Paragraph::new("Init diff...")
+                    .style(Style::default().fg(Color::Yellow))
+                    .block(Block::default().borders(Borders::ALL));
+                loading_text.render(layout[1], buf);
+            }
+            GitDiffLoadingState::Loading => {
+                // Show loading state for diff
+                let loading_text = Paragraph::new("Loading diff...")
+                    .style(Style::default().fg(Color::Yellow))
+                    .block(Block::default().borders(Borders::ALL));
+                loading_text.render(layout[1], buf);
+            }
+            GitDiffLoadingState::Loaded(_diff) => {
+                // Split content area into files list (20%) and diff content (80%)
+                let content_layout = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([
+                        Constraint::Percentage(20), // Files list
+                        Constraint::Percentage(80), // Diff content
+                    ])
+                    .split(layout[1]);
+
+                // Render files list
+                self.render_files_list(content_layout[0], buf);
+
+                // Render diff content
+                self.render_diff_content(content_layout[1], buf);
+            }
+            GitDiffLoadingState::Error(error) => {
+                // Show error state for diff
+                let error_text = Paragraph::new(format!("Diff error: {error}"))
+                    .style(Style::default().fg(Color::Red))
+                    .block(Block::default().borders(Borders::ALL));
+                error_text.render(layout[1], buf);
+            }
+        }
+    }
+
     /// Render the files list panel
     fn render_files_list(&self, area: Rect, buf: &mut Buffer) {
+        // Show empty state when no files are available
         if let GitDiffLoadingState::Loaded(diff) = &self.diff_state {
             if diff.is_empty() {
-                // Show empty state when no files are available
                 let empty_text = Paragraph::new("No files to display")
                     .style(Style::default().fg(Color::Gray))
                     .block(
@@ -457,14 +541,14 @@ impl ReviewDetailsView {
 
     /// Render the diff content panel
     fn render_diff_content(&self, area: Rect, buf: &mut Buffer) {
+        // Show empty state when no files are available
         if let GitDiffLoadingState::Loaded(diff) = &self.diff_state {
             if diff.is_empty() {
-                // Show empty state when no files are available
                 let empty_text = Paragraph::new("No diff to display")
                     .style(Style::default().fg(Color::Gray))
                     .block(
                         Block::default()
-                            .title(" Files ")
+                            .title(" Content ")
                             .borders(Borders::ALL)
                             .border_style(Style::default().fg(Color::Gray)),
                     );
@@ -478,11 +562,11 @@ impl ReviewDetailsView {
             &file.content
         } else {
             // Show error when no files are available
-            let error_text = Paragraph::new("Error: No diff files available")
+            let error_text = Paragraph::new("Error: No files available")
                 .style(Style::default().fg(Color::Red))
                 .block(
                     Block::default()
-                        .title(" Diff Error ")
+                        .title(" Content ")
                         .borders(Borders::ALL)
                         .border_style(Style::default().fg(Color::Red)),
                 );
@@ -567,58 +651,6 @@ impl ReviewDetailsView {
 
         content.render(area, buf);
     }
-
-    fn render_loading(&self, area: Rect, buf: &mut Buffer) {
-        let loading_text = Paragraph::new("Loading review...")
-            .style(Style::default().fg(Color::Yellow))
-            .block(Block::default().borders(Borders::NONE));
-        loading_text.render(area, buf);
-    }
-
-    fn render_error(&self, error: &str, area: Rect, buf: &mut Buffer) {
-        let error_text = Paragraph::new(format!("Error: {error}"))
-            .style(Style::default().fg(Color::Red))
-            .block(Block::default().borders(Borders::NONE));
-        error_text.render(area, buf);
-    }
-
-    fn render_loaded(&self, review: &Review, area: Rect, buf: &mut Buffer) {
-        let layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3), // Title section
-                Constraint::Min(1),    // Content area
-            ])
-            .split(area);
-
-        // Title section
-        let title_block = Block::default()
-            .title(" Title ")
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Gray));
-
-        let title = review.title().clone();
-        let title_content = Paragraph::new(title.as_str())
-            .block(title_block)
-            .style(Style::default().fg(Color::White));
-
-        title_content.render(layout[0], buf);
-
-        // Split content area into files list (20%) and diff content (80%)
-        let content_layout = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(20), // Files list
-                Constraint::Percentage(80), // Diff content
-            ])
-            .split(layout[1]);
-
-        // Render files list
-        self.render_files_list(content_layout[0], buf);
-
-        // Render diff content
-        self.render_diff_content(content_layout[1], buf);
-    }
 }
 
 #[cfg(test)]
@@ -700,14 +732,16 @@ mod tests {
 
         let keybindings = view.get_keybindings();
         assert_eq!(keybindings.len(), 5);
-        assert_eq!(keybindings[0].key, "Esc");
-        assert_eq!(keybindings[0].description, "Go back / Switch to Files mode");
-        assert_eq!(keybindings[1].key, "↑/k");
-        assert_eq!(keybindings[1].description, "Scroll up");
-        assert_eq!(keybindings[2].key, "↓/j");
-        assert_eq!(keybindings[2].description, "Scroll down");
-        assert_eq!(keybindings[3].key, "?");
-        assert_eq!(keybindings[3].description, "Help");
+        assert_eq!(keybindings[0].key, "↑/k");
+        assert_eq!(keybindings[0].description, "Scroll up");
+        assert_eq!(keybindings[1].key, "↓/j");
+        assert_eq!(keybindings[1].description, "Scroll down");
+        assert_eq!(keybindings[2].key, "Enter");
+        assert_eq!(keybindings[2].description, "Toggle navigation mode");
+        assert_eq!(keybindings[3].key, "Esc");
+        assert_eq!(keybindings[3].description, "Go back / Switch to Files mode");
+        assert_eq!(keybindings[4].key, "?");
+        assert_eq!(keybindings[4].description, "Help");
     }
 
     #[tokio::test]
@@ -868,41 +902,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_review_details_view_render_loading_state() {
-        let view = ReviewDetailsView::new_loading();
-        let app = App {
-            view_stack: vec![Box::new(view)],
-            ..create_test_app().await
-        };
-
-        assert_snapshot!(render_app_to_terminal_backend(app))
-    }
-
-    #[tokio::test]
-    async fn test_review_details_view_render_error_state() {
-        let mut view = ReviewDetailsView::new_loading();
-        view.state = ReviewDetailsState::Error("Database connection failed".to_string());
-        let app = App {
-            view_stack: vec![Box::new(view)],
-            ..create_test_app().await
-        };
-
-        assert_snapshot!(render_app_to_terminal_backend(app))
-    }
-
-    #[tokio::test]
-    async fn test_review_details_view_render_loaded_state() {
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
-        let view = ReviewDetailsView::new(review);
-        let app = App {
-            view_stack: vec![Box::new(view)],
-            ..create_test_app().await
-        };
-
-        assert_snapshot!(render_app_to_terminal_backend(app))
-    }
-
-    #[tokio::test]
     async fn test_review_details_view_scroll_down_basic() {
         let review = Review::test_review(());
         let mut view = ReviewDetailsView::new(review);
@@ -1020,25 +1019,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_review_details_view_render_with_diff_content() {
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
-        let mut view = ReviewDetailsView::new(review);
-
-        // Simulate diff content being loaded
-        let diff_content = r#"@@ -1,3 +1,4 @@
- # Test Repository
-+
- This is a test file
--Old line to remove
-+New line to add"#;
-        view.diff_state =
-            GitDiffLoadingState::Loaded(Arc::new(crate::models::Diff::from_files(vec![
-                crate::models::DiffFile {
-                    path: "test_file.txt".to_string(),
-                    content: diff_content.to_string(),
-                },
-            ])));
-
+    async fn test_review_details_view_render_loading_state() {
+        let view = ReviewDetailsView::new_loading();
         let app = App {
             view_stack: vec![Box::new(view)],
             ..create_test_app().await
@@ -1048,7 +1030,31 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_review_details_view_render_with_diff_loading() {
+    async fn test_review_details_view_render_error_state() {
+        let mut view = ReviewDetailsView::new_loading();
+        view.state = ReviewDetailsState::Error("Database connection failed".to_string());
+        let app = App {
+            view_stack: vec![Box::new(view)],
+            ..create_test_app().await
+        };
+
+        assert_snapshot!(render_app_to_terminal_backend(app))
+    }
+
+    #[tokio::test]
+    async fn test_review_details_view_render_loaded_state_diff_init() {
+        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let view = ReviewDetailsView::new(review);
+        let app = App {
+            view_stack: vec![Box::new(view)],
+            ..create_test_app().await
+        };
+
+        assert_snapshot!(render_app_to_terminal_backend(app))
+    }
+
+    #[tokio::test]
+    async fn test_review_details_view_render_loaded_state_diff_loading() {
         let review = Review::test_review(
             TestReviewParams::new()
                 .base_branch("develop")
@@ -1068,7 +1074,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_review_details_view_render_with_diff_error() {
+    async fn test_review_details_view_render_loaded_state_diff_error() {
         let review = Review::test_review(
             TestReviewParams::new()
                 .base_branch("feature")
@@ -1078,6 +1084,53 @@ mod tests {
 
         // Simulate diff error state
         view.diff_state = GitDiffLoadingState::Error("Repository not found".into());
+
+        let app = App {
+            view_stack: vec![Box::new(view)],
+            ..create_test_app().await
+        };
+
+        assert_snapshot!(render_app_to_terminal_backend(app))
+    }
+
+    #[tokio::test]
+    async fn test_review_details_view_render_loaded_state_diff_loaded_no_files() {
+        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let mut view = ReviewDetailsView::new(review);
+
+        let files = vec![];
+        view.diff_state =
+            GitDiffLoadingState::Loaded(Arc::new(crate::models::Diff::from_files(files.clone())));
+        view.files = files.to_vec();
+
+        let app = App {
+            view_stack: vec![Box::new(view)],
+            ..create_test_app().await
+        };
+
+        assert_snapshot!(render_app_to_terminal_backend(app))
+    }
+
+    #[tokio::test]
+    async fn test_review_details_view_render_loaded_state_diff_loaded_with_files() {
+        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let mut view = ReviewDetailsView::new(review);
+
+        // Simulate diff content being loaded
+        let diff_content = r#"@@ -1,3 +1,4 @@
+ # Test Repository
++
+ This is a test file
+-Old line to remove
++New line to add"#;
+        let files = vec![crate::models::DiffFile {
+            path: "test_file.txt".to_string(),
+            content: diff_content.to_string(),
+        }];
+
+        view.diff_state =
+            GitDiffLoadingState::Loaded(Arc::new(crate::models::Diff::from_files(files.clone())));
+        view.files = files.to_vec();
 
         let app = App {
             view_stack: vec![Box::new(view)],
