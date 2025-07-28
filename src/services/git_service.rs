@@ -1,6 +1,9 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::database::Database;
@@ -112,84 +115,94 @@ impl GitService {
 
     /// Parse a git2::Diff into structured DiffFile objects
     fn parse_git_diff(diff: git2::Diff) -> color_eyre::Result<Diff> {
-        let mut diff_content = String::new();
+        // Use Rc and RefCell to share mutable state across closures
+        // HashMap to store file paths and their content (path => content)
+        let files_content = Rc::new(RefCell::new(HashMap::<String, String>::new()));
 
-        // First get the entire diff as a string
-        diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
-            match line.origin() {
-                '+' | '-' | ' ' => diff_content.push(line.origin()),
-                _ => {}
-            }
-            match std::str::from_utf8(line.content()) {
-                Ok(line_content) => diff_content.push_str(line_content),
-                Err(error) => {
-                    eprintln!("UTF-8 conversion error: {error}");
-                    diff_content.push_str("[INVALID UTF-8]");
+        // Clone references for each closure
+        let files_content_file = Rc::clone(&files_content);
+        let files_content_hunk = Rc::clone(&files_content);
+        let files_content_line = Rc::clone(&files_content);
+
+        // Use foreach to collect file information
+        diff.foreach(
+            &mut |delta, _progress| {
+                // Extract file path from delta. If new_file and old_file are both present,
+                // new_file takes precedence because that's the state after the commits.
+                if let Some(new_file) = delta.new_file().path() {
+                    let file_path = new_file.to_string_lossy().to_string();
+                    files_content_file
+                        .borrow_mut()
+                        .entry(file_path)
+                        .or_default();
+                } else if let Some(old_file) = delta.old_file().path() {
+                    let file_path = old_file.to_string_lossy().to_string();
+                    files_content_file
+                        .borrow_mut()
+                        .entry(file_path)
+                        .or_default();
                 }
-            }
-            true
-        })?;
+                true
+            },
+            None, // No binary callback needed
+            Some(&mut |delta, _hunk| {
+                // Collect hunk headers
+                let file_path = if let Some(new_file) = delta.new_file().path() {
+                    new_file.to_string_lossy().to_string()
+                } else if let Some(old_file) = delta.old_file().path() {
+                    old_file.to_string_lossy().to_string()
+                } else {
+                    return true;
+                };
 
-        // Now parse the string diff into files
-        let diff_files = Self::parse_diff_string(&diff_content)?;
+                if let Some(content) = files_content_hunk.borrow_mut().get_mut(&file_path) {
+                    if let Ok(header) = std::str::from_utf8(_hunk.header()) {
+                        content.push_str(header);
+                    }
+                }
+                true
+            }),
+            Some(&mut |delta, _hunk, line| {
+                // Collect line content
+                let file_path = if let Some(new_file) = delta.new_file().path() {
+                    new_file.to_string_lossy().to_string()
+                } else if let Some(old_file) = delta.old_file().path() {
+                    old_file.to_string_lossy().to_string()
+                } else {
+                    return true;
+                };
+
+                if let Some(content) = files_content_line.borrow_mut().get_mut(&file_path) {
+                    // Add line origin character
+                    match line.origin() {
+                        '+' | '-' | ' ' => content.push(line.origin()),
+                        _ => {}
+                    }
+
+                    // Add line content
+                    match std::str::from_utf8(line.content()) {
+                        Ok(line_content) => content.push_str(line_content),
+                        Err(error) => {
+                            eprintln!("UTF-8 conversion error: {error}");
+                            content.push_str("[INVALID UTF-8]");
+                        }
+                    }
+                }
+                true
+            }),
+        )?;
+
+        // Convert HashMap to Vec<DiffFile>
+        let diff_files: Vec<DiffFile> = files_content
+            .borrow()
+            .iter()
+            .map(|(path, content)| DiffFile {
+                path: path.clone(),
+                content: content.clone(),
+            })
+            .collect();
+
         Ok(Diff::from_files(diff_files))
-    }
-
-    /// Parse a string diff into structured DiffFile objects
-    fn parse_diff_string(diff_content: &str) -> color_eyre::Result<Vec<DiffFile>> {
-        let mut files = Vec::new();
-        let mut current_file: Option<DiffFile> = None;
-        let mut current_content = Vec::new();
-
-        for line in diff_content.lines() {
-            if line.starts_with("diff --git") {
-                // Save previous file if exists
-                if let Some(mut file) = current_file.take() {
-                    file.content = current_content.join("\n");
-                    files.push(file);
-                    current_content.clear();
-                }
-
-                // Extract file path from diff --git a/path b/path
-                if let Some(path) = Self::extract_file_path(line) {
-                    current_file = Some(DiffFile {
-                        path,
-                        content: String::new(),
-                    });
-                }
-            } else if current_file.is_some() {
-                current_content.push(line.to_string());
-            }
-        }
-
-        // Don't forget the last file
-        if let Some(mut file) = current_file {
-            file.content = current_content.join("\n");
-            files.push(file);
-        }
-
-        // If no files were found, create a single file with all content
-        if files.is_empty() && !diff_content.is_empty() {
-            files.push(DiffFile {
-                path: "All changes".to_string(),
-                content: diff_content.to_string(),
-            });
-        }
-
-        Ok(files)
-    }
-
-    /// Extract file path from diff --git line
-    fn extract_file_path(line: &str) -> Option<String> {
-        // Parse "diff --git a/path/to/file b/path/to/file"
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() >= 4 {
-            let b_path = parts[3];
-            if let Some(path) = b_path.strip_prefix("b/") {
-                return Some(path.to_string());
-            }
-        }
-        None
     }
 
     /// Send loading event to start the actual loading process
