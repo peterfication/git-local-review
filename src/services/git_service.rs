@@ -113,7 +113,32 @@ impl GitService {
         Self::parse_git_diff(diff)
     }
 
-    /// Parse a git2::Diff into structured DiffFile objects
+    /// Parse a `git2::Diff` into structured `DiffFile` objects.
+    ///
+    /// This function processes a `git2::Diff` object and extracts file-level
+    /// changes into a structured format (`DiffFile`). It uses the `foreach` method
+    /// provided by `git2::Diff` to iterate over files, hunks, and lines in the diff.
+    ///
+    /// ### Design Choices
+    /// - **Shared Mutable State:** The function uses `Rc<RefCell<HashMap>>` to manage
+    ///   shared mutable state across the closures required by the `foreach` method.
+    ///   This approach was chosen because:
+    ///   - `Rc` allows multiple closures to share ownership of the state.
+    ///   - `RefCell` enables interior mutability, allowing the state to be modified
+    ///     within the closures while adhering to Rust's borrowing rules.
+    /// - **Alternatives Considered:** Other synchronization primitives like `Mutex` or
+    ///   `RwLock` were not used because they introduce unnecessary overhead in a
+    ///   single-threaded context, which is the typical use case for this function.
+    ///
+    /// ### Callback-Based Parsing
+    /// The `git2::Diff` API is callback-based, meaning that it invokes user-provided
+    /// closures for each file, hunk, and line in the diff. This design necessitates
+    /// the use of shared state (`Rc<RefCell<HashMap>>`) to accumulate results across
+    /// multiple callbacks.
+    ///
+    /// ### Output
+    /// The function returns a `Diff` object containing a list of `DiffFile` objects,
+    /// each representing a file in the diff along with its content.
     fn parse_git_diff(diff: git2::Diff) -> color_eyre::Result<Diff> {
         // Use Rc and RefCell to share mutable state across closures
         // HashMap to store file paths and their content (path => content)
