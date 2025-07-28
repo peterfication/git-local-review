@@ -1,5 +1,11 @@
 use std::sync::Arc;
 
+#[derive(Debug, Clone)]
+pub enum NavigationMode {
+    Files,
+    Lines,
+}
+
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{KeyCode, KeyEvent},
@@ -12,7 +18,7 @@ use ratatui::{
 use crate::{
     app::App,
     event::AppEvent,
-    models::Review,
+    models::{DiffFile, Review},
     services::GitDiffLoadingState,
     views::{KeyBinding, ViewHandler, ViewType},
 };
@@ -28,10 +34,13 @@ pub struct ReviewDetailsView {
     state: ReviewDetailsState,
     diff_state: GitDiffLoadingState,
     scroll_offset: usize,
-    current_line: usize,
+    files: Vec<DiffFile>,
+    selected_file_index: usize,
+    selected_line_index: usize,
+    navigation_mode: NavigationMode,
 }
 
-const CONTENT_HEIGHT: usize = 30; // Default content height for scrolling
+const CONTENT_HEIGHT: usize = 15; // Default content height for scrolling
 
 impl ReviewDetailsView {
     pub fn new(review: Review) -> Self {
@@ -39,7 +48,10 @@ impl ReviewDetailsView {
             state: ReviewDetailsState::Loaded(Arc::from(review)),
             diff_state: GitDiffLoadingState::Init,
             scroll_offset: 0,
-            current_line: 0,
+            files: Vec::new(),
+            selected_file_index: 0,
+            selected_line_index: 0,
+            navigation_mode: NavigationMode::Files,
         }
     }
 
@@ -48,7 +60,10 @@ impl ReviewDetailsView {
             state: ReviewDetailsState::Loading,
             diff_state: GitDiffLoadingState::Init,
             scroll_offset: 0,
-            current_line: 0,
+            files: Vec::new(),
+            selected_file_index: 0,
+            selected_line_index: 0,
+            navigation_mode: NavigationMode::Files,
         }
     }
 }
@@ -80,10 +95,22 @@ impl ViewHandler for ReviewDetailsView {
 
     fn handle_key_events(&mut self, app: &mut App, key_event: &KeyEvent) -> color_eyre::Result<()> {
         match key_event.code {
-            KeyCode::Esc => self.close(app),
+            KeyCode::Esc => {
+                match self.navigation_mode {
+                    NavigationMode::Lines => {
+                        // Switch back to Files mode instead of closing
+                        self.navigation_mode = NavigationMode::Files;
+                    }
+                    NavigationMode::Files => {
+                        // Close the view when already in Files mode
+                        self.close(app);
+                    }
+                }
+            }
             KeyCode::Char('?') => self.help(app),
             KeyCode::Up | KeyCode::Char('k') => self.go_up(),
             KeyCode::Down | KeyCode::Char('j') => self.go_down(),
+            KeyCode::Enter => self.toggle_navigation_mode(),
             _ => {}
         }
         Ok(())
@@ -107,7 +134,7 @@ impl ViewHandler for ReviewDetailsView {
         Arc::new([
             KeyBinding {
                 key: "Esc".to_string(),
-                description: "Go back".to_string(),
+                description: "Go back / Switch to Files mode".to_string(),
                 key_event: KeyEvent {
                     code: KeyCode::Esc,
                     modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
@@ -145,6 +172,16 @@ impl ViewHandler for ReviewDetailsView {
                     state: ratatui::crossterm::event::KeyEventState::empty(),
                 },
             },
+            KeyBinding {
+                key: "Enter".to_string(),
+                description: "Toggle navigation mode".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Enter,
+                    modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
+                    kind: ratatui::crossterm::event::KeyEventKind::Press,
+                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                },
+            },
         ])
     }
 
@@ -152,17 +189,30 @@ impl ViewHandler for ReviewDetailsView {
     fn debug_state(&self) -> String {
         match &self.state {
             ReviewDetailsState::Loading => format!(
-                "state: Loading, diff_state: {:?}, current_line: {}, scroll_offset: {}",
-                self.diff_state, self.current_line, self.scroll_offset
+                "state: Loading, diff_state: {:?}, scroll_offset: {}, selected_file_index: {}, selected_line_index: {}, navigation_mode: {:?}",
+                self.diff_state,
+                self.scroll_offset,
+                self.selected_file_index,
+                self.selected_line_index,
+                self.navigation_mode
             ),
             ReviewDetailsState::Error(error) => format!(
-                "state: Error(\"{error}\"), diff_state: {:?}, current_line: {}, scroll_offset: {}",
-                self.diff_state, self.current_line, self.scroll_offset
+                "state: Error(\"{error}\"), diff_state: {:?}, scroll_offset: {}, selected_file_index: {}, selected_line_index: {}, navigation_mode: {:?}",
+                self.diff_state,
+                self.scroll_offset,
+                self.selected_file_index,
+                self.selected_line_index,
+                self.navigation_mode
             ),
             ReviewDetailsState::Loaded(review) => {
                 format!(
-                    "state: Loaded(review_id: \"{}\"), diff_state: {:?}, current_line: {}, scroll_offset: {}",
-                    review.id, self.diff_state, self.current_line, self.scroll_offset
+                    "state: Loaded(review_id: \"{}\"), diff_state: {:?}, scroll_offset: {}, selected_file_index: {}, selected_line_index: {}, navigation_mode: {:?}",
+                    review.id,
+                    self.diff_state,
+                    self.scroll_offset,
+                    self.selected_file_index,
+                    self.selected_line_index,
+                    self.navigation_mode
                 )
             }
         }
@@ -192,20 +242,40 @@ impl ReviewDetailsView {
 
     /// Navigate to the previous line
     fn go_up(&mut self) {
-        if self.current_line > 0 {
-            self.current_line -= 1;
-            // Update scroll to follow current line (estimated content height)
-            self.update_scroll_to_follow_current_line(CONTENT_HEIGHT);
+        match self.navigation_mode {
+            NavigationMode::Files => {
+                if self.selected_file_index > 0 {
+                    self.selected_file_index -= 1;
+                    self.selected_line_index = 0;
+                    self.scroll_offset = 0;
+                }
+            }
+            NavigationMode::Lines => {
+                if self.selected_line_index > 0 {
+                    self.selected_line_index -= 1;
+                    self.update_scroll_to_follow_selected_line(CONTENT_HEIGHT);
+                }
+            }
         }
     }
 
     /// Navigate to the next line
     fn go_down(&mut self) {
-        let total_lines = self.get_total_lines();
-        if total_lines > 0 && self.current_line < total_lines.saturating_sub(1) {
-            self.current_line += 1;
-            // Update scroll to follow current line
-            self.update_scroll_to_follow_current_line(CONTENT_HEIGHT);
+        match self.navigation_mode {
+            NavigationMode::Files => {
+                if self.selected_file_index < self.files.len().saturating_sub(1) {
+                    self.selected_file_index += 1;
+                    self.selected_line_index = 0;
+                    self.scroll_offset = 0;
+                }
+            }
+            NavigationMode::Lines => {
+                let current_file_lines = self.get_current_file_lines();
+                if self.selected_line_index < current_file_lines.saturating_sub(1) {
+                    self.selected_line_index += 1;
+                    self.update_scroll_to_follow_selected_line(CONTENT_HEIGHT);
+                }
+            }
         }
     }
 
@@ -213,8 +283,11 @@ impl ReviewDetailsView {
     fn handle_review_loaded(&mut self, app: &mut App, review: &Arc<Review>) {
         self.state = ReviewDetailsState::Loaded(Arc::clone(review));
         self.scroll_offset = 0; // Reset scroll when new review is loaded
-        self.current_line = 0; // Reset current line when new review is loaded
         self.diff_state = GitDiffLoadingState::Init; // Reset diff state
+        self.files.clear(); // Reset files
+        self.selected_file_index = 0;
+        self.selected_line_index = 0;
+        self.navigation_mode = NavigationMode::Files;
 
         // Request git diff if SHAs are available
         if let (Some(base_sha), Some(target_sha)) = (&review.base_sha, &review.target_sha) {
@@ -234,7 +307,10 @@ impl ReviewDetailsView {
         self.state = ReviewDetailsState::Error(format!("Review not found: {review_id}"));
         self.diff_state = GitDiffLoadingState::Init;
         self.scroll_offset = 0; // Reset scroll on error
-        self.current_line = 0; // Reset current line on error
+        self.files.clear(); // Reset files
+        self.selected_file_index = 0;
+        self.selected_line_index = 0;
+        self.navigation_mode = NavigationMode::Files;
     }
 
     /// Reset the current line and scroll offset to 0 and set the state
@@ -242,67 +318,220 @@ impl ReviewDetailsView {
         self.state = ReviewDetailsState::Error(error.to_string());
         self.diff_state = GitDiffLoadingState::Init;
         self.scroll_offset = 0; // Reset scroll on error
-        self.current_line = 0; // Reset current line on error
+        self.files.clear(); // Reset files
+        self.selected_file_index = 0;
+        self.selected_line_index = 0;
+        self.navigation_mode = NavigationMode::Files;
     }
 
     /// Handle git diff loading state changes
     fn handle_git_diff_loading_state(&mut self, loading_state: &GitDiffLoadingState) {
         self.diff_state = loading_state.clone();
-    }
 
-    /// Get the diff content for the current diff state
-    fn get_diff_content(&self) -> String {
-        match &self.diff_state {
-            GitDiffLoadingState::Init => "Initializing diff...".to_string(),
-            GitDiffLoadingState::Loading => "Loading diff...".to_string(),
-            GitDiffLoadingState::Loaded(diff) => diff.to_string(),
-            GitDiffLoadingState::Error(error) => error.to_string(),
+        // Use structured diff data when loaded
+        if let GitDiffLoadingState::Loaded(diff) = loading_state {
+            self.files = diff.files.to_vec();
+            self.selected_file_index = 0;
+            self.selected_line_index = 0;
+            self.navigation_mode = NavigationMode::Files;
         }
     }
 
-    /// Get the total number of lines in the content
-    fn get_total_lines(&self) -> usize {
-        match &self.state {
-            ReviewDetailsState::Loaded(_) => {
-                let content = self.get_diff_content();
-                content.lines().count()
+    /// Toggle between file navigation and line navigation modes
+    fn toggle_navigation_mode(&mut self) {
+        match self.navigation_mode {
+            NavigationMode::Files => {
+                if !self.files.is_empty() {
+                    self.navigation_mode = NavigationMode::Lines;
+                    self.selected_line_index = 0;
+                }
             }
-            _ => 0,
+            NavigationMode::Lines => {
+                self.navigation_mode = NavigationMode::Files;
+            }
         }
     }
 
-    /// Get the maximum allowed scroll offset based on content
-    fn get_max_scroll_offset(&self, content_height: usize) -> usize {
-        let total_lines = self.get_total_lines();
-        if total_lines > content_height {
-            total_lines.saturating_sub(content_height)
+    /// Get the number of lines in the currently selected file
+    fn get_current_file_lines(&self) -> usize {
+        if let Some(file) = self.files.get(self.selected_file_index) {
+            file.content.lines().count()
         } else {
             0
         }
     }
 
-    /// Update scroll offset to ensure current line is visible
-    fn update_scroll_to_follow_current_line(&mut self, content_height: usize) {
+    /// Update scroll offset to ensure selected line is visible
+    fn update_scroll_to_follow_selected_line(&mut self, content_height: usize) {
         if content_height == 0 {
             return;
         }
 
-        // If current line is above the viewport, scroll up
-        if self.current_line < self.scroll_offset {
-            self.scroll_offset = self.current_line;
+        // If selected line is above the viewport, scroll up
+        if self.selected_line_index < self.scroll_offset {
+            self.scroll_offset = self.selected_line_index;
         }
 
-        // If current line is below the viewport, scroll down
+        // If selected line is below the viewport, scroll down
         let viewport_bottom = self.scroll_offset + content_height.saturating_sub(1);
-        if self.current_line > viewport_bottom {
+        if self.selected_line_index > viewport_bottom {
             self.scroll_offset = self
-                .current_line
+                .selected_line_index
                 .saturating_sub(content_height.saturating_sub(1));
         }
 
         // Ensure scroll offset doesn't exceed bounds
-        let max_offset = self.get_max_scroll_offset(content_height);
+        let current_file_lines = self.get_current_file_lines();
+        let max_offset = if current_file_lines > content_height {
+            current_file_lines.saturating_sub(content_height)
+        } else {
+            0
+        };
         self.scroll_offset = self.scroll_offset.min(max_offset);
+    }
+
+    /// Render the files list panel
+    fn render_files_list(&self, area: Rect, buf: &mut Buffer) {
+        let files_lines: Vec<Line> = self
+            .files
+            .iter()
+            .enumerate()
+            .map(|(idx, file)| {
+                let is_selected = idx == self.selected_file_index;
+                let is_files_mode = matches!(self.navigation_mode, NavigationMode::Files);
+
+                let style = if is_selected && is_files_mode {
+                    Style::default()
+                        .fg(Color::Black)
+                        .bg(Color::White)
+                        .add_modifier(Modifier::BOLD)
+                } else if is_selected {
+                    Style::default().fg(Color::Yellow)
+                } else {
+                    Style::default().fg(Color::White)
+                };
+
+                Line::from(Span::styled(file.path.clone(), style))
+            })
+            .collect();
+
+        let files_title = match self.navigation_mode {
+            NavigationMode::Files => " Files [ACTIVE] ",
+            NavigationMode::Lines => " Files ",
+        };
+
+        let files_paragraph = Paragraph::new(files_lines)
+            .block(
+                Block::default()
+                    .title(files_title)
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(
+                        if matches!(self.navigation_mode, NavigationMode::Files) {
+                            Color::Blue
+                        } else {
+                            Color::Gray
+                        },
+                    )),
+            )
+            .wrap(ratatui::widgets::Wrap { trim: true });
+
+        files_paragraph.render(area, buf);
+    }
+
+    /// Render the diff content panel
+    fn render_diff_content(&self, area: Rect, buf: &mut Buffer) {
+        let content_text = if let Some(file) = self.files.get(self.selected_file_index) {
+            &file.content
+        } else {
+            // Show error when no files are available
+            let error_text = Paragraph::new("Error: No diff files available")
+                .style(Style::default().fg(Color::Red))
+                .block(
+                    Block::default()
+                        .title(" Diff Error ")
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(Color::Red)),
+                );
+            error_text.render(area, buf);
+            return;
+        };
+
+        // Split content into lines and apply scrolling with highlighting
+        let content_lines: Vec<&str> = content_text.lines().collect();
+        let content_height = area.height.saturating_sub(2) as usize; // Account for borders
+
+        // Calculate the visible lines based on scroll offset
+        let start_line = self.scroll_offset;
+        let end_line = (start_line + content_height).min(content_lines.len());
+        let visible_lines = if start_line < content_lines.len() {
+            &content_lines[start_line..end_line]
+        } else {
+            &[]
+        };
+
+        // Create styled lines with highlighting for selected line
+        let styled_lines: Vec<Line> = visible_lines
+            .iter()
+            .enumerate()
+            .map(|(idx, line_text)| {
+                let absolute_line_idx = start_line + idx;
+                let is_selected_line = absolute_line_idx == self.selected_line_index;
+                let is_lines_mode = matches!(self.navigation_mode, NavigationMode::Lines);
+
+                if is_selected_line && is_lines_mode {
+                    // Highlight selected line in lines mode
+                    Line::from(Span::styled(
+                        *line_text,
+                        Style::default()
+                            .fg(Color::Black)
+                            .bg(Color::White)
+                            .add_modifier(Modifier::BOLD),
+                    ))
+                } else {
+                    // Regular styling for other lines with diff colors
+                    let style = match line_text.chars().next() {
+                        Some('+') => Style::default().fg(Color::Green),
+                        Some('-') => Style::default().fg(Color::Red),
+                        Some('@') => Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                        _ => Style::default().fg(Color::White),
+                    };
+                    Line::from(Span::styled(*line_text, style))
+                }
+            })
+            .collect();
+
+        // Show file info and navigation mode in title
+        let total_lines = content_lines.len();
+        let current_file_name = self
+            .files
+            .get(self.selected_file_index)
+            .map(|f| f.path.as_str())
+            .unwrap_or("Unknown");
+
+        let title_text = match self.navigation_mode {
+            NavigationMode::Files => format!(" {current_file_name} ({total_lines} lines) "),
+            NavigationMode::Lines => {
+                let line_num = self.selected_line_index + 1;
+                format!(" {current_file_name} [ACTIVE] (line {line_num}/{total_lines}) ")
+            }
+        };
+
+        let content = Paragraph::new(styled_lines).block(
+            Block::default()
+                .title(title_text)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(
+                    if matches!(self.navigation_mode, NavigationMode::Lines) {
+                        Color::Blue
+                    } else {
+                        Color::Gray
+                    },
+                )),
+        );
+
+        content.render(area, buf);
     }
 
     fn render_loading(&self, area: Rect, buf: &mut Buffer) {
@@ -341,76 +570,20 @@ impl ReviewDetailsView {
 
         title_content.render(layout[0], buf);
 
-        // Content section - show diff
-        let content_text = self.get_diff_content();
+        // Split content area into files list (20%) and diff content (80%)
+        let content_layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(20), // Files list
+                Constraint::Percentage(80), // Diff content
+            ])
+            .split(layout[1]);
 
-        // Split content into lines and apply scrolling with highlighting
-        let content_lines: Vec<&str> = content_text.lines().collect();
-        let content_height = layout[1].height.saturating_sub(2) as usize; // Account for borders
+        // Render files list
+        self.render_files_list(content_layout[0], buf);
 
-        // Calculate the visible lines based on scroll offset
-        let start_line = self.scroll_offset;
-        let end_line = (start_line + content_height).min(content_lines.len());
-        let visible_lines = if start_line < content_lines.len() {
-            &content_lines[start_line..end_line]
-        } else {
-            &[]
-        };
-
-        // Create styled lines with highlighting for current line
-        let styled_lines: Vec<Line> = visible_lines
-            .iter()
-            .enumerate()
-            .map(|(idx, line_text)| {
-                let absolute_line_idx = start_line + idx;
-                let is_current_line = absolute_line_idx == self.current_line;
-
-                if is_current_line {
-                    // Highlight current line with inverted colors
-                    Line::from(Span::styled(
-                        *line_text,
-                        Style::default()
-                            .fg(Color::Black)
-                            .bg(Color::White)
-                            .add_modifier(Modifier::BOLD),
-                    ))
-                } else {
-                    // Regular styling for other lines with diff colors
-                    let style = match line_text.chars().next() {
-                        Some('+') => Style::default().fg(Color::Green),
-                        Some('-') => Style::default().fg(Color::Red),
-                        Some('@') => Style::default()
-                            .fg(Color::Cyan)
-                            .add_modifier(Modifier::BOLD),
-                        _ => Style::default().fg(Color::White),
-                    };
-                    Line::from(Span::styled(*line_text, style))
-                }
-            })
-            .collect();
-
-        // Show scroll and line indicator in title
-        let total_lines = content_lines.len();
-        let title_text = if total_lines > 0 {
-            format!(
-                " Diff (line {}/{}, scroll {}/{}) ",
-                self.current_line + 1,
-                total_lines,
-                start_line + 1,
-                total_lines
-            )
-        } else {
-            " Diff ".to_string()
-        };
-
-        let content = Paragraph::new(styled_lines).block(
-            Block::default()
-                .title(title_text)
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Gray)),
-        );
-
-        content.render(layout[1], buf);
+        // Render diff content
+        self.render_diff_content(content_layout[1], buf);
     }
 }
 
@@ -482,7 +655,7 @@ mod tests {
         let debug_state = view.debug_state();
         assert_eq!(
             debug_state,
-            "state: Loading, diff_state: Init, current_line: 0, scroll_offset: 0"
+            "state: Loading, diff_state: Init, scroll_offset: 0, selected_file_index: 0, selected_line_index: 0, navigation_mode: Files"
         );
     }
 
@@ -492,32 +665,15 @@ mod tests {
         let view = ReviewDetailsView::new(review);
 
         let keybindings = view.get_keybindings();
-        assert_eq!(keybindings.len(), 4);
+        assert_eq!(keybindings.len(), 5);
         assert_eq!(keybindings[0].key, "Esc");
-        assert_eq!(keybindings[0].description, "Go back");
+        assert_eq!(keybindings[0].description, "Go back / Switch to Files mode");
         assert_eq!(keybindings[1].key, "↑/k");
         assert_eq!(keybindings[1].description, "Scroll up");
         assert_eq!(keybindings[2].key, "↓/j");
         assert_eq!(keybindings[2].description, "Scroll down");
         assert_eq!(keybindings[3].key, "?");
         assert_eq!(keybindings[3].description, "Help");
-    }
-
-    #[test]
-    fn test_review_details_view_line_navigation() {
-        let review = Review::test_review(());
-        let mut view = ReviewDetailsView::new(review);
-
-        // Initial current line should be 0
-        assert_eq!(view.current_line, 0);
-
-        // Test direct line manipulation
-        view.current_line = 5;
-        assert_eq!(view.current_line, 5);
-
-        // Test reset behavior
-        view.current_line = 0;
-        assert_eq!(view.current_line, 0);
     }
 
     #[tokio::test]
@@ -529,13 +685,10 @@ mod tests {
         );
         let mut view = ReviewDetailsView::new(review);
         let mut app = create_test_app().await;
+        view.navigation_mode = NavigationMode::Lines;
 
         // Initial current line should be 0
-        assert_eq!(view.current_line, 0);
-
-        // Check total lines - with error message, there should be 1 line
-        let total_lines = view.get_total_lines();
-        assert_eq!(total_lines, 1);
+        assert_eq!(view.selected_line_index, 0);
 
         // Try to navigate down with 'j' - should not increment since we only have 1 line (index 0)
         let key_event = KeyEvent::new(
@@ -544,7 +697,7 @@ mod tests {
         );
         view.handle_key_events(&mut app, &key_event).unwrap();
         // Should stay at 0 since there's only 1 line (max index is 0)
-        assert_eq!(view.current_line, 0);
+        assert_eq!(view.selected_line_index, 0);
 
         // Navigate up with 'k' - should stay at 0
         let key_event = KeyEvent::new(
@@ -552,12 +705,12 @@ mod tests {
             ratatui::crossterm::event::KeyModifiers::NONE,
         );
         view.handle_key_events(&mut app, &key_event).unwrap();
-        assert_eq!(view.current_line, 0);
+        assert_eq!(view.selected_line_index, 0);
 
         // Try to navigate up from 0 - should stay at 0
         let key_event = KeyEvent::new(KeyCode::Up, ratatui::crossterm::event::KeyModifiers::NONE);
         view.handle_key_events(&mut app, &key_event).unwrap();
-        assert_eq!(view.current_line, 0);
+        assert_eq!(view.selected_line_index, 0);
     }
 
     #[tokio::test]
@@ -566,44 +719,13 @@ mod tests {
         let mut app = create_test_app().await;
 
         // Set some current line
-        view.current_line = 5;
+        view.selected_line_index = 5;
 
         // Load a new review - should reset current line
         let review = Review::test_review(TestReviewParams::new().base_branch("main"));
         view.handle_app_events(&mut app, &AppEvent::ReviewLoaded(Arc::from(review)));
 
-        assert_eq!(view.current_line, 0);
-    }
-
-    #[test]
-    fn test_get_total_lines() {
-        let review = Review::test_review(());
-        let view = ReviewDetailsView::new(review);
-
-        // Should return 1 for the "Missing SHA information" message
-        let total_lines = view.get_total_lines();
-        assert_eq!(total_lines, 1);
-    }
-
-    #[test]
-    fn test_update_scroll_to_follow_current_line() {
-        let review = Review::test_review(());
-        let mut view = ReviewDetailsView::new(review);
-
-        // Test with small content height, but limited by total lines (1 line for this review)
-        view.current_line = 0; // Only line available
-        view.scroll_offset = 0;
-        view.update_scroll_to_follow_current_line(3);
-
-        // Should stay at 0 since we only have 1 line
-        assert_eq!(view.scroll_offset, 0);
-
-        // Test with artificially high current line (will be bounded)
-        view.current_line = 10; // Way beyond available content
-        view.update_scroll_to_follow_current_line(3);
-
-        // Should be bounded by max offset (0 since only 1 line)
-        assert_eq!(view.scroll_offset, 0);
+        assert_eq!(view.selected_line_index, 0);
     }
 
     #[tokio::test]
@@ -615,12 +737,31 @@ mod tests {
         let key_event = KeyEvent::new(KeyCode::Esc, ratatui::crossterm::event::KeyModifiers::NONE);
         view.handle_key_events(&mut app, &key_event).unwrap();
 
-        // Should send ViewClose event
+        // Should send ViewClose event when in Files mode
         let event = app.events.try_recv().unwrap();
         match *event {
             crate::event::Event::App(AppEvent::ViewClose) => {}
             _ => panic!("Expected ViewClose event"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_review_details_view_handles_escape_key_in_lines_mode() {
+        let review = Review::test_review(());
+        let mut view = ReviewDetailsView::new(review);
+        let mut app = create_test_app().await;
+
+        // Switch to Lines mode first
+        view.navigation_mode = NavigationMode::Lines;
+
+        let key_event = KeyEvent::new(KeyCode::Esc, ratatui::crossterm::event::KeyModifiers::NONE);
+        view.handle_key_events(&mut app, &key_event).unwrap();
+
+        // Should switch back to Files mode, not close the view
+        assert!(matches!(view.navigation_mode, NavigationMode::Files));
+
+        // Should not send any events
+        assert!(!app.events.has_pending_events());
     }
 
     #[tokio::test]
@@ -779,8 +920,8 @@ mod tests {
         let mut app = create_test_app().await;
 
         // Set initial current line and scroll offset to test navigation
-        view.current_line = 3;
-        view.scroll_offset = 3;
+        view.navigation_mode = NavigationMode::Lines;
+        view.selected_line_index = 3;
 
         // Navigate up with 'k' - should move current line up
         let key_event = KeyEvent::new(
@@ -788,12 +929,12 @@ mod tests {
             ratatui::crossterm::event::KeyModifiers::NONE,
         );
         view.handle_key_events(&mut app, &key_event).unwrap();
-        assert_eq!(view.current_line, 2);
+        assert_eq!(view.selected_line_index, 2);
 
         // Navigate up with arrow key
         let key_event = KeyEvent::new(KeyCode::Up, ratatui::crossterm::event::KeyModifiers::NONE);
         view.handle_key_events(&mut app, &key_event).unwrap();
-        assert_eq!(view.current_line, 1);
+        assert_eq!(view.selected_line_index, 1);
     }
 
     #[tokio::test]
@@ -844,45 +985,6 @@ mod tests {
         assert_eq!(view.scroll_offset, 0);
     }
 
-    #[test]
-    fn test_get_diff_content_with_shas() {
-        let review = Review::test_review(
-            TestReviewParams::new()
-                .base_sha("abc123")
-                .target_sha("def456"),
-        );
-        let view = ReviewDetailsView::new(review);
-
-        // This will show "Missing SHA information" since we don't have SHAs set up for diff loading
-        let content = view.get_diff_content();
-        assert!(content.contains("Initializing diff"));
-    }
-
-    #[test]
-    fn test_get_diff_content_without_shas() {
-        let review = Review::test_review(());
-        let view = ReviewDetailsView::new(review);
-
-        match &view.state {
-            ReviewDetailsState::Loaded(_) => {
-                let content = view.get_diff_content();
-                assert_eq!(content, "Initializing diff...");
-            }
-            _ => panic!("Expected loaded state"),
-        }
-    }
-
-    #[test]
-    fn test_get_max_scroll_offset() {
-        let review = Review::test_review(());
-        let view = ReviewDetailsView::new(review);
-
-        // With a small content height, max offset should be calculated correctly
-        let max_offset = view.get_max_scroll_offset(5);
-        // Since the content is a single line, max offset should be 0
-        assert_eq!(max_offset, 0);
-    }
-
     #[tokio::test]
     async fn test_review_details_view_render_with_diff_content() {
         let review = Review::test_review(TestReviewParams::new().base_branch("main"));
@@ -895,7 +997,13 @@ mod tests {
  This is a test file
 -Old line to remove
 +New line to add"#;
-        view.diff_state = GitDiffLoadingState::Loaded(diff_content.into());
+        view.diff_state =
+            GitDiffLoadingState::Loaded(Arc::new(crate::models::Diff::from_files(vec![
+                crate::models::DiffFile {
+                    path: "test_file.txt".to_string(),
+                    content: diff_content.to_string(),
+                },
+            ])));
 
         let app = App {
             view_stack: vec![Box::new(view)],

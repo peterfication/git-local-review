@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use crate::database::Database;
 use crate::event::{AppEvent, EventHandler};
+use crate::models::{Diff, DiffFile};
 use crate::services::ServiceHandler;
 
 /// State of Git branches loading process
@@ -21,7 +22,7 @@ pub enum GitBranchesLoadingState {
     Error(Arc<str>),
 }
 
-/// State of Git diff loading process
+/// State of Git diff loading process with structured data
 #[derive(Debug, Clone, PartialEq, Default)]
 pub enum GitDiffLoadingState {
     /// Initial state - no loading has been attempted
@@ -29,8 +30,8 @@ pub enum GitDiffLoadingState {
     Init,
     /// Currently loading diff from Git repository
     Loading,
-    /// Diff has been successfully loaded
-    Loaded(Arc<str>),
+    /// Diff has been successfully loaded with structured data
+    Loaded(Arc<Diff>),
     /// Error occurred during loading
     Error(Arc<str>),
 }
@@ -82,12 +83,12 @@ impl GitService {
         format!("refs/heads/{branch_name}")
     }
 
-    /// Get the diff between two SHAs
+    /// Get the diff between two SHAs as structured data
     pub fn get_diff_between_shas<PathRef: AsRef<Path>>(
         repo_path: PathRef,
         base_sha: &str,
         target_sha: &str,
-    ) -> color_eyre::Result<String> {
+    ) -> color_eyre::Result<Diff> {
         let repo = git2::Repository::open(repo_path)?;
 
         // Parse SHAs to git2::Oid
@@ -105,24 +106,90 @@ impl GitService {
         // Create diff between trees
         let diff = repo.diff_tree_to_tree(Some(&base_tree), Some(&target_tree), None)?;
 
-        // Format diff as string
-        let mut diff_str = String::new();
+        // Parse diff into structured format
+        Self::parse_git_diff(diff)
+    }
+
+    /// Parse a git2::Diff into structured DiffFile objects
+    fn parse_git_diff(diff: git2::Diff) -> color_eyre::Result<Diff> {
+        let mut diff_content = String::new();
+
+        // First get the entire diff as a string
         diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
             match line.origin() {
-                '+' | '-' | ' ' => diff_str.push(line.origin()),
+                '+' | '-' | ' ' => diff_content.push(line.origin()),
                 _ => {}
             }
             match std::str::from_utf8(line.content()) {
-                Ok(content) => diff_str.push_str(content),
+                Ok(line_content) => diff_content.push_str(line_content),
                 Err(error) => {
                     eprintln!("UTF-8 conversion error: {error}");
-                    diff_str.push_str("[INVALID UTF-8]");
+                    diff_content.push_str("[INVALID UTF-8]");
                 }
             }
             true
         })?;
 
-        Ok(diff_str)
+        // Now parse the string diff into files
+        let diff_files = Self::parse_diff_string(&diff_content)?;
+        Ok(Diff::from_files(diff_files))
+    }
+
+    /// Parse a string diff into structured DiffFile objects
+    fn parse_diff_string(diff_content: &str) -> color_eyre::Result<Vec<DiffFile>> {
+        let mut files = Vec::new();
+        let mut current_file: Option<DiffFile> = None;
+        let mut current_content = Vec::new();
+
+        for line in diff_content.lines() {
+            if line.starts_with("diff --git") {
+                // Save previous file if exists
+                if let Some(mut file) = current_file.take() {
+                    file.content = current_content.join("\n");
+                    files.push(file);
+                    current_content.clear();
+                }
+
+                // Extract file path from diff --git a/path b/path
+                if let Some(path) = Self::extract_file_path(line) {
+                    current_file = Some(DiffFile {
+                        path,
+                        content: String::new(),
+                    });
+                }
+            } else if current_file.is_some() {
+                current_content.push(line.to_string());
+            }
+        }
+
+        // Don't forget the last file
+        if let Some(mut file) = current_file {
+            file.content = current_content.join("\n");
+            files.push(file);
+        }
+
+        // If no files were found, create a single file with all content
+        if files.is_empty() && !diff_content.is_empty() {
+            files.push(DiffFile {
+                path: "All changes".to_string(),
+                content: diff_content.to_string(),
+            });
+        }
+
+        Ok(files)
+    }
+
+    /// Extract file path from diff --git line
+    fn extract_file_path(line: &str) -> Option<String> {
+        // Parse "diff --git a/path/to/file b/path/to/file"
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() >= 4 {
+            let b_path = parts[3];
+            if let Some(path) = b_path.strip_prefix("b/") {
+                return Some(path.to_string());
+            }
+        }
+        None
     }
 
     /// Send loading event to start the actual loading process
@@ -166,13 +233,17 @@ impl GitService {
     ) {
         match Self::get_diff_between_shas(".", base_sha, target_sha) {
             Ok(diff) => {
-                let diff_content = if diff.is_empty() {
-                    "No differences found between the two commits.".to_string()
+                let final_diff = if diff.is_empty() {
+                    // Create a single file with no-differences message
+                    Diff::from_files(vec![DiffFile {
+                        path: "No changes".to_string(),
+                        content: "No differences found between the two commits.".to_string(),
+                    }])
                 } else {
                     diff
                 };
                 events.send(AppEvent::GitDiffLoadingState(GitDiffLoadingState::Loaded(
-                    diff_content.into(),
+                    Arc::new(final_diff),
                 )));
             }
             Err(error) => {
@@ -408,10 +479,14 @@ mod tests {
         // Get diff between commits
         let diff = GitService::get_diff_between_shas(repo_path, &initial_sha, &second_sha).unwrap();
 
-        // Should contain diff showing the change
-        assert!(diff.contains("file.txt"));
-        assert!(diff.contains("-initial content"));
-        assert!(diff.contains("+modified content"));
+        // Should have one file with changes
+        assert!(!diff.is_empty());
+        assert_eq!(diff.file_count(), 1);
+
+        let file = &diff.files[0];
+        assert_eq!(file.path, "file.txt");
+        assert!(file.content.contains("-initial content"));
+        assert!(file.content.contains("+modified content"));
     }
 
     #[test]
