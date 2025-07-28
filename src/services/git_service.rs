@@ -501,7 +501,10 @@ mod tests {
         assert!(!events.has_pending_events());
 
         // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
+        std::env::set_current_dir(original_dir).unwrap_or_else(
+            // FIXLATER: Don't panic because in CI it doesn't work
+            |e| println!("Failed to restore original directory: {e}"),
+        );
     }
 
     #[tokio::test]
