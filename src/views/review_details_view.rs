@@ -6,13 +6,13 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph, Widget},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Widget},
 };
 
 use crate::{
     app::App,
     event::AppEvent,
-    models::{Diff, Review},
+    models::{Diff, DiffFile, Review},
     services::{GitDiffLoadingState, ReviewLoadingState},
     views::{KeyBinding, ViewHandler, ViewType},
 };
@@ -488,28 +488,12 @@ impl ReviewDetailsView {
             }
         }
 
-        let files_lines: Vec<Line> = self
+        let files_lines: Vec<ListItem> = self
             .diff
             .files
             .iter()
             .enumerate()
-            .map(|(idx, file)| {
-                let is_selected = idx == self.selected_file_index;
-                let is_files_mode = matches!(self.navigation_mode, NavigationMode::Files);
-
-                let style = if is_selected && is_files_mode {
-                    Style::default()
-                        .fg(Color::Black)
-                        .bg(Color::White)
-                        .add_modifier(Modifier::BOLD)
-                } else if is_selected {
-                    Style::default().fg(Color::Yellow)
-                } else {
-                    Style::default().fg(Color::White)
-                };
-
-                Line::from(Span::styled(file.path.clone(), style))
-            })
+            .map(|(index, diff_file)| self.render_file_line(index, diff_file))
             .collect();
 
         let files_title = match self.navigation_mode {
@@ -517,22 +501,34 @@ impl ReviewDetailsView {
             NavigationMode::Lines => " Files ",
         };
 
-        let files_paragraph = Paragraph::new(files_lines)
-            .block(
-                Block::default()
-                    .title(files_title)
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(
-                        if matches!(self.navigation_mode, NavigationMode::Files) {
-                            Color::Blue
-                        } else {
-                            Color::Gray
-                        },
-                    )),
-            )
-            .wrap(ratatui::widgets::Wrap { trim: true });
+        let files_list = List::new(files_lines)
+            .block(Block::bordered().title(files_title).border_style(
+                if matches!(self.navigation_mode, NavigationMode::Files) {
+                    Color::Blue
+                } else {
+                    Color::Gray
+                },
+            ))
+            .style(Style::default().fg(Color::White));
 
-        files_paragraph.render(area, buf);
+        files_list.render(area, buf);
+    }
+
+    fn render_file_line(&self, index: usize, diff_file: &DiffFile) -> ListItem {
+        let is_selected = index == self.selected_file_index;
+        let is_files_mode = matches!(self.navigation_mode, NavigationMode::Files);
+
+        let style = if is_selected && is_files_mode {
+            Style::default().bg(Color::Blue).fg(Color::Black)
+        } else if is_selected {
+            Style::default().fg(Color::Yellow)
+        } else {
+            Style::default().fg(Color::White)
+        };
+        let prefix = if is_selected { ">" } else { " " };
+
+        let content = format!("{} {}", prefix, diff_file.path.clone());
+        ListItem::new(content).style(style)
     }
 
     /// Render the diff content panel
