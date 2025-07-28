@@ -12,7 +12,7 @@ use ratatui::{
 use crate::{
     app::App,
     event::AppEvent,
-    models::{DiffFile, Review},
+    models::{Diff, Review},
     services::GitDiffLoadingState,
     views::{KeyBinding, ViewHandler, ViewType},
 };
@@ -35,10 +35,10 @@ pub struct ReviewDetailsView {
     state: ReviewDetailsState,
     /// Current state of the git diff loading
     diff_state: GitDiffLoadingState,
+    /// Current git diff if loaded
+    diff: Arc<Diff>,
     /// Current scroll offset for the diff content
     scroll_offset: usize,
-    /// List of files in the diff if loaded
-    files: Vec<DiffFile>,
     /// Index of the currently selected file
     selected_file_index: usize,
     /// Index of the currently selected line in the diff content
@@ -54,8 +54,8 @@ impl ReviewDetailsView {
         Self {
             state: ReviewDetailsState::Loaded(Arc::from(review)),
             diff_state: GitDiffLoadingState::Init,
+            diff: Arc::new(Diff::default()),
             scroll_offset: 0,
-            files: Vec::new(),
             selected_file_index: 0,
             selected_line_index: 0,
             navigation_mode: NavigationMode::Files,
@@ -66,8 +66,8 @@ impl ReviewDetailsView {
         Self {
             state: ReviewDetailsState::Loading,
             diff_state: GitDiffLoadingState::Init,
+            diff: Arc::new(Diff::default()),
             scroll_offset: 0,
-            files: Vec::new(),
             selected_file_index: 0,
             selected_line_index: 0,
             navigation_mode: NavigationMode::Files,
@@ -254,7 +254,7 @@ impl ReviewDetailsView {
     fn go_down(&mut self) {
         match self.navigation_mode {
             NavigationMode::Files => {
-                if self.selected_file_index < self.files.len().saturating_sub(1) {
+                if self.selected_file_index < self.diff.files.len().saturating_sub(1) {
                     self.selected_file_index += 1;
                     self.selected_line_index = 0;
                     self.scroll_offset = 0;
@@ -274,7 +274,7 @@ impl ReviewDetailsView {
     fn toggle_navigation_mode(&mut self) {
         match self.navigation_mode {
             NavigationMode::Files => {
-                if !self.files.is_empty() {
+                if !self.diff.files.is_empty() {
                     self.navigation_mode = NavigationMode::Lines;
                     self.selected_line_index = 0;
                 }
@@ -304,12 +304,7 @@ impl ReviewDetailsView {
     /// Reset the current line and scroll offset to 0 and set the review
     fn handle_review_loaded(&mut self, app: &mut App, review: &Arc<Review>) {
         self.state = ReviewDetailsState::Loaded(Arc::clone(review));
-        self.scroll_offset = 0; // Reset scroll when new review is loaded
-        self.diff_state = GitDiffLoadingState::Init; // Reset diff state
-        self.files.clear(); // Reset files
-        self.selected_file_index = 0;
-        self.selected_line_index = 0;
-        self.navigation_mode = NavigationMode::Files;
+        self.reset_diff_state();
 
         // Request git diff if SHAs are available
         if let (Some(base_sha), Some(target_sha)) = (&review.base_sha, &review.target_sha) {
@@ -327,20 +322,20 @@ impl ReviewDetailsView {
     /// Reset the current line and scroll offset to 0 and set the state
     fn handle_review_not_found(&mut self, review_id: &str) {
         self.state = ReviewDetailsState::Error(format!("Review not found: {review_id}"));
-        self.diff_state = GitDiffLoadingState::Init;
-        self.scroll_offset = 0; // Reset scroll on error
-        self.files.clear(); // Reset files
-        self.selected_file_index = 0;
-        self.selected_line_index = 0;
-        self.navigation_mode = NavigationMode::Files;
+        self.reset_diff_state();
     }
 
     /// Reset the current line and scroll offset to 0 and set the state
     fn handle_review_load_error(&mut self, error: &str) {
         self.state = ReviewDetailsState::Error(error.to_string());
+        self.reset_diff_state();
+    }
+
+    /// Reset all state related to the diff view
+    fn reset_diff_state(&mut self) {
         self.diff_state = GitDiffLoadingState::Init;
-        self.scroll_offset = 0; // Reset scroll on error
-        self.files.clear(); // Reset files
+        self.diff = Arc::new(Diff::default());
+        self.scroll_offset = 0;
         self.selected_file_index = 0;
         self.selected_line_index = 0;
         self.navigation_mode = NavigationMode::Files;
@@ -352,7 +347,7 @@ impl ReviewDetailsView {
 
         // Use structured diff data when loaded
         if let GitDiffLoadingState::Loaded(diff) = loading_state {
-            self.files = diff.files.to_vec();
+            self.diff = diff.clone();
             self.selected_file_index = 0;
             self.selected_line_index = 0;
             self.navigation_mode = NavigationMode::Files;
@@ -361,7 +356,7 @@ impl ReviewDetailsView {
 
     /// Get the number of lines in the currently selected file
     fn get_current_file_lines(&self) -> usize {
-        if let Some(file) = self.files.get(self.selected_file_index) {
+        if let Some(file) = self.diff.files.get(self.selected_file_index) {
             file.content.lines().count()
         } else {
             0
@@ -494,6 +489,7 @@ impl ReviewDetailsView {
         }
 
         let files_lines: Vec<Line> = self
+            .diff
             .files
             .iter()
             .enumerate()
@@ -542,23 +538,21 @@ impl ReviewDetailsView {
     /// Render the diff content panel
     fn render_diff_content(&self, area: Rect, buf: &mut Buffer) {
         // Show empty state when no files are available
-        if let GitDiffLoadingState::Loaded(diff) = &self.diff_state {
-            if diff.is_empty() {
-                let empty_text = Paragraph::new("No diff to display")
-                    .style(Style::default().fg(Color::Gray))
-                    .block(
-                        Block::default()
-                            .title(" Content ")
-                            .borders(Borders::ALL)
-                            .border_style(Style::default().fg(Color::Gray)),
-                    );
+        if self.diff.is_empty() {
+            let empty_text = Paragraph::new("No diff to display")
+                .style(Style::default().fg(Color::Gray))
+                .block(
+                    Block::default()
+                        .title(" Content ")
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(Color::Gray)),
+                );
 
-                empty_text.render(area, buf);
-                return;
-            }
+            empty_text.render(area, buf);
+            return;
         }
 
-        let content_text = if let Some(file) = self.files.get(self.selected_file_index) {
+        let content_text = if let Some(file) = self.diff.files.get(self.selected_file_index) {
             &file.content
         } else {
             // Show error when no files are available
@@ -623,6 +617,7 @@ impl ReviewDetailsView {
         // Show file info and navigation mode in title
         let total_lines = content_lines.len();
         let current_file_name = self
+            .diff
             .files
             .get(self.selected_file_index)
             .map(|f| f.path.as_str())
@@ -1060,15 +1055,14 @@ mod tests {
                 .base_branch("develop")
                 .base_sha("asdf1234"),
         );
-        let mut view = ReviewDetailsView::new(review);
+        let view = ReviewDetailsView::new(review);
 
-        // Simulate diff loading state
-        view.diff_state = GitDiffLoadingState::Loading;
-
-        let app = App {
+        let mut app = App {
             view_stack: vec![Box::new(view)],
             ..create_test_app().await
         };
+        // Simulate diff loading state
+        app.handle_app_events(&AppEvent::GitDiffLoadingState(GitDiffLoadingState::Loading));
 
         assert_snapshot!(render_app_to_terminal_backend(app))
     }
@@ -1080,15 +1074,17 @@ mod tests {
                 .base_branch("feature")
                 .base_sha("jkl09876"),
         );
-        let mut view = ReviewDetailsView::new(review);
+        let view = ReviewDetailsView::new(review);
 
-        // Simulate diff error state
-        view.diff_state = GitDiffLoadingState::Error("Repository not found".into());
-
-        let app = App {
+        let mut app = App {
             view_stack: vec![Box::new(view)],
             ..create_test_app().await
         };
+
+        // Simulate diff error state
+        app.handle_app_events(&AppEvent::GitDiffLoadingState(GitDiffLoadingState::Error(
+            "Repository not found".into(),
+        )));
 
         assert_snapshot!(render_app_to_terminal_backend(app))
     }
@@ -1096,17 +1092,18 @@ mod tests {
     #[tokio::test]
     async fn test_review_details_view_render_loaded_state_diff_loaded_no_files() {
         let review = Review::test_review(TestReviewParams::new().base_branch("main"));
-        let mut view = ReviewDetailsView::new(review);
+        let view = ReviewDetailsView::new(review);
 
         let files = vec![];
-        view.diff_state =
-            GitDiffLoadingState::Loaded(Arc::new(crate::models::Diff::from_files(files.clone())));
-        view.files = files.to_vec();
 
-        let app = App {
+        let mut app = App {
             view_stack: vec![Box::new(view)],
             ..create_test_app().await
         };
+
+        app.handle_app_events(&AppEvent::GitDiffLoadingState(GitDiffLoadingState::Loaded(
+            Arc::new(crate::models::Diff::from_files(files)),
+        )));
 
         assert_snapshot!(render_app_to_terminal_backend(app))
     }
@@ -1114,7 +1111,7 @@ mod tests {
     #[tokio::test]
     async fn test_review_details_view_render_loaded_state_diff_loaded_with_files() {
         let review = Review::test_review(TestReviewParams::new().base_branch("main"));
-        let mut view = ReviewDetailsView::new(review);
+        let view = ReviewDetailsView::new(review);
 
         // Simulate diff content being loaded
         let diff_content = r#"@@ -1,3 +1,4 @@
@@ -1128,14 +1125,14 @@ mod tests {
             content: diff_content.to_string(),
         }];
 
-        view.diff_state =
-            GitDiffLoadingState::Loaded(Arc::new(crate::models::Diff::from_files(files.clone())));
-        view.files = files.to_vec();
-
-        let app = App {
+        let mut app = App {
             view_stack: vec![Box::new(view)],
             ..create_test_app().await
         };
+
+        app.handle_app_events(&AppEvent::GitDiffLoadingState(GitDiffLoadingState::Loaded(
+            Arc::new(crate::models::Diff::from_files(files)),
+        )));
 
         assert_snapshot!(render_app_to_terminal_backend(app))
     }
