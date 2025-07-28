@@ -1,10 +1,14 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::database::Database;
 use crate::event::{AppEvent, EventHandler};
+use crate::models::{Diff, DiffFile};
 use crate::services::ServiceHandler;
 
 /// State of Git branches loading process
@@ -21,7 +25,7 @@ pub enum GitBranchesLoadingState {
     Error(Arc<str>),
 }
 
-/// State of Git diff loading process
+/// State of Git diff loading process with structured data
 #[derive(Debug, Clone, PartialEq, Default)]
 pub enum GitDiffLoadingState {
     /// Initial state - no loading has been attempted
@@ -29,8 +33,8 @@ pub enum GitDiffLoadingState {
     Init,
     /// Currently loading diff from Git repository
     Loading,
-    /// Diff has been successfully loaded
-    Loaded(Arc<str>),
+    /// Diff has been successfully loaded with structured data
+    Loaded(Arc<Diff>),
     /// Error occurred during loading
     Error(Arc<str>),
 }
@@ -82,12 +86,12 @@ impl GitService {
         format!("refs/heads/{branch_name}")
     }
 
-    /// Get the diff between two SHAs
+    /// Get the diff between two SHAs as structured data
     pub fn get_diff_between_shas<PathRef: AsRef<Path>>(
         repo_path: PathRef,
         base_sha: &str,
         target_sha: &str,
-    ) -> color_eyre::Result<String> {
+    ) -> color_eyre::Result<Diff> {
         let repo = git2::Repository::open(repo_path)?;
 
         // Parse SHAs to git2::Oid
@@ -105,24 +109,125 @@ impl GitService {
         // Create diff between trees
         let diff = repo.diff_tree_to_tree(Some(&base_tree), Some(&target_tree), None)?;
 
-        // Format diff as string
-        let mut diff_str = String::new();
-        diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
-            match line.origin() {
-                '+' | '-' | ' ' => diff_str.push(line.origin()),
-                _ => {}
-            }
-            match std::str::from_utf8(line.content()) {
-                Ok(content) => diff_str.push_str(content),
-                Err(error) => {
-                    eprintln!("UTF-8 conversion error: {error}");
-                    diff_str.push_str("[INVALID UTF-8]");
-                }
-            }
-            true
-        })?;
+        // Parse diff into structured format
+        Self::parse_git_diff(diff)
+    }
 
-        Ok(diff_str)
+    /// Parse a `git2::Diff` into structured `DiffFile` objects.
+    ///
+    /// This function processes a `git2::Diff` object and extracts file-level
+    /// changes into a structured format (`DiffFile`). It uses the `foreach` method
+    /// provided by `git2::Diff` to iterate over files, hunks, and lines in the diff.
+    ///
+    /// ### Design Choices
+    /// - **Shared Mutable State:** The function uses `Rc<RefCell<HashMap>>` to manage
+    ///   shared mutable state across the closures required by the `foreach` method.
+    ///   This approach was chosen because:
+    ///   - `Rc` allows multiple closures to share ownership of the state.
+    ///   - `RefCell` enables interior mutability, allowing the state to be modified
+    ///     within the closures while adhering to Rust's borrowing rules.
+    /// - **Alternatives Considered:** Other synchronization primitives like `Mutex` or
+    ///   `RwLock` were not used because they introduce unnecessary overhead in a
+    ///   single-threaded context, which is the typical use case for this function.
+    ///
+    /// ### Callback-Based Parsing
+    /// The `git2::Diff` API is callback-based, meaning that it invokes user-provided
+    /// closures for each file, hunk, and line in the diff. This design necessitates
+    /// the use of shared state (`Rc<RefCell<HashMap>>`) to accumulate results across
+    /// multiple callbacks.
+    ///
+    /// ### Output
+    /// The function returns a `Diff` object containing a list of `DiffFile` objects,
+    /// each representing a file in the diff along with its content.
+    fn parse_git_diff(diff: git2::Diff) -> color_eyre::Result<Diff> {
+        // Use Rc and RefCell to share mutable state across closures
+        // HashMap to store file paths and their content (path => content)
+        let files_content = Rc::new(RefCell::new(HashMap::<String, String>::new()));
+
+        // Clone references for each closure
+        let files_content_file = Rc::clone(&files_content);
+        let files_content_hunk = Rc::clone(&files_content);
+        let files_content_line = Rc::clone(&files_content);
+
+        // Use foreach to collect file information
+        diff.foreach(
+            &mut |delta, _progress| {
+                // Extract file path from delta. If new_file and old_file are both present,
+                // new_file takes precedence because that's the state after the commits.
+                if let Some(new_file) = delta.new_file().path() {
+                    let file_path = new_file.to_string_lossy().to_string();
+                    files_content_file
+                        .borrow_mut()
+                        .entry(file_path)
+                        .or_default();
+                } else if let Some(old_file) = delta.old_file().path() {
+                    let file_path = old_file.to_string_lossy().to_string();
+                    files_content_file
+                        .borrow_mut()
+                        .entry(file_path)
+                        .or_default();
+                }
+                true
+            },
+            None, // No binary callback needed
+            Some(&mut |delta, _hunk| {
+                // Collect hunk headers
+                let file_path = if let Some(new_file) = delta.new_file().path() {
+                    new_file.to_string_lossy().to_string()
+                } else if let Some(old_file) = delta.old_file().path() {
+                    old_file.to_string_lossy().to_string()
+                } else {
+                    return true;
+                };
+
+                if let Some(content) = files_content_hunk.borrow_mut().get_mut(&file_path) {
+                    if let Ok(header) = std::str::from_utf8(_hunk.header()) {
+                        content.push_str(header);
+                    }
+                }
+                true
+            }),
+            Some(&mut |delta, _hunk, line| {
+                // Collect line content
+                let file_path = if let Some(new_file) = delta.new_file().path() {
+                    new_file.to_string_lossy().to_string()
+                } else if let Some(old_file) = delta.old_file().path() {
+                    old_file.to_string_lossy().to_string()
+                } else {
+                    return true;
+                };
+
+                if let Some(content) = files_content_line.borrow_mut().get_mut(&file_path) {
+                    // Add line origin character
+                    match line.origin() {
+                        '+' | '-' | ' ' => content.push(line.origin()),
+                        _ => {}
+                    }
+
+                    // Add line content
+                    match std::str::from_utf8(line.content()) {
+                        Ok(line_content) => content.push_str(line_content),
+                        Err(error) => {
+                            eprintln!("UTF-8 conversion error: {error}");
+                            content.push_str("[INVALID UTF-8]");
+                        }
+                    }
+                }
+                true
+            }),
+        )?;
+
+        // Convert HashMap to Vec<DiffFile>
+        let diff_files: Vec<DiffFile> = files_content
+            .borrow()
+            .iter()
+            .map(|(path, content)| DiffFile {
+                path: path.clone(),
+                content: content.clone(),
+            })
+            .collect();
+
+        Ok(Diff::from_files(diff_files))
     }
 
     /// Send loading event to start the actual loading process
@@ -166,13 +271,8 @@ impl GitService {
     ) {
         match Self::get_diff_between_shas(".", base_sha, target_sha) {
             Ok(diff) => {
-                let diff_content = if diff.is_empty() {
-                    "No differences found between the two commits.".to_string()
-                } else {
-                    diff
-                };
                 events.send(AppEvent::GitDiffLoadingState(GitDiffLoadingState::Loaded(
-                    diff_content.into(),
+                    Arc::new(diff),
                 )));
             }
             Err(error) => {
@@ -408,10 +508,14 @@ mod tests {
         // Get diff between commits
         let diff = GitService::get_diff_between_shas(repo_path, &initial_sha, &second_sha).unwrap();
 
-        // Should contain diff showing the change
-        assert!(diff.contains("file.txt"));
-        assert!(diff.contains("-initial content"));
-        assert!(diff.contains("+modified content"));
+        // Should have one file with changes
+        assert!(!diff.is_empty());
+        assert_eq!(diff.file_count(), 1);
+
+        let file = &diff.files[0];
+        assert_eq!(file.path, "file.txt");
+        assert!(file.content.contains("-initial content"));
+        assert!(file.content.contains("+modified content"));
     }
 
     #[test]
