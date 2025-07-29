@@ -9,12 +9,14 @@ use crate::{app::App, event::AppEvent};
 
 pub use help_modal::KeyBinding;
 
+pub mod comments_view;
 pub mod confirmation_dialog;
 pub mod help_modal;
 pub mod main_view;
 pub mod review_create_view;
 pub mod review_details_view;
 
+pub use comments_view::CommentsView;
 pub use confirmation_dialog::ConfirmationDialogView;
 pub use help_modal::HelpModalView;
 pub use main_view::MainView;
@@ -28,6 +30,7 @@ pub enum ViewType {
     ConfirmationDialog,
     HelpModal,
     ReviewDetails,
+    Comments,
 }
 
 pub trait ViewHandler {

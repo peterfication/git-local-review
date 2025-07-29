@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -7,10 +8,10 @@ use ratatui::crossterm::event::{Event as CrosstermEvent, KeyEvent};
 use tokio::sync::mpsc;
 
 use crate::{
-    models::Review,
+    models::{Comment, Review},
     services::{
-        GitBranchesLoadingState, GitDiffLoadingState, ReviewCreateData, ReviewLoadingState,
-        ReviewsLoadingState,
+        CommentsLoadingState, GitBranchesLoadingState, GitDiffLoadingState, ReviewCreateData,
+        ReviewLoadingState, ReviewsLoadingState,
     },
     views::KeyBinding,
 };
@@ -145,6 +146,46 @@ pub enum AppEvent {
     FileViewsLoadError {
         review_id: Arc<ReviewId>,
         error: Arc<str>,
+    },
+
+    /// Open comments view for a file or line.
+    CommentsOpen {
+        review_id: Arc<ReviewId>,
+        file_path: Arc<str>,
+        line_number: Option<i64>,
+    },
+    /// Load comments for a specific file or line.
+    CommentsLoad {
+        review_id: Arc<ReviewId>,
+        file_path: Arc<str>,
+        line_number: Option<i64>,
+    },
+    /// Comments are being loaded.
+    CommentsLoading {
+        review_id: Arc<ReviewId>,
+        file_path: Arc<str>,
+        line_number: Option<i64>,
+    },
+    /// Propagates the current loading state of comments.
+    CommentsLoadingState(CommentsLoadingState),
+    /// Create a new comment.
+    CommentCreate {
+        review_id: Arc<ReviewId>,
+        file_path: Arc<str>,
+        line_number: Option<i64>,
+        content: Arc<str>,
+    },
+    /// Comment was created successfully.
+    CommentCreated(Arc<Comment>),
+    /// Error occurred while creating a comment.
+    CommentCreateError(Arc<str>),
+    /// Load comment metadata for a review (files with comments, lines with comments).
+    CommentMetadataLoad { review_id: Arc<ReviewId> },
+    /// Comment metadata loaded successfully.
+    CommentMetadataLoaded {
+        review_id: Arc<ReviewId>,
+        files_with_comments: Arc<Vec<String>>,
+        lines_with_comments: Arc<HashMap<String, Vec<i64>>>,
     },
 }
 
