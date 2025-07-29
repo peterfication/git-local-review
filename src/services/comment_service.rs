@@ -134,20 +134,12 @@ impl CommentService {
             return Ok(());
         }
 
-        // Create comment based on whether it's for a line or file
-        let comment = match line_number {
-            Some(line_num) => Comment::new_line_comment(
-                review_id.to_string(),
-                file_path.to_string(),
-                line_num,
-                trimmed_content.to_string(),
-            ),
-            None => Comment::new_file_comment(
-                review_id.to_string(),
-                file_path.to_string(),
-                trimmed_content.to_string(),
-            ),
-        };
+        let comment = Comment::new(
+            review_id.to_string(),
+            file_path.to_string(),
+            line_number,
+            trimmed_content.to_string(),
+        );
 
         // Save comment to database
         match comment.create(pool).await {
@@ -398,9 +390,10 @@ mod tests {
         review.save(database.pool()).await.unwrap();
 
         // Create a test comment first
-        let comment = Comment::new_file_comment(
+        let comment = Comment::new(
             review.id.clone(),
             "src/main.rs".to_string(),
+            None,
             "Test comment".to_string(),
         );
         comment.create(database.pool()).await.unwrap();
@@ -448,10 +441,10 @@ mod tests {
         review.save(database.pool()).await.unwrap();
 
         // Create a test line comment
-        let comment = Comment::new_line_comment(
+        let comment = Comment::new(
             review.id.clone(),
             "src/main.rs".to_string(),
-            10,
+            Some(10),
             "Line comment".to_string(),
         );
         comment.create(database.pool()).await.unwrap();
@@ -499,17 +492,18 @@ mod tests {
         review.save(database.pool()).await.unwrap();
 
         // Create test comments
-        let file_comment = Comment::new_file_comment(
+        let file_comment = Comment::new(
             review.id.clone(),
             "src/main.rs".to_string(),
+            None,
             "File comment".to_string(),
         );
         file_comment.create(database.pool()).await.unwrap();
 
-        let line_comment = Comment::new_line_comment(
+        let line_comment = Comment::new(
             review.id.clone(),
             "src/main.rs".to_string(),
-            5,
+            Some(5),
             "Line comment".to_string(),
         );
         line_comment.create(database.pool()).await.unwrap();

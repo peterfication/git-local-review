@@ -683,9 +683,10 @@ mod tests {
         assert!(matches!(view.loading_state, CommentsLoadingState::Loading));
 
         // Test loaded state
-        let test_comments = vec![Comment::test_file_comment(
+        let test_comments = vec![Comment::test_comment(
             "review-123".to_string(),
             "src/main.rs".to_string(),
+            None,
             "Test comment".to_string(),
         )];
         view.handle_app_events(

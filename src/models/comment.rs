@@ -23,22 +23,16 @@ impl PartialEq for Comment {
 }
 
 impl Comment {
-    pub fn new_file_comment(review_id: String, file_path: String, content: String) -> Self {
-        Self::new_file_comment_with_time_provider(
-            review_id,
-            file_path,
-            content,
-            &SystemTimeProvider,
-        )
-    }
-
-    pub fn new_line_comment(
+    /// Create a comment.
+    /// If `line_number` is `None`, it will be a file-level comment.
+    /// If `line_number` is `Some`, it will be a line-level comment.
+    pub fn new(
         review_id: String,
         file_path: String,
-        line_number: i64,
+        line_number: Option<i64>,
         content: String,
     ) -> Self {
-        Self::new_line_comment_with_time_provider(
+        Self::new_with_time_provider(
             review_id,
             file_path,
             line_number,
@@ -47,9 +41,10 @@ impl Comment {
         )
     }
 
-    pub fn new_file_comment_with_time_provider(
+    pub fn new_with_time_provider(
         review_id: String,
         file_path: String,
+        line_number: Option<i64>,
         content: String,
         time_provider: &dyn TimeProvider,
     ) -> Self {
@@ -57,24 +52,7 @@ impl Comment {
             id: Uuid::new_v4().to_string(),
             review_id,
             file_path,
-            line_number: None,
-            content,
-            created_at: time_provider.now(),
-        }
-    }
-
-    pub fn new_line_comment_with_time_provider(
-        review_id: String,
-        file_path: String,
-        line_number: i64,
-        content: String,
-        time_provider: &dyn TimeProvider,
-    ) -> Self {
-        Self {
-            id: Uuid::new_v4().to_string(),
-            review_id,
-            file_path,
-            line_number: Some(line_number),
+            line_number,
             content,
             created_at: time_provider.now(),
         }
@@ -330,18 +308,13 @@ impl Comment {
     }
 
     #[cfg(test)]
-    pub fn test_file_comment(review_id: String, file_path: String, content: String) -> Self {
-        Self::new_file_comment(review_id, file_path, content)
-    }
-
-    #[cfg(test)]
-    pub fn test_line_comment(
+    pub fn test_comment(
         review_id: String,
         file_path: String,
-        line_number: i64,
+        line_number: Option<i64>,
         content: String,
     ) -> Self {
-        Self::new_line_comment(review_id, file_path, line_number, content)
+        Self::new(review_id, file_path, line_number, content)
     }
 }
 
@@ -358,9 +331,10 @@ mod tests {
 
     #[test]
     fn test_comment_creation() {
-        let file_comment = Comment::new_file_comment(
+        let file_comment = Comment::new(
             "review-123".to_string(),
             "src/main.rs".to_string(),
+            None,
             "This is a file comment".to_string(),
         );
 
@@ -371,10 +345,10 @@ mod tests {
         assert_eq!(file_comment.content, "This is a file comment");
         assert_eq!(file_comment.line_number, None);
 
-        let line_comment = Comment::new_line_comment(
+        let line_comment = Comment::new(
             "review-123".to_string(),
             "src/main.rs".to_string(),
-            42,
+            Some(42),
             "This is a line comment".to_string(),
         );
 
@@ -395,18 +369,19 @@ mod tests {
         review.save(&pool).await.unwrap();
 
         // Create file comment
-        let file_comment = Comment::new_file_comment(
+        let file_comment = Comment::new(
             review.id.clone(),
             "src/main.rs".to_string(),
+            None,
             "File comment".to_string(),
         );
         file_comment.create(&pool).await.unwrap();
 
         // Create line comment
-        let line_comment = Comment::new_line_comment(
+        let line_comment = Comment::new(
             review.id.clone(),
             "src/main.rs".to_string(),
-            10,
+            Some(10),
             "Line comment".to_string(),
         );
         line_comment.create(&pool).await.unwrap();
@@ -476,9 +451,10 @@ mod tests {
         let review = crate::models::Review::test_review(());
         review.save(&pool).await.unwrap();
 
-        let comment = Comment::new_file_comment(
+        let comment = Comment::new(
             review.id.clone(),
             "src/main.rs".to_string(),
+            None,
             "Test comment".to_string(),
         );
         comment.create(&pool).await.unwrap();
@@ -510,17 +486,18 @@ mod tests {
         review.save(&pool).await.unwrap();
 
         // Create multiple comments for the same review
-        let comment1 = Comment::new_file_comment(
+        let comment1 = Comment::new(
             review.id.clone(),
             "src/main.rs".to_string(),
+            None,
             "Comment 1".to_string(),
         );
         comment1.create(&pool).await.unwrap();
 
-        let comment2 = Comment::new_line_comment(
+        let comment2 = Comment::new(
             review.id.clone(),
             "src/lib.rs".to_string(),
-            5,
+            Some(5),
             "Comment 2".to_string(),
         );
         comment2.create(&pool).await.unwrap();
