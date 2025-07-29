@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM comments WHERE review_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "6d9bb06f3be3f411ec51decdc3ce74c6a588314a52f3ff743d0073de0dbbc8ce"
+}
