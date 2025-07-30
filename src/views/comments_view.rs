@@ -13,7 +13,7 @@ use crate::{
     app::App,
     event::AppEvent,
     models::Comment,
-    services::CommentsLoadingState,
+    services::{CommentLoadParams, CommentsLoadingState},
     views::{KeyBinding, ViewHandler, ViewType},
 };
 
@@ -31,6 +31,28 @@ pub enum CommentTarget {
 }
 
 impl CommentTarget {
+    pub fn comment_load_params(&self) -> CommentLoadParams {
+        match self {
+            CommentTarget::File {
+                review_id,
+                file_path,
+            } => CommentLoadParams {
+                review_id: Arc::from(review_id.clone()),
+                file_path: Arc::from(Some(file_path.clone())),
+                line_number: Arc::from(None),
+            },
+            CommentTarget::Line {
+                review_id,
+                file_path,
+                line_number,
+            } => CommentLoadParams {
+                review_id: Arc::from(review_id.clone()),
+                file_path: Arc::from(Some(file_path.clone())),
+                line_number: Arc::from(Some(*line_number)),
+            },
+        }
+    }
+
     pub fn review_id(&self) -> &str {
         match self {
             CommentTarget::File { review_id, .. } => review_id,
@@ -222,13 +244,8 @@ impl ViewHandler for CommentsView {
 
     fn handle_app_events(&mut self, app: &mut App, event: &AppEvent) {
         match event {
-            AppEvent::CommentsLoadingState {
-                review_id,
-                file_path,
-                line_number,
-                state,
-            } => {
-                self.handle_comments_loading_state(review_id, file_path, line_number, state);
+            AppEvent::CommentsLoadingState { params, state } => {
+                self.handle_comments_loading_state(params, state);
             }
             AppEvent::CommentCreated(_comment) => {
                 // Reload comments when a new comment is created
@@ -438,23 +455,12 @@ impl CommentsView {
 
     fn handle_comments_loading_state(
         &mut self,
-        review_id: &Arc<str>,
-        file_path: &Arc<Option<String>>,
-        line_number: &Arc<Option<i64>>,
+        params: &CommentLoadParams,
         state: &CommentsLoadingState,
     ) {
-        // Check if the identifying information matches the current target
-        if !self.target.review_id().eq(review_id.as_ref()) {
-            // If the review ID doesn't match, we shouldn't handle this state
+        if !self.target.comment_load_params().equals(params) {
+            // If the params don't match our target, ignore this state
             return;
-        }
-        match file_path.as_ref() {
-            Some(path) if self.target.file_path() != path => return,
-            _ => {}
-        }
-        match line_number.as_ref() {
-            Some(line) if self.target.line_number() != Some(*line) => return,
-            _ => {}
         }
 
         self.loading_state = state.clone();
@@ -471,22 +477,22 @@ impl CommentsView {
                 review_id,
                 file_path,
             } => {
-                app.events.send(AppEvent::CommentsLoad {
+                app.events.send(AppEvent::CommentsLoad(CommentLoadParams {
                     review_id: review_id.clone().into(),
                     file_path: Arc::from(Some(file_path.clone())),
                     line_number: Arc::from(None),
-                });
+                }));
             }
             CommentTarget::Line {
                 review_id,
                 file_path,
                 line_number,
             } => {
-                app.events.send(AppEvent::CommentsLoad {
+                app.events.send(AppEvent::CommentsLoad(CommentLoadParams {
                     review_id: review_id.clone().into(),
                     file_path: Arc::from(Some(file_path.clone())),
                     line_number: Arc::from(Some(*line_number)),
-                });
+                }));
             }
         }
     }
@@ -704,9 +710,11 @@ mod tests {
         view.handle_app_events(
             &mut app,
             &AppEvent::CommentsLoadingState {
-                review_id: Arc::from("review-123"),
-                file_path: Arc::from(Some("src/main.rs".to_string())),
-                line_number: Arc::from(None),
+                params: CommentLoadParams {
+                    review_id: Arc::from("review-123"),
+                    file_path: Arc::from(Some("src/main.rs".to_string())),
+                    line_number: Arc::from(None),
+                },
                 state: CommentsLoadingState::Loading,
             },
         );
@@ -722,9 +730,11 @@ mod tests {
         view.handle_app_events(
             &mut app,
             &AppEvent::CommentsLoadingState {
-                review_id: Arc::from("review-123"),
-                file_path: Arc::from(Some("src/main.rs".to_string())),
-                line_number: Arc::from(None),
+                params: CommentLoadParams {
+                    review_id: Arc::from("review-123"),
+                    file_path: Arc::from(Some("src/main.rs".to_string())),
+                    line_number: Arc::from(None),
+                },
                 state: CommentsLoadingState::Loaded(Arc::new(test_comments.clone())),
             },
         );

@@ -5,7 +5,10 @@ use ratatui::crossterm::event::KeyEvent;
 use crate::{
     app::App,
     event::{AppEvent, Event},
-    services::{CommentService, FileViewService, GitService, ReviewService, ServiceHandler},
+    services::{
+        CommentLoadParams, CommentService, FileViewService, GitService, ReviewService,
+        ServiceHandler,
+    },
     views::{
         CommentsView, ConfirmationDialogView, HelpModalView, KeyBinding, ReviewCreateView,
         ReviewDetailsView,
@@ -114,11 +117,11 @@ impl EventProcessor {
         line_number: &Option<i64>,
     ) {
         // Trigger loading of comments for the specified target
-        app.events.send(AppEvent::CommentsLoad {
+        app.events.send(AppEvent::CommentsLoad(CommentLoadParams {
             review_id: review_id.clone(),
             file_path: Arc::from(Some(file_path.as_ref().to_string())),
             line_number: Arc::from(*line_number),
-        });
+        }));
 
         let comments_view = if let Some(line) = line_number {
             log::info!("Opening comments for review {review_id} at {file_path}:{line}");
@@ -574,14 +577,10 @@ mod tests {
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
         match &*event {
-            Event::App(AppEvent::CommentsLoad {
-                review_id: event_review_id,
-                file_path: event_file_path,
-                line_number: event_line_number,
-            }) => {
-                assert_eq!(event_review_id.as_ref(), "test-review-id");
-                assert_eq!(event_file_path.as_deref(), Some("src/main.rs"));
-                assert_eq!((*event_line_number.as_ref()), None);
+            Event::App(AppEvent::CommentsLoad(params)) => {
+                assert_eq!(params.review_id.as_ref(), "test-review-id");
+                assert_eq!(params.file_path.as_deref(), Some("src/main.rs"));
+                assert_eq!((*params.line_number.as_ref()), None);
             }
             _ => panic!("Expected CommentsLoad event, got: {event:?}"),
         }
@@ -620,14 +619,10 @@ mod tests {
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
         match &*event {
-            Event::App(AppEvent::CommentsLoad {
-                review_id: event_review_id,
-                file_path: event_file_path,
-                line_number: event_line_number,
-            }) => {
-                assert_eq!(event_review_id.as_ref(), "test-review-id");
-                assert_eq!(event_file_path.as_deref(), Some("src/lib.rs"));
-                assert_eq!((*event_line_number.as_ref()), Some(42));
+            Event::App(AppEvent::CommentsLoad(params)) => {
+                assert_eq!(params.review_id.as_ref(), "test-review-id");
+                assert_eq!(params.file_path.as_deref(), Some("src/lib.rs"));
+                assert_eq!((*params.line_number.as_ref()), Some(42));
             }
             _ => panic!("Expected CommentsLoad event, got: {event:?}"),
         }
@@ -656,14 +651,10 @@ mod tests {
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
         match &*event {
-            Event::App(AppEvent::CommentsLoad {
-                review_id: event_review_id,
-                file_path: event_file_path,
-                line_number: event_line_number,
-            }) => {
-                assert_eq!(event_review_id.as_ref(), "direct-test-review");
-                assert_eq!(event_file_path.as_deref(), Some("src/utils.rs"));
-                assert_eq!(*event_line_number.as_ref(), None);
+            Event::App(AppEvent::CommentsLoad(params)) => {
+                assert_eq!(params.review_id.as_ref(), "direct-test-review");
+                assert_eq!(params.file_path.as_deref(), Some("src/utils.rs"));
+                assert_eq!(*params.line_number.as_ref(), None);
             }
             _ => panic!("Expected CommentsLoad event, got: {event:?}"),
         }
@@ -692,14 +683,10 @@ mod tests {
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
         match &*event {
-            Event::App(AppEvent::CommentsLoad {
-                review_id: event_review_id,
-                file_path: event_file_path,
-                line_number: event_line_number,
-            }) => {
-                assert_eq!(event_review_id.as_ref(), "direct-test-review");
-                assert_eq!(event_file_path.as_deref(), Some("src/models/comment.rs"));
-                assert_eq!(*event_line_number.as_ref(), Some(123));
+            Event::App(AppEvent::CommentsLoad(params)) => {
+                assert_eq!(params.review_id.as_ref(), "direct-test-review");
+                assert_eq!(params.file_path.as_deref(), Some("src/models/comment.rs"));
+                assert_eq!(*params.line_number.as_ref(), Some(123));
             }
             _ => panic!("Expected CommentsLoad event, got: {event:?}"),
         }

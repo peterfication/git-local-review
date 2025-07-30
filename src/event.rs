@@ -10,8 +10,8 @@ use tokio::sync::mpsc;
 use crate::{
     models::{Comment, Review},
     services::{
-        CommentsLoadingState, GitBranchesLoadingState, GitDiffLoadingState, ReviewCreateData,
-        ReviewLoadingState, ReviewsLoadingState,
+        CommentLoadParams, CommentsLoadingState, GitBranchesLoadingState, GitDiffLoadingState,
+        ReviewCreateData, ReviewLoadingState, ReviewsLoadingState,
     },
     views::KeyBinding,
 };
@@ -155,25 +155,12 @@ pub enum AppEvent {
         line_number: Option<i64>,
     },
     /// Load comments for a review, file or line.
-    /// If `file_path` is `None`, load all comments for the review.
-    /// If `line_number` is `None`, load all comments for the file.
-    /// If `line_number` is `Some`, load all comments for the line.
-    CommentsLoad {
-        review_id: Arc<ReviewId>,
-        file_path: Arc<Option<String>>,
-        line_number: Arc<Option<i64>>,
-    },
+    CommentsLoad(CommentLoadParams),
     /// Comments are being loaded.
-    CommentsLoading {
-        review_id: Arc<ReviewId>,
-        file_path: Arc<Option<String>>,
-        line_number: Arc<Option<i64>>,
-    },
+    CommentsLoading(CommentLoadParams),
     /// Propagates the current loading state of comments.
     CommentsLoadingState {
-        review_id: Arc<ReviewId>,
-        file_path: Arc<Option<String>>,
-        line_number: Arc<Option<i64>>,
+        params: CommentLoadParams,
         state: CommentsLoadingState,
     },
     /// Create a new comment.
