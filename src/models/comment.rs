@@ -4,12 +4,14 @@ use uuid::Uuid;
 
 use crate::time_provider::{SystemTimeProvider, TimeProvider};
 
+use super::review::ReviewId;
+
 pub type CommentId = String;
 
 #[derive(Debug, Clone, FromRow)]
 pub struct Comment {
     pub id: CommentId,
-    pub review_id: String,
+    pub review_id: ReviewId,
     pub file_path: String,
     pub line_number: Option<i64>, // None for file-level comments
     pub content: String,
@@ -26,12 +28,7 @@ impl Comment {
     /// Create a comment.
     /// If `line_number` is `None`, it will be a file-level comment.
     /// If `line_number` is `Some`, it will be a line-level comment.
-    pub fn new(
-        review_id: String,
-        file_path: String,
-        line_number: Option<i64>,
-        content: String,
-    ) -> Self {
+    pub fn new(review_id: &str, file_path: &str, line_number: Option<i64>, content: &str) -> Self {
         Self::new_with_time_provider(
             review_id,
             file_path,
@@ -42,18 +39,18 @@ impl Comment {
     }
 
     pub fn new_with_time_provider(
-        review_id: String,
-        file_path: String,
+        review_id: &str,
+        file_path: &str,
         line_number: Option<i64>,
-        content: String,
+        content: &str,
         time_provider: &dyn TimeProvider,
     ) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
-            review_id,
-            file_path,
+            review_id: review_id.to_string(),
+            file_path: file_path.to_string(),
             line_number,
-            content,
+            content: content.to_string(),
             created_at: time_provider.now(),
         }
     }
@@ -85,6 +82,42 @@ impl Comment {
         .await?;
 
         Ok(())
+    }
+
+    /// Find comments for a specific review
+    pub async fn find_for_review(
+        pool: &SqlitePool,
+        review_id: &str,
+    ) -> color_eyre::Result<Vec<Comment>> {
+        let rows = sqlx::query!(
+            r#"
+            SELECT id as "id!", review_id as "review_id!", file_path as "file_path!", line_number, content as "content!", created_at as "created_at!"
+            FROM comments
+            WHERE review_id = ?
+            ORDER BY created_at DESC
+            "#,
+            review_id,
+        )
+        .fetch_all(pool)
+        .await?;
+
+        let mut comments = Vec::new();
+        for row in rows {
+            let created_at = DateTime::parse_from_rfc3339(&row.created_at)
+                .map_err(|e| color_eyre::eyre::eyre!("Failed to parse created_at: {}", e))?
+                .with_timezone(&Utc);
+
+            comments.push(Comment {
+                id: row.id,
+                review_id: row.review_id,
+                file_path: row.file_path,
+                line_number: row.line_number,
+                content: row.content,
+                created_at,
+            });
+        }
+
+        Ok(comments)
     }
 
     /// Find comments for a specific file (both file-level and line-level)
@@ -309,10 +342,10 @@ impl Comment {
 
     #[cfg(test)]
     pub fn test_comment(
-        review_id: String,
-        file_path: String,
+        review_id: &str,
+        file_path: &str,
         line_number: Option<i64>,
-        content: String,
+        content: &str,
     ) -> Self {
         Self::new(review_id, file_path, line_number, content)
     }
@@ -331,12 +364,8 @@ mod tests {
 
     #[test]
     fn test_comment_creation() {
-        let file_comment = Comment::new(
-            "review-123".to_string(),
-            "src/main.rs".to_string(),
-            None,
-            "This is a file comment".to_string(),
-        );
+        let file_comment =
+            Comment::new("review-123", "src/main.rs", None, "This is a file comment");
 
         assert!(file_comment.is_file_comment());
         assert!(!file_comment.is_line_comment());
@@ -346,10 +375,10 @@ mod tests {
         assert_eq!(file_comment.line_number, None);
 
         let line_comment = Comment::new(
-            "review-123".to_string(),
-            "src/main.rs".to_string(),
+            "review-123",
+            "src/main.rs",
             Some(42),
-            "This is a line comment".to_string(),
+            "This is a line comment",
         );
 
         assert!(!line_comment.is_file_comment());
@@ -369,21 +398,11 @@ mod tests {
         review.save(&pool).await.unwrap();
 
         // Create file comment
-        let file_comment = Comment::new(
-            review.id.clone(),
-            "src/main.rs".to_string(),
-            None,
-            "File comment".to_string(),
-        );
+        let file_comment = Comment::new(&review.id, "src/main.rs", None, "File comment");
         file_comment.create(&pool).await.unwrap();
 
         // Create line comment
-        let line_comment = Comment::new(
-            review.id.clone(),
-            "src/main.rs".to_string(),
-            Some(10),
-            "Line comment".to_string(),
-        );
+        let line_comment = Comment::new(&review.id, "src/main.rs", Some(10), "Line comment");
         line_comment.create(&pool).await.unwrap();
 
         // Test find_for_file (should return both comments)
@@ -451,12 +470,7 @@ mod tests {
         let review = crate::models::Review::test_review(());
         review.save(&pool).await.unwrap();
 
-        let comment = Comment::new(
-            review.id.clone(),
-            "src/main.rs".to_string(),
-            None,
-            "Test comment".to_string(),
-        );
+        let comment = Comment::new(&review.id, "src/main.rs", None, "Test comment");
         comment.create(&pool).await.unwrap();
 
         // Verify comment exists
@@ -486,20 +500,10 @@ mod tests {
         review.save(&pool).await.unwrap();
 
         // Create multiple comments for the same review
-        let comment1 = Comment::new(
-            review.id.clone(),
-            "src/main.rs".to_string(),
-            None,
-            "Comment 1".to_string(),
-        );
+        let comment1 = Comment::new(&review.id, "src/main.rs", None, "Comment 1");
         comment1.create(&pool).await.unwrap();
 
-        let comment2 = Comment::new(
-            review.id.clone(),
-            "src/lib.rs".to_string(),
-            Some(5),
-            "Comment 2".to_string(),
-        );
+        let comment2 = Comment::new(&review.id, "src/lib.rs", Some(5), "Comment 2");
         comment2.create(&pool).await.unwrap();
 
         // Verify comments exist

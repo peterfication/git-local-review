@@ -116,8 +116,8 @@ impl EventProcessor {
         // Trigger loading of comments for the specified target
         app.events.send(AppEvent::CommentsLoad {
             review_id: review_id.clone(),
-            file_path: file_path.clone(),
-            line_number: *line_number,
+            file_path: Arc::from(Some(file_path.as_ref().to_string())),
+            line_number: Arc::from(*line_number),
         });
 
         let comments_view = if let Some(line) = line_number {
@@ -580,8 +580,8 @@ mod tests {
                 line_number: event_line_number,
             }) => {
                 assert_eq!(event_review_id.as_ref(), "test-review-id");
-                assert_eq!(event_file_path.as_ref(), "src/main.rs");
-                assert_eq!(*event_line_number, None);
+                assert_eq!(event_file_path.as_deref(), Some("src/main.rs"));
+                assert_eq!((*event_line_number.as_ref()), None);
             }
             _ => panic!("Expected CommentsLoad event, got: {event:?}"),
         }
@@ -626,8 +626,8 @@ mod tests {
                 line_number: event_line_number,
             }) => {
                 assert_eq!(event_review_id.as_ref(), "test-review-id");
-                assert_eq!(event_file_path.as_ref(), "src/lib.rs");
-                assert_eq!(*event_line_number, Some(42));
+                assert_eq!(event_file_path.as_deref(), Some("src/lib.rs"));
+                assert_eq!((*event_line_number.as_ref()), Some(42));
             }
             _ => panic!("Expected CommentsLoad event, got: {event:?}"),
         }
@@ -662,8 +662,8 @@ mod tests {
                 line_number: event_line_number,
             }) => {
                 assert_eq!(event_review_id.as_ref(), "direct-test-review");
-                assert_eq!(event_file_path.as_ref(), "src/utils.rs");
-                assert_eq!(*event_line_number, None);
+                assert_eq!(event_file_path.as_deref(), Some("src/utils.rs"));
+                assert_eq!(*event_line_number.as_ref(), None);
             }
             _ => panic!("Expected CommentsLoad event, got: {event:?}"),
         }
@@ -698,8 +698,8 @@ mod tests {
                 line_number: event_line_number,
             }) => {
                 assert_eq!(event_review_id.as_ref(), "direct-test-review");
-                assert_eq!(event_file_path.as_ref(), "src/models/comment.rs");
-                assert_eq!(*event_line_number, Some(123));
+                assert_eq!(event_file_path.as_deref(), Some("src/models/comment.rs"));
+                assert_eq!(*event_line_number.as_ref(), Some(123));
             }
             _ => panic!("Expected CommentsLoad event, got: {event:?}"),
         }

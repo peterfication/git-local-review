@@ -34,14 +34,8 @@ impl ServiceHandler for CommentService {
                     file_path,
                     line_number,
                 } => {
-                    Self::handle_comments_load(
-                        database,
-                        events,
-                        review_id,
-                        file_path,
-                        *line_number,
-                    )
-                    .await?;
+                    Self::handle_comments_load(database, events, review_id, file_path, line_number)
+                        .await?;
                 }
                 AppEvent::CommentCreate {
                     review_id,
@@ -72,42 +66,66 @@ impl ServiceHandler for CommentService {
 }
 
 impl CommentService {
-    /// Load comments for a specific file or line
+    /// Load comments for a review, file or line
     async fn handle_comments_load(
         database: &Database,
         events: &mut EventHandler,
-        review_id: &ReviewId,
-        file_path: &str,
-        line_number: Option<i64>,
+        review_id: &Arc<ReviewId>,
+        file_path: &Arc<Option<String>>,
+        line_number: &Arc<Option<i64>>,
     ) -> color_eyre::Result<()> {
         let pool = database.pool();
 
-        // Send loading state
-        events.send(AppEvent::CommentsLoadingState(
-            CommentsLoadingState::Loading,
-        ));
+        events.send(AppEvent::CommentsLoadingState {
+            review_id: review_id.clone(),
+            file_path: file_path.clone(),
+            line_number: line_number.clone(),
+            state: CommentsLoadingState::Loading,
+        });
 
-        let result = match line_number {
-            Some(line_num) => {
-                // Load comments for a specific line
-                Comment::find_for_line(pool, review_id, file_path, line_num).await
+        let result = match file_path.as_ref() {
+            Some(file_path_present) => {
+                match **line_number {
+                    Some(line_number_present) => {
+                        // Load comments for a specific line
+                        Comment::find_for_line(
+                            pool,
+                            review_id,
+                            file_path_present,
+                            line_number_present,
+                        )
+                        .await
+                    }
+                    None => {
+                        // Load comments for a whole file (file-level and line-level comments)
+                        Comment::find_for_file(pool, review_id, file_path_present).await
+                    }
+                }
             }
             None => {
                 // Load comments for the whole file (file-level comments only)
-                Comment::find_file_comments(pool, review_id, file_path).await
+                Comment::find_for_review(pool, review_id).await
             }
         };
 
         match result {
             Ok(comments) => {
-                events.send(AppEvent::CommentsLoadingState(
-                    CommentsLoadingState::Loaded(Arc::new(comments)),
-                ));
+                events.send(AppEvent::CommentsLoadingState {
+                    review_id: review_id.clone(),
+                    file_path: file_path.clone(),
+                    line_number: line_number.clone(),
+                    state: CommentsLoadingState::Loaded(Arc::new(comments)),
+                });
             }
             Err(error) => {
-                events.send(AppEvent::CommentsLoadingState(CommentsLoadingState::Error(
-                    Arc::from(format!("Failed to load comments: {error}")),
-                )));
+                events.send(AppEvent::CommentsLoadingState {
+                    review_id: review_id.clone(),
+                    file_path: file_path.clone(),
+                    line_number: line_number.clone(),
+                    state: CommentsLoadingState::Error(Arc::from(format!(
+                        "Failed to load comments: {error}"
+                    ))),
+                });
             }
         }
 
@@ -134,12 +152,7 @@ impl CommentService {
             return Ok(());
         }
 
-        let comment = Comment::new(
-            review_id.to_string(),
-            file_path.to_string(),
-            line_number,
-            trimmed_content.to_string(),
-        );
+        let comment = Comment::new(review_id, file_path, line_number, trimmed_content);
 
         // Save comment to database
         match comment.create(pool).await {
@@ -150,8 +163,8 @@ impl CommentService {
                 // Trigger reload of comments for the same target
                 events.send(AppEvent::CommentsLoad {
                     review_id: Arc::from(review_id),
-                    file_path: Arc::from(file_path),
-                    line_number,
+                    file_path: Arc::new(Some(file_path.to_string())),
+                    line_number: Arc::from(line_number),
                 });
             }
             Err(error) => {
@@ -296,8 +309,13 @@ mod tests {
                 line_number,
             }) => {
                 assert_eq!(review_id.to_string(), review.id);
-                assert_eq!(file_path.to_string(), "src/main.rs");
-                assert_eq!(*line_number, None);
+                match file_path.as_ref() {
+                    Some(file_path_conent) => {
+                        assert_eq!(file_path_conent, "src/main.rs");
+                    }
+                    None => panic!("Expected file path to be Some"),
+                }
+                assert_eq!(*line_number.as_ref(), None);
             }
             _ => panic!("Expected CommentsLoad event"),
         }
@@ -346,8 +364,18 @@ mod tests {
                 line_number,
             }) => {
                 assert_eq!(review_id.to_string(), review.id);
-                assert_eq!(file_path.to_string(), "src/main.rs");
-                assert_eq!(*line_number, Some(42));
+                match file_path.as_ref() {
+                    Some(file_path_content) => {
+                        assert_eq!(file_path_content, "src/main.rs");
+                    }
+                    None => panic!("Expected file path to be Some"),
+                }
+                match line_number.as_ref() {
+                    Some(line_number_value) => {
+                        assert_eq!(*line_number_value, 42);
+                    }
+                    None => panic!("Expected line number to be Some"),
+                }
             }
             _ => panic!("Expected CommentsLoad event"),
         }
@@ -390,21 +418,20 @@ mod tests {
         review.save(database.pool()).await.unwrap();
 
         // Create a test comment first
-        let comment = Comment::new(
-            review.id.clone(),
-            "src/main.rs".to_string(),
-            None,
-            "Test comment".to_string(),
-        );
+        let comment = Comment::new(&review.id, "src/main.rs", None, "Test comment");
         comment.create(database.pool()).await.unwrap();
+
+        let review_id = Arc::from(review.id.clone());
+        let file_path = Arc::from(Some("src/main.rs".to_string()));
+        let line_number = Arc::from(None);
 
         // Load comments for the file
         CommentService::handle_comments_load(
             &database,
             &mut events,
-            &review.id,
-            "src/main.rs",
-            None,
+            &review_id,
+            &file_path,
+            &line_number,
         )
         .await
         .unwrap();
@@ -412,18 +439,31 @@ mod tests {
         // Should send Loading state first
         let event = events.try_recv().unwrap();
         match &*event {
-            crate::event::Event::App(AppEvent::CommentsLoadingState(
-                CommentsLoadingState::Loading,
-            )) => {}
+            crate::event::Event::App(AppEvent::CommentsLoadingState {
+                review_id,
+                file_path,
+                line_number,
+                state: CommentsLoadingState::Loading,
+            }) => {
+                assert_eq!(review_id.to_string(), review.id);
+                assert_eq!(file_path.as_deref(), Some("src/main.rs"));
+                assert!(line_number.is_none());
+            }
             _ => panic!("Expected Loading state"),
         }
 
         // Should send Loaded state with comments
         let event = events.try_recv().unwrap();
         match &*event {
-            crate::event::Event::App(AppEvent::CommentsLoadingState(
-                CommentsLoadingState::Loaded(comments),
-            )) => {
+            crate::event::Event::App(AppEvent::CommentsLoadingState {
+                review_id,
+                file_path,
+                line_number,
+                state: CommentsLoadingState::Loaded(comments),
+            }) => {
+                assert_eq!(review_id.to_string(), review.id);
+                assert_eq!(file_path.as_deref(), Some("src/main.rs"));
+                assert!(line_number.is_none());
                 assert_eq!(comments.len(), 1);
                 assert_eq!(comments[0].content, "Test comment");
             }
@@ -441,21 +481,20 @@ mod tests {
         review.save(database.pool()).await.unwrap();
 
         // Create a test line comment
-        let comment = Comment::new(
-            review.id.clone(),
-            "src/main.rs".to_string(),
-            Some(10),
-            "Line comment".to_string(),
-        );
+        let comment = Comment::new(&review.id, "src/main.rs", Some(10), "Line comment");
         comment.create(database.pool()).await.unwrap();
+
+        let review_id = Arc::from(review.id.clone());
+        let file_path = Arc::from(Some("src/main.rs".to_string()));
+        let line_number = Arc::from(Some(10));
 
         // Load comments for the specific line
         CommentService::handle_comments_load(
             &database,
             &mut events,
-            &review.id,
-            "src/main.rs",
-            Some(10),
+            &review_id,
+            &file_path,
+            &line_number,
         )
         .await
         .unwrap();
@@ -463,18 +502,41 @@ mod tests {
         // Should send Loading state first
         let event = events.try_recv().unwrap();
         match &*event {
-            crate::event::Event::App(AppEvent::CommentsLoadingState(
-                CommentsLoadingState::Loading,
-            )) => {}
+            crate::event::Event::App(AppEvent::CommentsLoadingState {
+                review_id,
+                file_path,
+                line_number,
+                state: CommentsLoadingState::Loading,
+            }) => {
+                assert_eq!(review_id.to_string(), review.id);
+                assert_eq!(file_path.as_deref(), Some("src/main.rs"));
+                match line_number.as_ref() {
+                    Some(line_number_value) => {
+                        assert_eq!(*line_number_value, 10);
+                    }
+                    None => panic!("Expected line number to be Some"),
+                }
+            }
             _ => panic!("Expected Loading state"),
         }
 
         // Should send Loaded state with comments
         let event = events.try_recv().unwrap();
         match &*event {
-            crate::event::Event::App(AppEvent::CommentsLoadingState(
-                CommentsLoadingState::Loaded(comments),
-            )) => {
+            crate::event::Event::App(AppEvent::CommentsLoadingState {
+                review_id,
+                file_path,
+                line_number,
+                state: CommentsLoadingState::Loaded(comments),
+            }) => {
+                assert_eq!(review_id.to_string(), review.id);
+                assert_eq!(file_path.as_deref(), Some("src/main.rs"));
+                match line_number.as_ref() {
+                    Some(line_number_value) => {
+                        assert_eq!(*line_number_value, 10);
+                    }
+                    None => panic!("Expected line number to be Some"),
+                }
                 assert_eq!(comments.len(), 1);
                 assert_eq!(comments[0].content, "Line comment");
                 assert_eq!(comments[0].line_number, Some(10));
@@ -492,20 +554,10 @@ mod tests {
         review.save(database.pool()).await.unwrap();
 
         // Create test comments
-        let file_comment = Comment::new(
-            review.id.clone(),
-            "src/main.rs".to_string(),
-            None,
-            "File comment".to_string(),
-        );
+        let file_comment = Comment::new(&review.id, "src/main.rs", None, "File comment");
         file_comment.create(database.pool()).await.unwrap();
 
-        let line_comment = Comment::new(
-            review.id.clone(),
-            "src/main.rs".to_string(),
-            Some(5),
-            "Line comment".to_string(),
-        );
+        let line_comment = Comment::new(&review.id, "src/main.rs", Some(5), "Line comment");
         line_comment.create(database.pool()).await.unwrap();
 
         // Test file_has_comments

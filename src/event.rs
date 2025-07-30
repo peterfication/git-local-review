@@ -154,20 +154,28 @@ pub enum AppEvent {
         file_path: Arc<str>,
         line_number: Option<i64>,
     },
-    /// Load comments for a specific file or line.
+    /// Load comments for a review, file or line.
+    /// If `file_path` is `None`, load all comments for the review.
+    /// If `line_number` is `None`, load all comments for the file.
+    /// If `line_number` is `Some`, load all comments for the line.
     CommentsLoad {
         review_id: Arc<ReviewId>,
-        file_path: Arc<str>,
-        line_number: Option<i64>,
+        file_path: Arc<Option<String>>,
+        line_number: Arc<Option<i64>>,
     },
     /// Comments are being loaded.
     CommentsLoading {
         review_id: Arc<ReviewId>,
-        file_path: Arc<str>,
-        line_number: Option<i64>,
+        file_path: Arc<Option<String>>,
+        line_number: Arc<Option<i64>>,
     },
     /// Propagates the current loading state of comments.
-    CommentsLoadingState(CommentsLoadingState),
+    CommentsLoadingState {
+        review_id: Arc<ReviewId>,
+        file_path: Arc<Option<String>>,
+        line_number: Arc<Option<i64>>,
+        state: CommentsLoadingState,
+    },
     /// Create a new comment.
     CommentCreate {
         review_id: Arc<ReviewId>,

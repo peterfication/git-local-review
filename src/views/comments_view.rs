@@ -222,8 +222,13 @@ impl ViewHandler for CommentsView {
 
     fn handle_app_events(&mut self, app: &mut App, event: &AppEvent) {
         match event {
-            AppEvent::CommentsLoadingState(loading_state) => {
-                self.handle_comments_loading_state(loading_state);
+            AppEvent::CommentsLoadingState {
+                review_id,
+                file_path,
+                line_number,
+                state,
+            } => {
+                self.handle_comments_loading_state(review_id, file_path, line_number, state);
             }
             AppEvent::CommentCreated(_comment) => {
                 // Reload comments when a new comment is created
@@ -431,10 +436,30 @@ impl CommentsView {
         ListItem::new(content)
     }
 
-    fn handle_comments_loading_state(&mut self, loading_state: &CommentsLoadingState) {
-        self.loading_state = loading_state.clone();
+    fn handle_comments_loading_state(
+        &mut self,
+        review_id: &Arc<str>,
+        file_path: &Arc<Option<String>>,
+        line_number: &Arc<Option<i64>>,
+        state: &CommentsLoadingState,
+    ) {
+        // Check if the identifying information matches the current target
+        if !self.target.review_id().eq(review_id.as_ref()) {
+            // If the review ID doesn't match, we shouldn't handle this state
+            return;
+        }
+        match file_path.as_ref() {
+            Some(path) if self.target.file_path() != path => return,
+            _ => {}
+        }
+        match line_number.as_ref() {
+            Some(line) if self.target.line_number() != Some(*line) => return,
+            _ => {}
+        }
 
-        if let CommentsLoadingState::Loaded(comments) = loading_state {
+        self.loading_state = state.clone();
+
+        if let CommentsLoadingState::Loaded(comments) = state {
             self.comments = comments.clone();
             self.scroll_offset = 0; // Reset scroll when comments are loaded
         }
@@ -448,8 +473,8 @@ impl CommentsView {
             } => {
                 app.events.send(AppEvent::CommentsLoad {
                     review_id: review_id.clone().into(),
-                    file_path: file_path.clone().into(),
-                    line_number: None,
+                    file_path: Arc::from(Some(file_path.clone())),
+                    line_number: Arc::from(None),
                 });
             }
             CommentTarget::Line {
@@ -459,8 +484,8 @@ impl CommentsView {
             } => {
                 app.events.send(AppEvent::CommentsLoad {
                     review_id: review_id.clone().into(),
-                    file_path: file_path.clone().into(),
-                    line_number: Some(*line_number),
+                    file_path: Arc::from(Some(file_path.clone())),
+                    line_number: Arc::from(Some(*line_number)),
                 });
             }
         }
@@ -678,22 +703,30 @@ mod tests {
         // Test loading state
         view.handle_app_events(
             &mut app,
-            &AppEvent::CommentsLoadingState(CommentsLoadingState::Loading),
+            &AppEvent::CommentsLoadingState {
+                review_id: Arc::from("review-123"),
+                file_path: Arc::from(Some("src/main.rs".to_string())),
+                line_number: Arc::from(None),
+                state: CommentsLoadingState::Loading,
+            },
         );
         assert!(matches!(view.loading_state, CommentsLoadingState::Loading));
 
         // Test loaded state
         let test_comments = vec![Comment::test_comment(
-            "review-123".to_string(),
-            "src/main.rs".to_string(),
+            "review-123",
+            "src/main.rs",
             None,
-            "Test comment".to_string(),
+            "Test comment",
         )];
         view.handle_app_events(
             &mut app,
-            &AppEvent::CommentsLoadingState(CommentsLoadingState::Loaded(Arc::new(
-                test_comments.clone(),
-            ))),
+            &AppEvent::CommentsLoadingState {
+                review_id: Arc::from("review-123"),
+                file_path: Arc::from(Some("src/main.rs".to_string())),
+                line_number: Arc::from(None),
+                state: CommentsLoadingState::Loaded(Arc::new(test_comments.clone())),
+            },
         );
         assert!(matches!(
             view.loading_state,
