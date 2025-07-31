@@ -201,23 +201,6 @@ impl CommentService {
     ) -> color_eyre::Result<bool> {
         Comment::line_has_comments(database.pool(), review_id, file_path, line_number).await
     }
-
-    /// Get all files with comments for a review
-    pub async fn get_files_with_comments(
-        database: &Database,
-        review_id: &str,
-    ) -> color_eyre::Result<Vec<String>> {
-        Comment::get_files_with_comments(database.pool(), review_id).await
-    }
-
-    /// Get all line numbers with comments for a specific file
-    pub async fn get_lines_with_comments(
-        database: &Database,
-        review_id: &str,
-        file_path: &str,
-    ) -> color_eyre::Result<Vec<i64>> {
-        Comment::get_lines_with_comments(database.pool(), review_id, file_path).await
-    }
 }
 
 #[cfg(test)]
@@ -614,17 +597,5 @@ mod tests {
                 .await
                 .unwrap();
         assert!(!line_no_comments);
-
-        // Test get_files_with_comments
-        let files = CommentService::get_files_with_comments(&database, &review.id)
-            .await
-            .unwrap();
-        assert_eq!(files, vec!["src/main.rs"]);
-
-        // Test get_lines_with_comments
-        let lines = CommentService::get_lines_with_comments(&database, &review.id, "src/main.rs")
-            .await
-            .unwrap();
-        assert_eq!(lines, vec![5]);
     }
 }

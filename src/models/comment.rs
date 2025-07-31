@@ -198,44 +198,6 @@ impl Comment {
         Ok(comments)
     }
 
-    /// Find file-level comments only
-    pub async fn find_file_comments(
-        pool: &SqlitePool,
-        review_id: &str,
-        file_path: &str,
-    ) -> color_eyre::Result<Vec<Comment>> {
-        let rows = sqlx::query!(
-            r#"
-            SELECT id as "id!", review_id as "review_id!", file_path as "file_path!", line_number, content as "content!", created_at as "created_at!"
-            FROM comments
-            WHERE review_id = ? AND file_path = ? AND line_number IS NULL
-            ORDER BY created_at DESC
-            "#,
-            review_id,
-            file_path
-        )
-        .fetch_all(pool)
-        .await?;
-
-        let mut comments = Vec::new();
-        for row in rows {
-            let created_at = DateTime::parse_from_rfc3339(&row.created_at)
-                .map_err(|e| color_eyre::eyre::eyre!("Failed to parse created_at: {}", e))?
-                .with_timezone(&Utc);
-
-            comments.push(Comment {
-                id: row.id,
-                review_id: row.review_id,
-                file_path: row.file_path,
-                line_number: row.line_number,
-                content: row.content,
-                created_at,
-            });
-        }
-
-        Ok(comments)
-    }
-
     /// Check if a file has any comments (file-level or line-level)
     pub async fn file_has_comments(
         pool: &SqlitePool,
@@ -278,48 +240,6 @@ impl Comment {
         .await?;
 
         Ok(count > 0)
-    }
-
-    /// Get all files with comments for a review
-    pub async fn get_files_with_comments(
-        pool: &SqlitePool,
-        review_id: &str,
-    ) -> color_eyre::Result<Vec<String>> {
-        let files = sqlx::query_scalar!(
-            r#"
-            SELECT DISTINCT file_path
-            FROM comments
-            WHERE review_id = ?
-            ORDER BY file_path
-            "#,
-            review_id
-        )
-        .fetch_all(pool)
-        .await?;
-
-        Ok(files)
-    }
-
-    /// Get all line numbers with comments for a specific file
-    pub async fn get_lines_with_comments(
-        pool: &SqlitePool,
-        review_id: &str,
-        file_path: &str,
-    ) -> color_eyre::Result<Vec<i64>> {
-        let lines = sqlx::query_scalar!(
-            r#"
-            SELECT DISTINCT line_number
-            FROM comments
-            WHERE review_id = ? AND file_path = ? AND line_number IS NOT NULL
-            ORDER BY line_number
-            "#,
-            review_id,
-            file_path
-        )
-        .fetch_all(pool)
-        .await?;
-
-        Ok(lines.into_iter().flatten().collect())
     }
 
     /// Delete a comment by ID
@@ -418,13 +338,6 @@ mod tests {
         assert_eq!(line_comments.len(), 1);
         assert_eq!(line_comments[0].content, "Line comment");
 
-        // Test find_file_comments (should return only file comment)
-        let only_file_comments = Comment::find_file_comments(&pool, &review.id, "src/main.rs")
-            .await
-            .unwrap();
-        assert_eq!(only_file_comments.len(), 1);
-        assert_eq!(only_file_comments[0].content, "File comment");
-
         // Test file_has_comments
         assert!(
             Comment::file_has_comments(&pool, &review.id, "src/main.rs")
@@ -448,18 +361,6 @@ mod tests {
                 .await
                 .unwrap()
         );
-
-        // Test get_files_with_comments
-        let files = Comment::get_files_with_comments(&pool, &review.id)
-            .await
-            .unwrap();
-        assert_eq!(files, vec!["src/main.rs"]);
-
-        // Test get_lines_with_comments
-        let lines = Comment::get_lines_with_comments(&pool, &review.id, "src/main.rs")
-            .await
-            .unwrap();
-        assert_eq!(lines, vec![10]);
     }
 
     #[tokio::test]
