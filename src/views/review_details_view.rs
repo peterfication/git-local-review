@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::sync::Arc;
 
 use ratatui::{
@@ -33,6 +34,26 @@ pub enum NavigationMode {
 pub enum FileListType {
     NotViewed,
     Viewed,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+/// Represents the type of comments a file has
+pub enum CommentIndicator {
+    NoComment,
+    FileComment,
+    LineComment,
+    FileAndLineComment,
+}
+
+impl fmt::Display for CommentIndicator {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            CommentIndicator::NoComment => f.write_str(" "),
+            CommentIndicator::FileComment => f.write_str(FILE_COMMENT_INDICATOR),
+            CommentIndicator::LineComment => f.write_str(LINE_COMMENT_INDICATOR),
+            CommentIndicator::FileAndLineComment => f.write_str(FILE_AND_LINE_COMMENT_INDICATOR),
+        }
+    }
 }
 
 pub struct ReviewDetailsView {
@@ -858,7 +879,7 @@ impl ReviewDetailsView {
     /// Get the comment indicator for a diff file based on its comment status
     ///
     /// Use different indicator for file comments and line comments and files that have both.
-    fn comment_indicator(&self, diff_file: &DiffFile) -> &str {
+    fn comment_indicator(&self, diff_file: &DiffFile) -> CommentIndicator {
         if self
             .files_with_file_and_or_line_comments
             .contains(&diff_file.path)
@@ -867,17 +888,14 @@ impl ReviewDetailsView {
             let has_file_comment = self.files_with_file_comments.contains(&diff_file.path);
 
             if has_file_comment && !has_line_comment {
-                // Only file comments,
-                FILE_COMMENT_INDICATOR
+                CommentIndicator::FileComment
             } else if !has_file_comment && has_line_comment {
-                // Only line comments
-                LINE_COMMENT_INDICATOR
+                CommentIndicator::LineComment
             } else {
-                // File and line comments
-                FILE_AND_LINE_COMMENT_INDICATOR
+                CommentIndicator::FileAndLineComment
             }
         } else {
-            " "
+            CommentIndicator::NoComment
         }
     }
 
@@ -1711,7 +1729,7 @@ mod tests {
 
         // No comments set up
         let indicator = view.comment_indicator(&diff_file);
-        assert_eq!(indicator, " ");
+        assert_eq!(indicator, CommentIndicator::NoComment);
     }
 
     #[test]
@@ -1730,7 +1748,7 @@ mod tests {
         // No line comments
 
         let indicator = view.comment_indicator(&diff_file);
-        assert_eq!(indicator, FILE_COMMENT_INDICATOR);
+        assert_eq!(indicator, CommentIndicator::FileComment);
     }
 
     #[test]
@@ -1751,7 +1769,7 @@ mod tests {
         view.lines_with_comments = Arc::new(lines_with_comments);
 
         let indicator = view.comment_indicator(&diff_file);
-        assert_eq!(indicator, LINE_COMMENT_INDICATOR);
+        assert_eq!(indicator, CommentIndicator::LineComment);
     }
 
     #[test]
@@ -1772,7 +1790,7 @@ mod tests {
         view.lines_with_comments = Arc::new(lines_with_comments);
 
         let indicator = view.comment_indicator(&diff_file);
-        assert_eq!(indicator, FILE_AND_LINE_COMMENT_INDICATOR);
+        assert_eq!(indicator, CommentIndicator::FileAndLineComment);
     }
 
     #[tokio::test]
