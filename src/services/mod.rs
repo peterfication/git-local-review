@@ -8,8 +8,8 @@ pub mod file_view_service;
 pub mod git_service;
 pub mod review_service;
 
-pub use comment_service::CommentsLoadParams;
 pub use comment_service::CommentService;
+pub use comment_service::CommentsLoadParams;
 pub use comment_service::CommentsLoadingState;
 pub use file_view_service::FileViewService;
 pub use git_service::GitBranchesLoadingState;

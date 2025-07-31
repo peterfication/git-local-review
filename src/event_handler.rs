@@ -6,7 +6,7 @@ use crate::{
     app::App,
     event::{AppEvent, Event},
     services::{
-        CommentsLoadParams, CommentService, FileViewService, GitService, ReviewService,
+        CommentService, CommentsLoadParams, FileViewService, GitService, ReviewService,
         ServiceHandler,
     },
     views::{

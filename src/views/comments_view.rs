@@ -107,8 +107,6 @@ pub struct CommentsView {
     loading_state: CommentsLoadingState,
     /// Comments list (cached from loading state)
     comments: Arc<Vec<Comment>>,
-    /// Scroll offset for comments list
-    scroll_offset: usize,
 }
 
 impl CommentsView {
@@ -121,7 +119,6 @@ impl CommentsView {
             input_text: String::new(),
             loading_state: CommentsLoadingState::Init,
             comments: Arc::new(vec![]),
-            scroll_offset: 0,
         }
     }
 
@@ -135,7 +132,6 @@ impl CommentsView {
             input_text: String::new(),
             loading_state: CommentsLoadingState::Init,
             comments: Arc::new(vec![]),
-            scroll_offset: 0,
         }
     }
 
@@ -183,17 +179,6 @@ impl CommentsView {
             self.input_text.push(c);
         }
     }
-
-    fn scroll_up(&mut self) {
-        self.scroll_offset = self.scroll_offset.saturating_sub(1);
-    }
-
-    fn scroll_down(&mut self) {
-        if !self.comments.is_empty() {
-            self.scroll_offset =
-                (self.scroll_offset + 1).min(self.comments.len().saturating_sub(1));
-        }
-    }
 }
 
 impl ViewHandler for CommentsView {
@@ -229,14 +214,12 @@ impl ViewHandler for CommentsView {
 
     fn handle_key_events(&mut self, app: &mut App, key_event: &KeyEvent) -> color_eyre::Result<()> {
         match key_event.code {
-            KeyCode::Enter => self.handle_enter(app),
+            KeyCode::Char(c) => self.handle_char(c),
             KeyCode::Backspace => self.handle_backspace(),
-            KeyCode::Up | KeyCode::Char('k') => self.scroll_up(),
-            KeyCode::Down | KeyCode::Char('j') => self.scroll_down(),
+            KeyCode::Enter => self.handle_enter(app),
             KeyCode::Esc => {
                 app.events.send(AppEvent::ViewClose);
             }
-            KeyCode::Char(c) => self.handle_char(c),
             _ => {}
         }
         Ok(())
@@ -274,26 +257,6 @@ impl ViewHandler for CommentsView {
                 },
             },
             KeyBinding {
-                key: "↑/k".to_string(),
-                description: "Scroll up".to_string(),
-                key_event: KeyEvent {
-                    code: KeyCode::Up,
-                    modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
-                    kind: ratatui::crossterm::event::KeyEventKind::Press,
-                    state: ratatui::crossterm::event::KeyEventState::empty(),
-                },
-            },
-            KeyBinding {
-                key: "↓/j".to_string(),
-                description: "Scroll down".to_string(),
-                key_event: KeyEvent {
-                    code: KeyCode::Down,
-                    modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
-                    kind: ratatui::crossterm::event::KeyEventKind::Press,
-                    state: ratatui::crossterm::event::KeyEventState::empty(),
-                },
-            },
-            KeyBinding {
                 key: "Esc".to_string(),
                 description: "Close comments".to_string(),
                 key_event: KeyEvent {
@@ -309,7 +272,7 @@ impl ViewHandler for CommentsView {
     #[cfg(test)]
     fn debug_state(&self) -> String {
         format!(
-            "target: {:?}, input_text: {:?}, loading_state: {:?}, comments_count: {}, scroll_offset: {}",
+            "target: {:?}, input_text: {:?}, loading_state: {:?}, comments_count: {}",
             self.target,
             self.input_text,
             match &self.loading_state {
@@ -319,7 +282,6 @@ impl ViewHandler for CommentsView {
                 CommentsLoadingState::Error(error) => format!("Error({error})"),
             },
             self.comments.len(),
-            self.scroll_offset
         )
     }
 
@@ -467,7 +429,6 @@ impl CommentsView {
 
         if let CommentsLoadingState::Loaded(comments) = state {
             self.comments = comments.clone();
-            self.scroll_offset = 0; // Reset scroll when comments are loaded
         }
     }
 
@@ -495,11 +456,6 @@ impl CommentsView {
                 }));
             }
         }
-    }
-
-    /// Request initial loading of comments when the view is opened
-    pub fn request_initial_load(&self, app: &mut App) {
-        self.request_comments_reload(app);
     }
 }
 
@@ -681,7 +637,6 @@ mod tests {
         assert!(debug_state.contains("input_text: \"\""));
         assert!(debug_state.contains("loading_state: \"Init\""));
         assert!(debug_state.contains("comments_count: 0"));
-        assert!(debug_state.contains("scroll_offset: 0"));
     }
 
     #[test]
@@ -689,15 +644,11 @@ mod tests {
         let view = CommentsView::new_for_file("review-123".to_string(), "src/main.rs".to_string());
 
         let keybindings = view.get_keybindings();
-        assert_eq!(keybindings.len(), 4);
+        assert_eq!(keybindings.len(), 2);
         assert_eq!(keybindings[0].key, "Enter");
         assert_eq!(keybindings[0].description, "Add comment");
-        assert_eq!(keybindings[1].key, "↑/k");
-        assert_eq!(keybindings[1].description, "Scroll up");
-        assert_eq!(keybindings[2].key, "↓/j");
-        assert_eq!(keybindings[2].description, "Scroll down");
-        assert_eq!(keybindings[3].key, "Esc");
-        assert_eq!(keybindings[3].description, "Close comments");
+        assert_eq!(keybindings[1].key, "Esc");
+        assert_eq!(keybindings[1].description, "Close comments");
     }
 
     #[tokio::test]

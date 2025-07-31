@@ -27,6 +27,8 @@ A Terminal User Interface (TUI) application for reviewing Git changes with local
 | **Review details**     | `Space`                   | When in files list, toggle file viewed                 |
 | **Review details**     | `c`                       | Open comments view for currently selected file or line |
 | **Review details**     | `Esc`                     | Close review details / go back to main view            |
+| **Comments**           | `Enter`                   | Submit comment                                         |
+| **Comments**           | `Esc`                     | Close comments                                         |
 | **ConfirmationDialog** | `y` / `Y` / `Enter`       | Confirm                                                |
 | **ConfirmationDialog** | `n` / `N` / `Esc`         | Cancel                                                 |
 | **Help Modal**         | `Up` / `Down` / `k` / `j` | Navigate keybindings                                   |
