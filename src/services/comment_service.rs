@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::{
@@ -69,9 +68,6 @@ impl ServiceHandler for CommentService {
                         content,
                     )
                     .await?;
-                }
-                AppEvent::CommentMetadataLoad { review_id } => {
-                    Self::handle_comment_metadata_load(database, events, review_id).await?;
                 }
                 _ => {
                     // Event not handled by this service
@@ -183,46 +179,6 @@ impl CommentService {
                 ))));
             }
         }
-
-        Ok(())
-    }
-
-    /// Load comment metadata for a review (files with comments, lines with comments per file)
-    async fn handle_comment_metadata_load(
-        database: &Database,
-        events: &mut EventHandler,
-        review_id: &ReviewId,
-    ) -> color_eyre::Result<()> {
-        let pool = database.pool();
-
-        // Get all files with comments
-        let files_with_comments = match Comment::get_files_with_comments(pool, review_id).await {
-            Ok(files) => Arc::new(files),
-            Err(error) => {
-                log::error!("Failed to load files with comments: {error}");
-                Arc::new(vec![])
-            }
-        };
-
-        // Get lines with comments for each file
-        let mut lines_with_comments = HashMap::new();
-        for file_path in files_with_comments.iter() {
-            match Comment::get_lines_with_comments(pool, review_id, file_path).await {
-                Ok(lines) => {
-                    lines_with_comments.insert(file_path.clone(), lines);
-                }
-                Err(error) => {
-                    log::error!("Failed to load lines with comments for {file_path}: {error}");
-                }
-            }
-        }
-
-        // Send metadata loaded event
-        events.send(AppEvent::CommentMetadataLoaded {
-            review_id: Arc::from(review_id),
-            files_with_comments,
-            lines_with_comments: Arc::from(lines_with_comments),
-        });
 
         Ok(())
     }

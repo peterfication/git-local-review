@@ -14,7 +14,7 @@ use crate::{
     app::App,
     event::AppEvent,
     models::{Diff, DiffFile, Review},
-    services::{GitDiffLoadingState, ReviewLoadingState},
+    services::{CommentLoadParams, CommentsLoadingState, GitDiffLoadingState, ReviewLoadingState},
     views::{KeyBinding, ViewHandler, ViewType},
 };
 
@@ -51,8 +51,10 @@ pub struct ReviewDetailsView {
     active_file_list: FileListType,
     /// List of viewed file paths for the current review
     viewed_files: Arc<Vec<String>>,
-    /// Files that have comments (for comment indicators)
-    files_with_comments: Arc<Vec<String>>,
+    /// Files that have comments (file comments only, for comment indicators)
+    files_with_file_comments: Arc<Vec<String>>,
+    /// Files that have file and line comments (for comment indicators)
+    files_with_file_and_line_comments: Arc<Vec<String>>,
     /// Map of file paths to line numbers with comments (for line comment indicators)
     lines_with_comments: Arc<HashMap<String, Vec<i64>>>,
 }
@@ -73,7 +75,8 @@ impl ReviewDetailsView {
             navigation_mode: NavigationMode::Files,
             active_file_list: FileListType::NotViewed,
             viewed_files: Arc::new(vec![]),
-            files_with_comments: Arc::new(vec![]),
+            files_with_file_comments: Arc::new(vec![]),
+            files_with_file_and_line_comments: Arc::new(vec![]),
             lines_with_comments: Arc::new(HashMap::new()),
         }
     }
@@ -90,7 +93,8 @@ impl ReviewDetailsView {
             navigation_mode: NavigationMode::Files,
             active_file_list: FileListType::NotViewed,
             viewed_files: Arc::new(vec![]),
-            files_with_comments: Arc::new(vec![]),
+            files_with_file_comments: Arc::new(vec![]),
+            files_with_file_and_line_comments: Arc::new(vec![]),
             lines_with_comments: Arc::new(HashMap::new()),
         }
     }
@@ -162,16 +166,12 @@ impl ViewHandler for ReviewDetailsView {
             } => {
                 // File view status changed, file views will be reloaded automatically
             }
-            AppEvent::CommentMetadataLoaded {
-                review_id: _,
-                files_with_comments,
-                lines_with_comments,
-            } => {
-                self.handle_comment_metadata_loaded(files_with_comments, lines_with_comments);
+            AppEvent::CommentsLoadingState { params, state } => {
+                self.handle_comments_loading_state(params, state);
             }
             AppEvent::CommentCreated(_) => {
                 // Reload comment metadata when a comment is created
-                self.reload_comment_metadata(app);
+                self.reload_comments(app);
             }
             _ => {
                 // Other events are not handled by this view
@@ -287,7 +287,7 @@ impl ViewHandler for ReviewDetailsView {
             self.navigation_mode,
             self.active_file_list,
             self.viewed_files,
-            self.files_with_comments,
+            self.files_with_file_comments,
             self.lines_with_comments
         )
     }
@@ -407,10 +407,10 @@ impl ReviewDetailsView {
                 review_id: review.id.clone().into(),
             });
 
-            // Load comment metadata for this review
-            app.events.send(AppEvent::CommentMetadataLoad {
-                review_id: review.id.clone().into(),
-            });
+            if let Some(params) = self.comments_load_params() {
+                // Load comments for the whole review
+                app.events.send(AppEvent::CommentsLoad(params));
+            }
         }
     }
 
@@ -424,7 +424,7 @@ impl ReviewDetailsView {
         self.navigation_mode = NavigationMode::Files;
         self.active_file_list = FileListType::NotViewed;
         self.viewed_files = Arc::new(vec![]);
-        self.files_with_comments = Arc::new(vec![]);
+        self.files_with_file_comments = Arc::new(vec![]);
         self.lines_with_comments = Arc::new(HashMap::new());
     }
 
@@ -544,22 +544,74 @@ impl ReviewDetailsView {
         self.scroll_offset = 0;
     }
 
+    /// Check if the current comments loading state is relevant to the current view
+    fn relevant_comments_loading_state(&self, params: &CommentLoadParams) -> bool {
+        if let Some(self_params) = self.comments_load_params() {
+            params.equals(&self_params)
+        } else {
+            false
+        }
+    }
+
     /// Handle comment metadata loaded event
-    fn handle_comment_metadata_loaded(
+    fn handle_comments_loading_state(
         &mut self,
-        files_with_comments: &Arc<Vec<String>>,
-        lines_with_comments: &Arc<HashMap<String, Vec<i64>>>,
+        params: &CommentLoadParams,
+        state: &CommentsLoadingState,
     ) {
-        self.files_with_comments = files_with_comments.clone();
-        self.lines_with_comments = lines_with_comments.clone();
+        if !self.relevant_comments_loading_state(params) {
+            // Ignore comments loading for different CommentsLoad requests
+            return;
+        };
+
+        if let CommentsLoadingState::Loaded(comments) = state {
+            self.files_with_file_comments = Arc::from(
+                comments
+                    .iter()
+                    .filter_map(|comment| {
+                        // Only include files with file-level comments and ignore line-level comments
+                        if comment.is_file_comment() {
+                            Some(comment.file_path.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<String>>(),
+            );
+            self.files_with_file_and_line_comments = Arc::from(
+                comments
+                    .iter()
+                    .map(|comment| comment.file_path.clone())
+                    .collect::<Vec<String>>(),
+            );
+            self.lines_with_comments = Arc::from(comments.iter().fold(
+                HashMap::new(),
+                |mut acc: HashMap<String, Vec<i64>>, comment| {
+                    if let Some(line_number) = comment.line_number {
+                        acc.entry(comment.file_path.clone())
+                            .or_default()
+                            .push(line_number);
+                    };
+                    acc
+                },
+            ));
+        };
+    }
+
+    /// The params for the comments loading based on the current review context
+    fn comments_load_params(&self) -> Option<CommentLoadParams> {
+        self.review.as_ref().map(|review| CommentLoadParams {
+            review_id: Arc::from(review.id.to_string()),
+            file_path: None.into(),
+            line_number: None.into(),
+        })
     }
 
     /// Reload comment metadata for the current review
-    fn reload_comment_metadata(&self, app: &mut App) {
-        if let Some(review) = &self.review {
-            app.events.send(AppEvent::CommentMetadataLoad {
-                review_id: review.id.clone().into(),
-            });
+    fn reload_comments(&self, app: &mut App) {
+        if let Some(params) = self.comments_load_params() {
+            // Load comments for the whole review
+            app.events.send(AppEvent::CommentsLoad(params));
         }
     }
 
@@ -780,24 +832,33 @@ impl ReviewDetailsView {
         };
         let prefix = if is_selected { ">" } else { " " };
 
-        // Add comment indicator if the file has comments
-        let comment_indicator = if self.files_with_comments.contains(&diff_file.path) {
-            // Use different indicator for file comments and line comments.
-            // If there is at least one file comment show the file symbol. If there are only
-            // line comments, show the line comment symbol.
-
-            let has_line_comments = self
-                .lines_with_comments
-                .get(&diff_file.path)
-                .is_some_and(|lines| !lines.is_empty());
-
-            if has_line_comments { "⊚" } else { "●" }
-        } else {
-            " "
-        };
-
-        let content = format!("{}{} {}", prefix, comment_indicator, diff_file.path.clone());
+        let content = format!(
+            "{}{} {}",
+            prefix,
+            self.comment_indicator(diff_file),
+            diff_file.path.clone()
+        );
         ListItem::new(content).style(style)
+    }
+
+    /// Get the comment indicator for a diff file based on its comment status
+    ///
+    /// Use different indicator for file comments and line comments.
+    /// If there is at least one file comment show the file symbol. If there are only
+    /// line comments, show the line comment symbol.
+    fn comment_indicator(&self, diff_file: &DiffFile) -> String {
+        if self
+            .files_with_file_and_line_comments
+            .contains(&diff_file.path)
+        {
+            if self.files_with_file_comments.contains(&diff_file.path) {
+                "●".to_string()
+            } else {
+                "⊚".to_string()
+            }
+        } else {
+            " ".to_string()
+        }
     }
 
     /// Render the diff content panel
@@ -1437,101 +1498,6 @@ mod tests {
         )));
 
         assert_snapshot!(render_app_to_terminal_backend(app))
-    }
-
-    #[tokio::test]
-    async fn test_review_details_view_handle_comment_metadata_loaded() {
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
-        let mut view = ReviewDetailsView::new(review);
-
-        // Initial state should have empty comment metadata
-        assert!(view.files_with_comments.is_empty());
-        assert!(view.lines_with_comments.is_empty());
-
-        // Create test comment metadata
-        let files_with_comments =
-            Arc::new(vec!["src/main.rs".to_string(), "src/lib.rs".to_string()]);
-
-        let mut lines_map = HashMap::new();
-        lines_map.insert("src/main.rs".to_string(), vec![10, 25, 42]);
-        lines_map.insert("src/lib.rs".to_string(), vec![5, 15]);
-        let lines_with_comments = Arc::new(lines_map);
-
-        // Handle the comment metadata loaded event
-        view.handle_comment_metadata_loaded(&files_with_comments, &lines_with_comments);
-
-        // Verify the metadata was stored correctly
-        assert_eq!(view.files_with_comments.len(), 2);
-        assert!(
-            view.files_with_comments
-                .contains(&"src/main.rs".to_string())
-        );
-        assert!(view.files_with_comments.contains(&"src/lib.rs".to_string()));
-
-        assert_eq!(view.lines_with_comments.len(), 2);
-        assert_eq!(
-            view.lines_with_comments.get("src/main.rs").unwrap(),
-            &vec![10, 25, 42]
-        );
-        assert_eq!(
-            view.lines_with_comments.get("src/lib.rs").unwrap(),
-            &vec![5, 15]
-        );
-    }
-
-    #[tokio::test]
-    async fn test_review_details_view_handle_comment_metadata_loaded_empty() {
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
-        let mut view = ReviewDetailsView::new(review);
-
-        // Create empty comment metadata
-        let files_with_comments = Arc::new(vec![]);
-        let lines_with_comments = Arc::new(HashMap::new());
-
-        // Handle the comment metadata loaded event
-        view.handle_comment_metadata_loaded(&files_with_comments, &lines_with_comments);
-
-        // Verify the metadata is empty
-        assert!(view.files_with_comments.is_empty());
-        assert!(view.lines_with_comments.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_review_details_view_reload_comment_metadata_with_review() {
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
-        let view = ReviewDetailsView::new(review.clone());
-        let mut app = create_test_app().await;
-
-        // Initial state should have no pending events
-        assert!(!app.events.has_pending_events());
-
-        // Call reload_comment_metadata
-        view.reload_comment_metadata(&mut app);
-
-        // Should have sent CommentMetadataLoad event
-        assert!(app.events.has_pending_events());
-        let event = app.events.try_recv().unwrap();
-        match &*event {
-            crate::event::Event::App(AppEvent::CommentMetadataLoad { review_id }) => {
-                assert_eq!(review_id.as_ref(), review.id);
-            }
-            _ => panic!("Expected CommentMetadataLoad event, got: {event:?}"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_review_details_view_reload_comment_metadata_no_review() {
-        let view = ReviewDetailsView::new_loading();
-        let mut app = create_test_app().await;
-
-        // Set the review to None (which is the case for new_loading())
-        assert!(view.review.is_none());
-
-        // Call reload_comment_metadata
-        view.reload_comment_metadata(&mut app);
-
-        // Should not send any events since there's no review
-        assert!(!app.events.has_pending_events());
     }
 
     #[tokio::test]

@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -174,14 +173,6 @@ pub enum AppEvent {
     CommentCreated(Arc<Comment>),
     /// Error occurred while creating a comment.
     CommentCreateError(Arc<str>),
-    /// Load comment metadata for a review (files with comments, lines with comments).
-    CommentMetadataLoad { review_id: Arc<ReviewId> },
-    /// Comment metadata loaded successfully.
-    CommentMetadataLoaded {
-        review_id: Arc<ReviewId>,
-        files_with_comments: Arc<Vec<String>>,
-        lines_with_comments: Arc<HashMap<String, Vec<i64>>>,
-    },
 }
 
 /// Terminal event handler.
