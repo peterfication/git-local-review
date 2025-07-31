@@ -14,7 +14,7 @@ use crate::{
     app::App,
     event::AppEvent,
     models::{Diff, DiffFile, Review},
-    services::{CommentLoadParams, CommentsLoadingState, GitDiffLoadingState, ReviewLoadingState},
+    services::{CommentsLoadParams, CommentsLoadingState, GitDiffLoadingState, ReviewLoadingState},
     views::{KeyBinding, ViewHandler, ViewType},
 };
 
@@ -553,7 +553,7 @@ impl ReviewDetailsView {
     /// so that the comment indicators are up to date.
     fn handle_comments_loading_state(
         &mut self,
-        params: &CommentLoadParams,
+        params: &CommentsLoadParams,
         state: &CommentsLoadingState,
     ) {
         if !self.relevant_comments_loading_state(params) {
@@ -600,7 +600,7 @@ impl ReviewDetailsView {
     }
 
     /// Check if the current comments loading state is relevant to the current view
-    fn relevant_comments_loading_state(&self, params: &CommentLoadParams) -> bool {
+    fn relevant_comments_loading_state(&self, params: &CommentsLoadParams) -> bool {
         if let Some(self_params) = self.comments_load_params() {
             params.equals(&self_params)
         } else {
@@ -609,8 +609,8 @@ impl ReviewDetailsView {
     }
 
     /// The params for the comments loading based on the current review context
-    fn comments_load_params(&self) -> Option<CommentLoadParams> {
-        self.review.as_ref().map(|review| CommentLoadParams {
+    fn comments_load_params(&self) -> Option<CommentsLoadParams> {
+        self.review.as_ref().map(|review| CommentsLoadParams {
             review_id: Arc::from(review.id.to_string()),
             file_path: None.into(),
             line_number: None.into(),
@@ -1836,7 +1836,7 @@ mod tests {
         let review = Review::test_review(TestReviewParams::new().base_branch("main"));
         let view = ReviewDetailsView::new(review.clone());
 
-        let params = crate::services::CommentLoadParams {
+        let params = crate::services::CommentsLoadParams {
             review_id: Arc::from(review.id.clone()),
             file_path: Arc::new(None),
             line_number: Arc::new(None),
@@ -1851,7 +1851,7 @@ mod tests {
         let review = Review::test_review(TestReviewParams::new().base_branch("main"));
         let view = ReviewDetailsView::new(review.clone());
 
-        let params = crate::services::CommentLoadParams {
+        let params = crate::services::CommentsLoadParams {
             review_id: Arc::from("different-review-id".to_string()),
             file_path: Arc::new(None),
             line_number: Arc::new(None),
@@ -1865,7 +1865,7 @@ mod tests {
     fn test_relevant_comments_loading_state_without_review() {
         let view = ReviewDetailsView::new_loading();
 
-        let params = crate::services::CommentLoadParams {
+        let params = crate::services::CommentsLoadParams {
             review_id: Arc::from("any-review-id".to_string()),
             file_path: Arc::new(None),
             line_number: Arc::new(None),
@@ -1885,7 +1885,7 @@ mod tests {
         let initial_lines_with_comments = view.lines_with_comments.clone();
 
         // Load comments for a different review
-        let params = crate::services::CommentLoadParams {
+        let params = crate::services::CommentsLoadParams {
             review_id: Arc::from("different-review-id".to_string()),
             file_path: Arc::new(None),
             line_number: Arc::new(None),
@@ -1918,7 +1918,7 @@ mod tests {
         let review = Review::test_review(TestReviewParams::new().base_branch("main"));
         let mut view = ReviewDetailsView::new(review.clone());
 
-        let params = crate::services::CommentLoadParams {
+        let params = crate::services::CommentsLoadParams {
             review_id: Arc::from(review.id.clone()),
             file_path: Arc::new(None),
             line_number: Arc::new(None),
@@ -1969,7 +1969,7 @@ mod tests {
         let review = Review::test_review(TestReviewParams::new().base_branch("main"));
         let mut view = ReviewDetailsView::new(review.clone());
 
-        let params = crate::services::CommentLoadParams {
+        let params = crate::services::CommentsLoadParams {
             review_id: Arc::from(review.id.clone()),
             file_path: Arc::new(None),
             line_number: Arc::new(None),
@@ -2017,7 +2017,7 @@ mod tests {
         let review = Review::test_review(TestReviewParams::new().base_branch("main"));
         let mut view = ReviewDetailsView::new(review.clone());
 
-        let params = crate::services::CommentLoadParams {
+        let params = crate::services::CommentsLoadParams {
             review_id: Arc::from(review.id.clone()),
             file_path: Arc::new(None),
             line_number: Arc::new(None),

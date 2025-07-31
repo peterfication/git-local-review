@@ -24,15 +24,15 @@ pub enum CommentsLoadingState {
 /// If `line_number` is `Some` while `file_path` is `None`, it will still
 /// load comments for the whole review.
 #[derive(Debug, Clone)]
-pub struct CommentLoadParams {
+pub struct CommentsLoadParams {
     pub review_id: Arc<ReviewId>,
     pub file_path: Arc<Option<String>>,
     pub line_number: Arc<Option<i64>>,
 }
 
-impl CommentLoadParams {
+impl CommentsLoadParams {
     /// Check if all values of this params are equal to another instance.
-    pub fn equals(&self, other: &CommentLoadParams) -> bool {
+    pub fn equals(&self, other: &CommentsLoadParams) -> bool {
         self.review_id.as_ref() == other.review_id.as_ref()
             && self.file_path.as_ref() == other.file_path.as_ref()
             && self.line_number.as_ref() == other.line_number.as_ref()
@@ -84,7 +84,7 @@ impl CommentService {
     async fn handle_comments_load(
         database: &Database,
         events: &mut EventHandler,
-        params: &CommentLoadParams,
+        params: &CommentsLoadParams,
     ) -> color_eyre::Result<()> {
         let pool = database.pool();
 
@@ -168,7 +168,7 @@ impl CommentService {
                 events.send(AppEvent::CommentCreated(Arc::from(comment.clone())));
 
                 // Trigger reload of comments for the same target
-                events.send(AppEvent::CommentsLoad(CommentLoadParams {
+                events.send(AppEvent::CommentsLoad(CommentsLoadParams {
                     review_id: Arc::from(review_id),
                     file_path: Arc::new(Some(file_path.to_string())),
                     line_number: Arc::from(*line_number),
@@ -218,12 +218,12 @@ mod tests {
 
     #[test]
     fn test_equals_all_fields_equal() {
-        let params1 = CommentLoadParams {
+        let params1 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("file.rs".to_string())),
             line_number: Arc::from(Some(42)),
         };
-        let params2 = CommentLoadParams {
+        let params2 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("file.rs".to_string())),
             line_number: Arc::from(Some(42)),
@@ -233,12 +233,12 @@ mod tests {
 
     #[test]
     fn test_equals_different_review_id() {
-        let params1 = CommentLoadParams {
+        let params1 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("file.rs".to_string())),
             line_number: Arc::from(Some(42)),
         };
-        let params2 = CommentLoadParams {
+        let params2 = CommentsLoadParams {
             review_id: Arc::from("456"),
             file_path: Arc::from(Some("file.rs".to_string())),
             line_number: Arc::from(Some(42)),
@@ -248,12 +248,12 @@ mod tests {
 
     #[test]
     fn test_equals_different_file_path() {
-        let params1 = CommentLoadParams {
+        let params1 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("file1.rs".to_string())),
             line_number: Arc::from(Some(42)),
         };
-        let params2 = CommentLoadParams {
+        let params2 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("file2.rs".to_string())),
             line_number: Arc::from(Some(42)),
@@ -263,12 +263,12 @@ mod tests {
 
     #[test]
     fn test_equals_different_line_number() {
-        let params1 = CommentLoadParams {
+        let params1 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("file.rs".to_string())),
             line_number: Arc::from(Some(42)),
         };
-        let params2 = CommentLoadParams {
+        let params2 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("file.rs".to_string())),
             line_number: Arc::from(Some(43)),
@@ -278,12 +278,12 @@ mod tests {
 
     #[test]
     fn test_equals_none_fields() {
-        let params1 = CommentLoadParams {
+        let params1 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(None),
             line_number: Arc::from(None),
         };
-        let params2 = CommentLoadParams {
+        let params2 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(None),
             line_number: Arc::from(None),
@@ -293,12 +293,12 @@ mod tests {
 
     #[test]
     fn test_equals_file_path_some_vs_none() {
-        let params1 = CommentLoadParams {
+        let params1 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("file.rs".to_string())),
             line_number: Arc::from(None),
         };
-        let params2 = CommentLoadParams {
+        let params2 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(None),
             line_number: Arc::from(None),
@@ -308,12 +308,12 @@ mod tests {
 
     #[test]
     fn test_equals_file_path_none_vs_some() {
-        let params1 = CommentLoadParams {
+        let params1 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(None),
             line_number: Arc::from(None),
         };
-        let params2 = CommentLoadParams {
+        let params2 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("file.rs".to_string())),
             line_number: Arc::from(None),
@@ -323,12 +323,12 @@ mod tests {
 
     #[test]
     fn test_equals_line_number_some_vs_none() {
-        let params1 = CommentLoadParams {
+        let params1 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("file.rs".to_string())),
             line_number: Arc::from(Some(42)),
         };
-        let params2 = CommentLoadParams {
+        let params2 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("file.rs".to_string())),
             line_number: Arc::from(None),
@@ -338,12 +338,12 @@ mod tests {
 
     #[test]
     fn test_equals_line_number_none_vs_some() {
-        let params1 = CommentLoadParams {
+        let params1 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("file.rs".to_string())),
             line_number: Arc::from(None),
         };
-        let params2 = CommentLoadParams {
+        let params2 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("file.rs".to_string())),
             line_number: Arc::from(Some(42)),
@@ -353,12 +353,12 @@ mod tests {
 
     #[test]
     fn test_equals_empty_review_id() {
-        let params1 = CommentLoadParams {
+        let params1 = CommentsLoadParams {
             review_id: Arc::from(""),
             file_path: Arc::from(None),
             line_number: Arc::from(None),
         };
-        let params2 = CommentLoadParams {
+        let params2 = CommentsLoadParams {
             review_id: Arc::from(""),
             file_path: Arc::from(None),
             line_number: Arc::from(None),
@@ -368,12 +368,12 @@ mod tests {
 
     #[test]
     fn test_equals_empty_vs_non_empty_review_id() {
-        let params1 = CommentLoadParams {
+        let params1 = CommentsLoadParams {
             review_id: Arc::from(""),
             file_path: Arc::from(None),
             line_number: Arc::from(None),
         };
-        let params2 = CommentLoadParams {
+        let params2 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(None),
             line_number: Arc::from(None),
@@ -383,12 +383,12 @@ mod tests {
 
     #[test]
     fn test_equals_empty_file_path() {
-        let params1 = CommentLoadParams {
+        let params1 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("".to_string())),
             line_number: Arc::from(None),
         };
-        let params2 = CommentLoadParams {
+        let params2 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("".to_string())),
             line_number: Arc::from(None),
@@ -398,12 +398,12 @@ mod tests {
 
     #[test]
     fn test_equals_empty_vs_non_empty_file_path() {
-        let params1 = CommentLoadParams {
+        let params1 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("".to_string())),
             line_number: Arc::from(None),
         };
-        let params2 = CommentLoadParams {
+        let params2 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("file.rs".to_string())),
             line_number: Arc::from(None),
@@ -413,12 +413,12 @@ mod tests {
 
     #[test]
     fn test_equals_negative_line_number() {
-        let params1 = CommentLoadParams {
+        let params1 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("file.rs".to_string())),
             line_number: Arc::from(Some(-1)),
         };
-        let params2 = CommentLoadParams {
+        let params2 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("file.rs".to_string())),
             line_number: Arc::from(Some(-1)),
@@ -428,12 +428,12 @@ mod tests {
 
     #[test]
     fn test_equals_zero_line_number() {
-        let params1 = CommentLoadParams {
+        let params1 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("file.rs".to_string())),
             line_number: Arc::from(Some(0)),
         };
-        let params2 = CommentLoadParams {
+        let params2 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("file.rs".to_string())),
             line_number: Arc::from(Some(0)),
@@ -443,12 +443,12 @@ mod tests {
 
     #[test]
     fn test_equals_large_line_number() {
-        let params1 = CommentLoadParams {
+        let params1 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("file.rs".to_string())),
             line_number: Arc::from(Some(i64::MAX)),
         };
-        let params2 = CommentLoadParams {
+        let params2 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("file.rs".to_string())),
             line_number: Arc::from(Some(i64::MAX)),
@@ -458,12 +458,12 @@ mod tests {
 
     #[test]
     fn test_equals_different_line_numbers_including_negatives() {
-        let params1 = CommentLoadParams {
+        let params1 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("file.rs".to_string())),
             line_number: Arc::from(Some(-1)),
         };
-        let params2 = CommentLoadParams {
+        let params2 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("file.rs".to_string())),
             line_number: Arc::from(Some(1)),
@@ -475,12 +475,12 @@ mod tests {
     fn test_equals_mixed_none_and_some_combinations() {
         // Test case where one param has file_path as Some and line_number as None,
         // and the other has file_path as None and line_number as Some
-        let params1 = CommentLoadParams {
+        let params1 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("file.rs".to_string())),
             line_number: Arc::from(None),
         };
-        let params2 = CommentLoadParams {
+        let params2 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(None),
             line_number: Arc::from(Some(42)),
@@ -491,12 +491,12 @@ mod tests {
     #[test]
     fn test_equals_long_review_id() {
         let long_id = "a".repeat(1000);
-        let params1 = CommentLoadParams {
+        let params1 = CommentsLoadParams {
             review_id: Arc::from(long_id.clone()),
             file_path: Arc::from(None),
             line_number: Arc::from(None),
         };
-        let params2 = CommentLoadParams {
+        let params2 = CommentsLoadParams {
             review_id: Arc::from(long_id),
             file_path: Arc::from(None),
             line_number: Arc::from(None),
@@ -507,12 +507,12 @@ mod tests {
     #[test]
     fn test_equals_long_file_path() {
         let long_path = format!("{}/file.rs", "a".repeat(500));
-        let params1 = CommentLoadParams {
+        let params1 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some(long_path.clone())),
             line_number: Arc::from(None),
         };
-        let params2 = CommentLoadParams {
+        let params2 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some(long_path)),
             line_number: Arc::from(None),
@@ -522,12 +522,12 @@ mod tests {
 
     #[test]
     fn test_equals_unicode_review_id() {
-        let params1 = CommentLoadParams {
+        let params1 = CommentsLoadParams {
             review_id: Arc::from("test-🔥-review-😀"),
             file_path: Arc::from(None),
             line_number: Arc::from(None),
         };
-        let params2 = CommentLoadParams {
+        let params2 = CommentsLoadParams {
             review_id: Arc::from("test-🔥-review-😀"),
             file_path: Arc::from(None),
             line_number: Arc::from(None),
@@ -537,12 +537,12 @@ mod tests {
 
     #[test]
     fn test_equals_unicode_file_path() {
-        let params1 = CommentLoadParams {
+        let params1 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("src/测试.rs".to_string())),
             line_number: Arc::from(None),
         };
-        let params2 = CommentLoadParams {
+        let params2 = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("src/测试.rs".to_string())),
             line_number: Arc::from(None),
@@ -552,7 +552,7 @@ mod tests {
 
     #[test]
     fn test_equals_self_comparison() {
-        let params = CommentLoadParams {
+        let params = CommentsLoadParams {
             review_id: Arc::from("123"),
             file_path: Arc::from(Some("file.rs".to_string())),
             line_number: Arc::from(Some(42)),
@@ -597,7 +597,7 @@ mod tests {
         // Should send CommentsLoad event to reload
         let event = events.try_recv().unwrap();
         match &*event {
-            crate::event::Event::App(AppEvent::CommentsLoad(CommentLoadParams {
+            crate::event::Event::App(AppEvent::CommentsLoad(CommentsLoadParams {
                 review_id,
                 file_path,
                 line_number,
@@ -652,7 +652,7 @@ mod tests {
         // Should send CommentsLoad event to reload
         let event = events.try_recv().unwrap();
         match &*event {
-            crate::event::Event::App(AppEvent::CommentsLoad(CommentLoadParams {
+            crate::event::Event::App(AppEvent::CommentsLoad(CommentsLoadParams {
                 review_id,
                 file_path,
                 line_number,
@@ -718,7 +718,7 @@ mod tests {
         let review_id: Arc<str> = Arc::from(review.id.clone());
         let file_path = Arc::from(Some("src/main.rs".to_string()));
         let line_number = Arc::from(None);
-        let params = CommentLoadParams {
+        let params = CommentsLoadParams {
             review_id: review_id.clone(),
             file_path: file_path.clone(),
             line_number: line_number.clone(),
@@ -776,7 +776,7 @@ mod tests {
         let review_id: Arc<str> = Arc::from(review.id.clone());
         let file_path = Arc::from(Some("src/main.rs".to_string()));
         let line_number = Arc::from(Some(10));
-        let params = CommentLoadParams {
+        let params = CommentsLoadParams {
             review_id: review_id.clone(),
             file_path: file_path.clone(),
             line_number: line_number.clone(),

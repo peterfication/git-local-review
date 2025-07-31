@@ -13,7 +13,7 @@ use crate::{
     app::App,
     event::AppEvent,
     models::Comment,
-    services::{CommentLoadParams, CommentsLoadingState},
+    services::{CommentsLoadParams, CommentsLoadingState},
     views::{KeyBinding, ViewHandler, ViewType},
 };
 
@@ -31,12 +31,12 @@ pub enum CommentTarget {
 }
 
 impl CommentTarget {
-    pub fn comment_load_params(&self) -> CommentLoadParams {
+    pub fn comments_load_params(&self) -> CommentsLoadParams {
         match self {
             CommentTarget::File {
                 review_id,
                 file_path,
-            } => CommentLoadParams {
+            } => CommentsLoadParams {
                 review_id: Arc::from(review_id.clone()),
                 file_path: Arc::from(Some(file_path.clone())),
                 line_number: Arc::from(None),
@@ -45,7 +45,7 @@ impl CommentTarget {
                 review_id,
                 file_path,
                 line_number,
-            } => CommentLoadParams {
+            } => CommentsLoadParams {
                 review_id: Arc::from(review_id.clone()),
                 file_path: Arc::from(Some(file_path.clone())),
                 line_number: Arc::from(Some(*line_number)),
@@ -455,10 +455,10 @@ impl CommentsView {
 
     fn handle_comments_loading_state(
         &mut self,
-        params: &CommentLoadParams,
+        params: &CommentsLoadParams,
         state: &CommentsLoadingState,
     ) {
-        if !self.target.comment_load_params().equals(params) {
+        if !self.target.comments_load_params().equals(params) {
             // If the params don't match our target, ignore this state
             return;
         }
@@ -477,7 +477,7 @@ impl CommentsView {
                 review_id,
                 file_path,
             } => {
-                app.events.send(AppEvent::CommentsLoad(CommentLoadParams {
+                app.events.send(AppEvent::CommentsLoad(CommentsLoadParams {
                     review_id: review_id.clone().into(),
                     file_path: Arc::from(Some(file_path.clone())),
                     line_number: Arc::from(None),
@@ -488,7 +488,7 @@ impl CommentsView {
                 file_path,
                 line_number,
             } => {
-                app.events.send(AppEvent::CommentsLoad(CommentLoadParams {
+                app.events.send(AppEvent::CommentsLoad(CommentsLoadParams {
                     review_id: review_id.clone().into(),
                     file_path: Arc::from(Some(file_path.clone())),
                     line_number: Arc::from(Some(*line_number)),
@@ -710,7 +710,7 @@ mod tests {
         view.handle_app_events(
             &mut app,
             &AppEvent::CommentsLoadingState {
-                params: CommentLoadParams {
+                params: CommentsLoadParams {
                     review_id: Arc::from("review-123"),
                     file_path: Arc::from(Some("src/main.rs".to_string())),
                     line_number: Arc::from(None),
@@ -730,7 +730,7 @@ mod tests {
         view.handle_app_events(
             &mut app,
             &AppEvent::CommentsLoadingState {
-                params: CommentLoadParams {
+                params: CommentsLoadParams {
                     review_id: Arc::from("review-123"),
                     file_path: Arc::from(Some("src/main.rs".to_string())),
                     line_number: Arc::from(None),

@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 use crate::{
     models::{Comment, Review},
     services::{
-        CommentLoadParams, CommentsLoadingState, GitBranchesLoadingState, GitDiffLoadingState,
+        CommentsLoadParams, CommentsLoadingState, GitBranchesLoadingState, GitDiffLoadingState,
         ReviewCreateData, ReviewLoadingState, ReviewsLoadingState,
     },
     views::KeyBinding,
@@ -154,12 +154,12 @@ pub enum AppEvent {
         line_number: Option<i64>,
     },
     /// Load comments for a review, file or line.
-    CommentsLoad(CommentLoadParams),
+    CommentsLoad(CommentsLoadParams),
     /// Comments are being loaded.
-    CommentsLoading(CommentLoadParams),
+    CommentsLoading(CommentsLoadParams),
     /// Propagates the current loading state of comments.
     CommentsLoadingState {
-        params: CommentLoadParams,
+        params: CommentsLoadParams,
         state: CommentsLoadingState,
     },
     /// Create a new comment.

@@ -6,7 +6,7 @@ use crate::{
     app::App,
     event::{AppEvent, Event},
     services::{
-        CommentLoadParams, CommentService, FileViewService, GitService, ReviewService,
+        CommentsLoadParams, CommentService, FileViewService, GitService, ReviewService,
         ServiceHandler,
     },
     views::{
@@ -117,7 +117,7 @@ impl EventProcessor {
         line_number: &Option<i64>,
     ) {
         // Trigger loading of comments for the specified target
-        app.events.send(AppEvent::CommentsLoad(CommentLoadParams {
+        app.events.send(AppEvent::CommentsLoad(CommentsLoadParams {
             review_id: review_id.clone(),
             file_path: Arc::from(Some(file_path.as_ref().to_string())),
             line_number: Arc::from(*line_number),
