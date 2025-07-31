@@ -16,6 +16,8 @@ use crate::{
     views::{KeyBinding, ViewHandler, ViewType},
 };
 
+const REVIEW_SELECTION_INDICATOR: &str = super::SELECTION_INDICATOR;
+
 pub struct MainView {
     selected_review_index: Option<usize>,
     reviews: Arc<[Review]>,
@@ -267,7 +269,11 @@ impl MainView {
         } else {
             Style::default()
         };
-        let prefix = if is_selected { ">" } else { " " };
+        let prefix = if is_selected {
+            REVIEW_SELECTION_INDICATOR
+        } else {
+            " "
+        };
         let content = format!(
             "{} {} ({})",
             prefix,

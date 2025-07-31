@@ -23,6 +23,8 @@ pub use main_view::MainView;
 pub use review_create_view::ReviewCreateView;
 pub use review_details_view::ReviewDetailsView;
 
+const SELECTION_INDICATOR: &str = ">";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViewType {
     Main,

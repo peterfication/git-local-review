@@ -18,6 +18,11 @@ use crate::{
     views::{KeyBinding, ViewHandler, ViewType},
 };
 
+const FILE_SELECTION_INDICATOR: &str = super::SELECTION_INDICATOR;
+const FILE_COMMENT_INDICATOR: &str = "●";
+const LINE_COMMENT_INDICATOR: &str = "■";
+const FILE_AND_LINE_COMMENT_INDICATOR: &str = "#";
+
 #[derive(Debug, Clone)]
 pub enum NavigationMode {
     Files,
@@ -54,7 +59,7 @@ pub struct ReviewDetailsView {
     /// Files that have comments (file comments only, for comment indicators)
     files_with_file_comments: Arc<Vec<String>>,
     /// Files that have file and line comments (for comment indicators)
-    files_with_file_and_line_comments: Arc<Vec<String>>,
+    files_with_file_and_or_line_comments: Arc<Vec<String>>,
     /// Map of file paths to line numbers with comments (for line comment indicators)
     lines_with_comments: Arc<HashMap<String, Vec<i64>>>,
 }
@@ -76,7 +81,7 @@ impl ReviewDetailsView {
             active_file_list: FileListType::NotViewed,
             viewed_files: Arc::new(vec![]),
             files_with_file_comments: Arc::new(vec![]),
-            files_with_file_and_line_comments: Arc::new(vec![]),
+            files_with_file_and_or_line_comments: Arc::new(vec![]),
             lines_with_comments: Arc::new(HashMap::new()),
         }
     }
@@ -94,7 +99,7 @@ impl ReviewDetailsView {
             active_file_list: FileListType::NotViewed,
             viewed_files: Arc::new(vec![]),
             files_with_file_comments: Arc::new(vec![]),
-            files_with_file_and_line_comments: Arc::new(vec![]),
+            files_with_file_and_or_line_comments: Arc::new(vec![]),
             lines_with_comments: Arc::new(HashMap::new()),
         }
     }
@@ -544,16 +549,8 @@ impl ReviewDetailsView {
         self.scroll_offset = 0;
     }
 
-    /// Check if the current comments loading state is relevant to the current view
-    fn relevant_comments_loading_state(&self, params: &CommentLoadParams) -> bool {
-        if let Some(self_params) = self.comments_load_params() {
-            params.equals(&self_params)
-        } else {
-            false
-        }
-    }
-
-    /// Handle comment metadata loaded event
+    /// Handle comments loaded. This updates the files with comments and lines with comments
+    /// so that the comment indicators are up to date.
     fn handle_comments_loading_state(
         &mut self,
         params: &CommentLoadParams,
@@ -578,7 +575,7 @@ impl ReviewDetailsView {
                     })
                     .collect::<Vec<String>>(),
             );
-            self.files_with_file_and_line_comments = Arc::from(
+            self.files_with_file_and_or_line_comments = Arc::from(
                 comments
                     .iter()
                     .map(|comment| comment.file_path.clone())
@@ -596,6 +593,15 @@ impl ReviewDetailsView {
                 },
             ));
         };
+    }
+
+    /// Check if the current comments loading state is relevant to the current view
+    fn relevant_comments_loading_state(&self, params: &CommentLoadParams) -> bool {
+        if let Some(self_params) = self.comments_load_params() {
+            params.equals(&self_params)
+        } else {
+            false
+        }
     }
 
     /// The params for the comments loading based on the current review context
@@ -830,7 +836,11 @@ impl ReviewDetailsView {
         } else {
             Style::default().fg(Color::White)
         };
-        let prefix = if is_selected { ">" } else { " " };
+        let prefix = if is_selected {
+            FILE_SELECTION_INDICATOR
+        } else {
+            " "
+        };
 
         let content = format!(
             "{}{} {}",
@@ -843,21 +853,27 @@ impl ReviewDetailsView {
 
     /// Get the comment indicator for a diff file based on its comment status
     ///
-    /// Use different indicator for file comments and line comments.
-    /// If there is at least one file comment show the file symbol. If there are only
-    /// line comments, show the line comment symbol.
-    fn comment_indicator(&self, diff_file: &DiffFile) -> String {
+    /// Use different indicator for file comments and line comments and files that have both.
+    fn comment_indicator(&self, diff_file: &DiffFile) -> &str {
         if self
-            .files_with_file_and_line_comments
+            .files_with_file_and_or_line_comments
             .contains(&diff_file.path)
         {
-            if self.files_with_file_comments.contains(&diff_file.path) {
-                "●".to_string()
+            let has_line_comment = self.lines_with_comments.contains_key(&diff_file.path);
+            let has_file_comment = self.files_with_file_comments.contains(&diff_file.path);
+
+            if has_file_comment && !has_line_comment {
+                // Only file comments,
+                FILE_COMMENT_INDICATOR
+            } else if !has_file_comment && has_line_comment {
+                // Only line comments
+                LINE_COMMENT_INDICATOR
             } else {
-                "⊚".to_string()
+                // File and line comments
+                FILE_AND_LINE_COMMENT_INDICATOR
             }
         } else {
-            " ".to_string()
+            " "
         }
     }
 
@@ -928,7 +944,11 @@ impl ReviewDetailsView {
                     .unwrap_or(false);
 
                 // Add comment indicator if the line has comments
-                let comment_prefix = if has_comments { "⊚" } else { " " };
+                let comment_prefix = if has_comments {
+                    LINE_COMMENT_INDICATOR
+                } else {
+                    " "
+                };
                 let display_text = format!("{comment_prefix} {line_text}");
 
                 if is_selected_line && is_lines_mode {
