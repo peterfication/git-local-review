@@ -1,4 +1,4 @@
-![crates.io](https://img.shields.io/crates/v/git-local-review.svg)
+[![crates.io](https://img.shields.io/crates/v/git-local-review.svg)](https://crates.io/crates/git-local-review)
 
 # git-local-review
 
