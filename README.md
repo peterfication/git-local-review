@@ -1,3 +1,5 @@
+![crates.io](https://img.shields.io/crates/v/git-local-review.svg)
+
 # git-local-review
 
 A Terminal User Interface (TUI) application for reviewing Git changes with local SQLite state storage.
