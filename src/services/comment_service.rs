@@ -31,6 +31,7 @@ pub struct CommentLoadParams {
 }
 
 impl CommentLoadParams {
+    /// Check if all values of this params are equal to another instance.
     pub fn equals(&self, other: &CommentLoadParams) -> bool {
         self.review_id.as_ref() == other.review_id.as_ref()
             && self.file_path.as_ref() == other.file_path.as_ref()
@@ -64,7 +65,7 @@ impl ServiceHandler for CommentService {
                         events,
                         review_id,
                         file_path,
-                        *line_number,
+                        line_number,
                         content,
                     )
                     .await?;
@@ -113,7 +114,7 @@ impl CommentService {
                 }
             }
             None => {
-                // Load comments for the whole file (file-level comments only)
+                // Load comments for the whole review
                 Comment::find_for_review(pool, params.review_id.as_ref()).await
             }
         };
@@ -144,7 +145,7 @@ impl CommentService {
         events: &mut EventHandler,
         review_id: &ReviewId,
         file_path: &str,
-        line_number: Option<i64>,
+        line_number: &Option<i64>,
         content: &str,
     ) -> color_eyre::Result<()> {
         let pool = database.pool();
@@ -158,7 +159,7 @@ impl CommentService {
             return Ok(());
         }
 
-        let comment = Comment::new(review_id, file_path, line_number, trimmed_content);
+        let comment = Comment::new(review_id, file_path, *line_number, trimmed_content);
 
         // Save comment to database
         match comment.create(pool).await {
@@ -170,7 +171,7 @@ impl CommentService {
                 events.send(AppEvent::CommentsLoad(CommentLoadParams {
                     review_id: Arc::from(review_id),
                     file_path: Arc::new(Some(file_path.to_string())),
-                    line_number: Arc::from(line_number),
+                    line_number: Arc::from(*line_number),
                 }));
             }
             Err(error) => {
@@ -290,6 +291,275 @@ mod tests {
         assert!(params1.equals(&params2));
     }
 
+    #[test]
+    fn test_equals_file_path_some_vs_none() {
+        let params1 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(Some("file.rs".to_string())),
+            line_number: Arc::from(None),
+        };
+        let params2 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(None),
+            line_number: Arc::from(None),
+        };
+        assert!(!params1.equals(&params2));
+    }
+
+    #[test]
+    fn test_equals_file_path_none_vs_some() {
+        let params1 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(None),
+            line_number: Arc::from(None),
+        };
+        let params2 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(Some("file.rs".to_string())),
+            line_number: Arc::from(None),
+        };
+        assert!(!params1.equals(&params2));
+    }
+
+    #[test]
+    fn test_equals_line_number_some_vs_none() {
+        let params1 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(Some("file.rs".to_string())),
+            line_number: Arc::from(Some(42)),
+        };
+        let params2 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(Some("file.rs".to_string())),
+            line_number: Arc::from(None),
+        };
+        assert!(!params1.equals(&params2));
+    }
+
+    #[test]
+    fn test_equals_line_number_none_vs_some() {
+        let params1 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(Some("file.rs".to_string())),
+            line_number: Arc::from(None),
+        };
+        let params2 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(Some("file.rs".to_string())),
+            line_number: Arc::from(Some(42)),
+        };
+        assert!(!params1.equals(&params2));
+    }
+
+    #[test]
+    fn test_equals_empty_review_id() {
+        let params1 = CommentLoadParams {
+            review_id: Arc::from(""),
+            file_path: Arc::from(None),
+            line_number: Arc::from(None),
+        };
+        let params2 = CommentLoadParams {
+            review_id: Arc::from(""),
+            file_path: Arc::from(None),
+            line_number: Arc::from(None),
+        };
+        assert!(params1.equals(&params2));
+    }
+
+    #[test]
+    fn test_equals_empty_vs_non_empty_review_id() {
+        let params1 = CommentLoadParams {
+            review_id: Arc::from(""),
+            file_path: Arc::from(None),
+            line_number: Arc::from(None),
+        };
+        let params2 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(None),
+            line_number: Arc::from(None),
+        };
+        assert!(!params1.equals(&params2));
+    }
+
+    #[test]
+    fn test_equals_empty_file_path() {
+        let params1 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(Some("".to_string())),
+            line_number: Arc::from(None),
+        };
+        let params2 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(Some("".to_string())),
+            line_number: Arc::from(None),
+        };
+        assert!(params1.equals(&params2));
+    }
+
+    #[test]
+    fn test_equals_empty_vs_non_empty_file_path() {
+        let params1 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(Some("".to_string())),
+            line_number: Arc::from(None),
+        };
+        let params2 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(Some("file.rs".to_string())),
+            line_number: Arc::from(None),
+        };
+        assert!(!params1.equals(&params2));
+    }
+
+    #[test]
+    fn test_equals_negative_line_number() {
+        let params1 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(Some("file.rs".to_string())),
+            line_number: Arc::from(Some(-1)),
+        };
+        let params2 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(Some("file.rs".to_string())),
+            line_number: Arc::from(Some(-1)),
+        };
+        assert!(params1.equals(&params2));
+    }
+
+    #[test]
+    fn test_equals_zero_line_number() {
+        let params1 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(Some("file.rs".to_string())),
+            line_number: Arc::from(Some(0)),
+        };
+        let params2 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(Some("file.rs".to_string())),
+            line_number: Arc::from(Some(0)),
+        };
+        assert!(params1.equals(&params2));
+    }
+
+    #[test]
+    fn test_equals_large_line_number() {
+        let params1 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(Some("file.rs".to_string())),
+            line_number: Arc::from(Some(i64::MAX)),
+        };
+        let params2 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(Some("file.rs".to_string())),
+            line_number: Arc::from(Some(i64::MAX)),
+        };
+        assert!(params1.equals(&params2));
+    }
+
+    #[test]
+    fn test_equals_different_line_numbers_including_negatives() {
+        let params1 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(Some("file.rs".to_string())),
+            line_number: Arc::from(Some(-1)),
+        };
+        let params2 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(Some("file.rs".to_string())),
+            line_number: Arc::from(Some(1)),
+        };
+        assert!(!params1.equals(&params2));
+    }
+
+    #[test]
+    fn test_equals_mixed_none_and_some_combinations() {
+        // Test case where one param has file_path as Some and line_number as None,
+        // and the other has file_path as None and line_number as Some
+        let params1 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(Some("file.rs".to_string())),
+            line_number: Arc::from(None),
+        };
+        let params2 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(None),
+            line_number: Arc::from(Some(42)),
+        };
+        assert!(!params1.equals(&params2));
+    }
+
+    #[test]
+    fn test_equals_long_review_id() {
+        let long_id = "a".repeat(1000);
+        let params1 = CommentLoadParams {
+            review_id: Arc::from(long_id.clone()),
+            file_path: Arc::from(None),
+            line_number: Arc::from(None),
+        };
+        let params2 = CommentLoadParams {
+            review_id: Arc::from(long_id),
+            file_path: Arc::from(None),
+            line_number: Arc::from(None),
+        };
+        assert!(params1.equals(&params2));
+    }
+
+    #[test]
+    fn test_equals_long_file_path() {
+        let long_path = format!("{}/file.rs", "a".repeat(500));
+        let params1 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(Some(long_path.clone())),
+            line_number: Arc::from(None),
+        };
+        let params2 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(Some(long_path)),
+            line_number: Arc::from(None),
+        };
+        assert!(params1.equals(&params2));
+    }
+
+    #[test]
+    fn test_equals_unicode_review_id() {
+        let params1 = CommentLoadParams {
+            review_id: Arc::from("test-🔥-review-😀"),
+            file_path: Arc::from(None),
+            line_number: Arc::from(None),
+        };
+        let params2 = CommentLoadParams {
+            review_id: Arc::from("test-🔥-review-😀"),
+            file_path: Arc::from(None),
+            line_number: Arc::from(None),
+        };
+        assert!(params1.equals(&params2));
+    }
+
+    #[test]
+    fn test_equals_unicode_file_path() {
+        let params1 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(Some("src/测试.rs".to_string())),
+            line_number: Arc::from(None),
+        };
+        let params2 = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(Some("src/测试.rs".to_string())),
+            line_number: Arc::from(None),
+        };
+        assert!(params1.equals(&params2));
+    }
+
+    #[test]
+    fn test_equals_self_comparison() {
+        let params = CommentLoadParams {
+            review_id: Arc::from("123"),
+            file_path: Arc::from(Some("file.rs".to_string())),
+            line_number: Arc::from(Some(42)),
+        };
+        assert!(params.equals(&params));
+    }
+
     #[tokio::test]
     async fn test_comment_service_create_file_comment() {
         let database = create_test_database().await;
@@ -305,7 +575,7 @@ mod tests {
             &mut events,
             &review.id,
             "src/main.rs",
-            None,
+            &None,
             "This is a file comment",
         )
         .await
@@ -360,7 +630,7 @@ mod tests {
             &mut events,
             &review.id,
             "src/main.rs",
-            Some(42),
+            &Some(42),
             "This is a line comment",
         )
         .await
@@ -416,7 +686,7 @@ mod tests {
             &mut events,
             "review-123",
             "src/main.rs",
-            None,
+            &None,
             "   ", // Only whitespace
         )
         .await
