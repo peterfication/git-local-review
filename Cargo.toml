@@ -3,8 +3,19 @@ name = "git-local-review"
 version = "0.1.0"
 authors = ["Peter Morgenstern <mail@petergundel.de>"]
 edition = "2024"
+homepage = "https://github.com/peterfication/git-local-review"
 license = "MIT"
+readme = "README.md"
+repository = "https://github.com/peterfication/git-local-review"
 description = "A Terminal User Interface (TUI) for reviewing Git changes with local SQLite state storage."
+
+exclude = [
+  ".github",
+  "CLAUDE.md",
+  "lefthook.yml",
+  "dprint.json",
+  "src/**/*.snap",
+]
 
 [dependencies]
 chrono = { version = "0.4.38", features = ["serde"] }
