@@ -5,9 +5,13 @@ use ratatui::crossterm::event::KeyEvent;
 use crate::{
     app::App,
     event::{AppEvent, Event},
-    services::{FileViewService, GitService, ReviewService, ServiceHandler},
+    services::{
+        CommentService, CommentsLoadParams, FileViewService, GitService, ReviewService,
+        ServiceHandler,
+    },
     views::{
-        ConfirmationDialogView, HelpModalView, KeyBinding, ReviewCreateView, ReviewDetailsView,
+        CommentsView, ConfirmationDialogView, HelpModalView, KeyBinding, ReviewCreateView,
+        ReviewDetailsView,
     },
 };
 
@@ -41,6 +45,11 @@ impl EventProcessor {
                     AppEvent::ReviewDeleteConfirm(ref review_id) => {
                         Self::review_delete_confirm(app, review_id)
                     }
+                    AppEvent::CommentsOpen {
+                        ref review_id,
+                        ref file_path,
+                        ref line_number,
+                    } => Self::comments_open(app, review_id, file_path, line_number),
                     AppEvent::HelpOpen(ref keybindings) => Self::help_open(app, keybindings),
                     AppEvent::HelpKeySelected(ref key_event) => {
                         Self::help_key_selected(app, key_event)
@@ -66,6 +75,7 @@ impl EventProcessor {
     /// Handle app events through services
     async fn handle_services(app: &mut App, event: &AppEvent) -> color_eyre::Result<()> {
         let services = vec![
+            CommentService::handle_app_event,
             ReviewService::handle_app_event,
             GitService::handle_app_event,
             FileViewService::handle_app_event,
@@ -96,6 +106,31 @@ impl EventProcessor {
             AppEvent::ViewClose,
         );
         app.push_view(Box::new(confirmation_dialog));
+    }
+
+    /// Open comments view for a specific review and file and optionally a line number
+    /// Triggers loading of comments for the specified target
+    fn comments_open(
+        app: &mut App,
+        review_id: &Arc<str>,
+        file_path: &Arc<str>,
+        line_number: &Option<i64>,
+    ) {
+        // Trigger loading of comments for the specified target
+        app.events.send(AppEvent::CommentsLoad(CommentsLoadParams {
+            review_id: review_id.clone(),
+            file_path: Arc::from(Some(file_path.as_ref().to_string())),
+            line_number: Arc::from(*line_number),
+        }));
+
+        let comments_view = if let Some(line) = line_number {
+            log::info!("Opening comments for review {review_id} at {file_path}:{line}");
+            CommentsView::new_for_line(review_id.to_string(), file_path.to_string(), *line)
+        } else {
+            log::info!("Opening comments for review {review_id} at {file_path}");
+            CommentsView::new_for_file(review_id.to_string(), file_path.to_string())
+        };
+        app.push_view(Box::new(comments_view));
     }
 
     /// Open help modal with provided keybindings
@@ -507,5 +542,174 @@ mod tests {
             }
             _ => panic!("Expected ReviewLoad event, got: {event:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_process_comments_open_for_file_event() {
+        let mut app = create_test_app().await;
+        assert_eq!(app.view_stack.len(), 1); // Only MainView
+        assert!(!app.events.has_pending_events());
+
+        let review_id: Arc<str> = Arc::from("test-review-id");
+        let file_path: Arc<str> = Arc::from("src/main.rs");
+        let line_number = None;
+
+        EventProcessor::process_event(
+            &mut app,
+            Event::App(AppEvent::CommentsOpen {
+                review_id: review_id.clone(),
+                file_path: file_path.clone(),
+                line_number,
+            })
+            .into(),
+        )
+        .await
+        .unwrap();
+
+        // Should have added a CommentsView to the stack
+        assert_eq!(app.view_stack.len(), 2);
+        assert_eq!(
+            app.view_stack.last().unwrap().view_type(),
+            ViewType::Comments
+        );
+
+        // Should have sent a CommentsLoad event
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        match &*event {
+            Event::App(AppEvent::CommentsLoad(params)) => {
+                assert_eq!(params.review_id.as_ref(), "test-review-id");
+                assert_eq!(params.file_path.as_deref(), Some("src/main.rs"));
+                assert_eq!((*params.line_number.as_ref()), None);
+            }
+            _ => panic!("Expected CommentsLoad event, got: {event:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_process_comments_open_for_line_event() {
+        let mut app = create_test_app().await;
+        assert_eq!(app.view_stack.len(), 1); // Only MainView
+        assert!(!app.events.has_pending_events());
+
+        let review_id: Arc<str> = Arc::from("test-review-id");
+        let file_path: Arc<str> = Arc::from("src/lib.rs");
+        let line_number = Some(42);
+
+        EventProcessor::process_event(
+            &mut app,
+            Event::App(AppEvent::CommentsOpen {
+                review_id: review_id.clone(),
+                file_path: file_path.clone(),
+                line_number,
+            })
+            .into(),
+        )
+        .await
+        .unwrap();
+
+        // Should have added a CommentsView to the stack
+        assert_eq!(app.view_stack.len(), 2);
+        assert_eq!(
+            app.view_stack.last().unwrap().view_type(),
+            ViewType::Comments
+        );
+
+        // Should have sent a CommentsLoad event
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        match &*event {
+            Event::App(AppEvent::CommentsLoad(params)) => {
+                assert_eq!(params.review_id.as_ref(), "test-review-id");
+                assert_eq!(params.file_path.as_deref(), Some("src/lib.rs"));
+                assert_eq!((*params.line_number.as_ref()), Some(42));
+            }
+            _ => panic!("Expected CommentsLoad event, got: {event:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_comments_open_function_for_file_level() {
+        let mut app = create_test_app().await;
+        assert_eq!(app.view_stack.len(), 1); // Only MainView
+        assert!(!app.events.has_pending_events());
+
+        let review_id: Arc<str> = Arc::from("direct-test-review");
+        let file_path: Arc<str> = Arc::from("src/utils.rs");
+        let line_number = None;
+
+        EventProcessor::comments_open(&mut app, &review_id, &file_path, &line_number);
+
+        // Should have added a CommentsView to the stack
+        assert_eq!(app.view_stack.len(), 2);
+        assert_eq!(
+            app.view_stack.last().unwrap().view_type(),
+            ViewType::Comments
+        );
+
+        // Should have sent a CommentsLoad event
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        match &*event {
+            Event::App(AppEvent::CommentsLoad(params)) => {
+                assert_eq!(params.review_id.as_ref(), "direct-test-review");
+                assert_eq!(params.file_path.as_deref(), Some("src/utils.rs"));
+                assert_eq!(*params.line_number.as_ref(), None);
+            }
+            _ => panic!("Expected CommentsLoad event, got: {event:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_comments_open_function_for_line_level() {
+        let mut app = create_test_app().await;
+        assert_eq!(app.view_stack.len(), 1); // Only MainView
+        assert!(!app.events.has_pending_events());
+
+        let review_id: Arc<str> = Arc::from("direct-test-review");
+        let file_path: Arc<str> = Arc::from("src/models/comment.rs");
+        let line_number = Some(123);
+
+        EventProcessor::comments_open(&mut app, &review_id, &file_path, &line_number);
+
+        // Should have added a CommentsView to the stack
+        assert_eq!(app.view_stack.len(), 2);
+        assert_eq!(
+            app.view_stack.last().unwrap().view_type(),
+            ViewType::Comments
+        );
+
+        // Should have sent a CommentsLoad event
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        match &*event {
+            Event::App(AppEvent::CommentsLoad(params)) => {
+                assert_eq!(params.review_id.as_ref(), "direct-test-review");
+                assert_eq!(params.file_path.as_deref(), Some("src/models/comment.rs"));
+                assert_eq!(*params.line_number.as_ref(), Some(123));
+            }
+            _ => panic!("Expected CommentsLoad event, got: {event:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_comments_open_view_state() {
+        let mut app = create_test_app().await;
+
+        let review_id: Arc<str> = Arc::from("state-test-review");
+        let file_path: Arc<str> = Arc::from("src/test.rs");
+        let line_number = Some(99);
+
+        EventProcessor::comments_open(&mut app, &review_id, &file_path, &line_number);
+
+        // Verify the view was created with correct state
+        assert_eq!(app.view_stack.len(), 2);
+        let comments_view = app.view_stack.last().unwrap();
+        assert_eq!(comments_view.view_type(), ViewType::Comments);
+
+        // Check the debug state to verify the view was configured correctly
+        let debug_state = comments_view.debug_state();
+        assert!(debug_state.contains("src/test.rs"));
+        assert!(debug_state.contains("state-test-review"));
     }
 }

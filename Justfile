@@ -2,7 +2,7 @@ default:
   just --list
 
 # Run all steps of CI
-ci: run-version db-schema-dump format lint test build doc
+ci: db-prepare run-version db-schema-dump format lint test build doc
 
 # Run the application
 run:
@@ -82,6 +82,10 @@ db-create:
 # Drop the database
 db-drop:
   DATABASE_URL="sqlite:./tmp/reviews.db" sqlx database drop -y
+
+# Write sqlx query data to the .sqlx folder
+db-prepare:
+  DATABASE_URL="sqlite:./tmp/reviews.db" cargo sqlx prepare
 
 # Reset the database by dropping, creating, and migrating
 db-reset:

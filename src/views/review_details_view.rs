@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::sync::Arc;
 
 use ratatui::{
@@ -13,9 +15,14 @@ use crate::{
     app::App,
     event::AppEvent,
     models::{Diff, DiffFile, Review},
-    services::{GitDiffLoadingState, ReviewLoadingState},
+    services::{CommentsLoadParams, CommentsLoadingState, GitDiffLoadingState, ReviewLoadingState},
     views::{KeyBinding, ViewHandler, ViewType},
 };
+
+const FILE_SELECTION_INDICATOR: &str = super::SELECTION_INDICATOR;
+const FILE_COMMENT_INDICATOR: &str = "●";
+const LINE_COMMENT_INDICATOR: &str = "■";
+const FILE_AND_LINE_COMMENT_INDICATOR: &str = "#";
 
 #[derive(Debug, Clone)]
 pub enum NavigationMode {
@@ -27,6 +34,26 @@ pub enum NavigationMode {
 pub enum FileListType {
     NotViewed,
     Viewed,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+/// Represents the type of comments a file has
+pub enum CommentIndicator {
+    NoComment,
+    FileComment,
+    LineComment,
+    FileAndLineComment,
+}
+
+impl fmt::Display for CommentIndicator {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            CommentIndicator::NoComment => f.write_str(" "),
+            CommentIndicator::FileComment => f.write_str(FILE_COMMENT_INDICATOR),
+            CommentIndicator::LineComment => f.write_str(LINE_COMMENT_INDICATOR),
+            CommentIndicator::FileAndLineComment => f.write_str(FILE_AND_LINE_COMMENT_INDICATOR),
+        }
+    }
 }
 
 pub struct ReviewDetailsView {
@@ -50,6 +77,12 @@ pub struct ReviewDetailsView {
     active_file_list: FileListType,
     /// List of viewed file paths for the current review
     viewed_files: Arc<Vec<String>>,
+    /// Files that have comments (file comments only, for comment indicators)
+    files_with_file_comments: Arc<Vec<String>>,
+    /// Files that have file and line comments (for comment indicators)
+    files_with_file_and_or_line_comments: Arc<Vec<String>>,
+    /// Map of file paths to line numbers with comments (for line comment indicators)
+    lines_with_comments: Arc<HashMap<String, Vec<i64>>>,
 }
 
 const CONTENT_HEIGHT: usize = 15; // Default content height for scrolling
@@ -68,6 +101,9 @@ impl ReviewDetailsView {
             navigation_mode: NavigationMode::Files,
             active_file_list: FileListType::NotViewed,
             viewed_files: Arc::new(vec![]),
+            files_with_file_comments: Arc::new(vec![]),
+            files_with_file_and_or_line_comments: Arc::new(vec![]),
+            lines_with_comments: Arc::new(HashMap::new()),
         }
     }
 
@@ -83,6 +119,9 @@ impl ReviewDetailsView {
             navigation_mode: NavigationMode::Files,
             active_file_list: FileListType::NotViewed,
             viewed_files: Arc::new(vec![]),
+            files_with_file_comments: Arc::new(vec![]),
+            files_with_file_and_or_line_comments: Arc::new(vec![]),
+            lines_with_comments: Arc::new(HashMap::new()),
         }
     }
 }
@@ -124,6 +163,7 @@ impl ViewHandler for ReviewDetailsView {
             KeyCode::Right | KeyCode::Char('l') => self.switch_file_list_right(),
             KeyCode::Enter => self.toggle_navigation_mode(),
             KeyCode::Char(' ') => self.toggle_file_view_status(app),
+            KeyCode::Char('c') => self.open_comments(app),
             KeyCode::Esc => self.handle_esc(app),
             KeyCode::Char('?') => self.help(app),
             _ => {}
@@ -151,6 +191,13 @@ impl ViewHandler for ReviewDetailsView {
                 is_viewed: _,
             } => {
                 // File view status changed, file views will be reloaded automatically
+            }
+            AppEvent::CommentsLoadingState { params, state } => {
+                self.handle_comments_loading_state(params, state);
+            }
+            AppEvent::CommentCreated(_) => {
+                // Reload comment metadata when a comment is created
+                self.reload_comments(app);
             }
             _ => {
                 // Other events are not handled by this view
@@ -231,6 +278,16 @@ impl ViewHandler for ReviewDetailsView {
                 },
             },
             KeyBinding {
+                key: "c".to_string(),
+                description: "Open comments".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Char('c'),
+                    modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
+                    kind: ratatui::crossterm::event::KeyEventKind::Press,
+                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                },
+            },
+            KeyBinding {
                 key: "?".to_string(),
                 description: "Help".to_string(),
                 key_event: KeyEvent {
@@ -246,7 +303,7 @@ impl ViewHandler for ReviewDetailsView {
     #[cfg(test)]
     fn debug_state(&self) -> String {
         format!(
-            "review_state: {:?}, review: {:?}, diff_state: {:?}, scroll_offset: {}, selected_file_index: {}, selected_line_index: {}, navigation_mode: {:?}, active_file_list: {:?}, viewed_files: {:?}",
+            "review_state: {:?}, review: {:?}, diff_state: {:?}, scroll_offset: {}, selected_file_index: {}, selected_line_index: {}, navigation_mode: {:?}, active_file_list: {:?}, viewed_files: {:?}, files_with_comments: {:?}, lines_with_comments: {:?}",
             self.review_state,
             self.review,
             self.diff_state,
@@ -255,7 +312,9 @@ impl ViewHandler for ReviewDetailsView {
             self.selected_line_index,
             self.navigation_mode,
             self.active_file_list,
-            self.viewed_files
+            self.viewed_files,
+            self.files_with_file_comments,
+            self.lines_with_comments
         )
     }
 
@@ -373,6 +432,11 @@ impl ReviewDetailsView {
             app.events.send(AppEvent::FileViewsLoad {
                 review_id: review.id.clone().into(),
             });
+
+            if let Some(params) = self.comments_load_params() {
+                // Load comments for the whole review
+                app.events.send(AppEvent::CommentsLoad(params));
+            }
         }
     }
 
@@ -386,6 +450,8 @@ impl ReviewDetailsView {
         self.navigation_mode = NavigationMode::Files;
         self.active_file_list = FileListType::NotViewed;
         self.viewed_files = Arc::new(vec![]);
+        self.files_with_file_comments = Arc::new(vec![]);
+        self.lines_with_comments = Arc::new(HashMap::new());
     }
 
     /// Handle git diff loading state changes
@@ -476,6 +542,25 @@ impl ReviewDetailsView {
         }
     }
 
+    /// Open comments view for the current context (file or line)
+    fn open_comments(&mut self, app: &mut App) {
+        if let Some(review) = &self.review {
+            let current_files = self.get_current_file_list();
+            if let Some(file) = current_files.get(self.selected_file_index) {
+                let line_number = match self.navigation_mode {
+                    NavigationMode::Files => None, // File-level comments
+                    NavigationMode::Lines => Some(self.selected_line_index as i64), // Line-level comments
+                };
+
+                app.events.send(AppEvent::CommentsOpen {
+                    review_id: review.id.clone().into(),
+                    file_path: file.path.clone().into(),
+                    line_number,
+                });
+            }
+        }
+    }
+
     /// Handle file views loaded event
     fn handle_file_views_loaded(&mut self, _review_id: &str, viewed_files: &Arc<Vec<String>>) {
         self.viewed_files = viewed_files.clone();
@@ -483,6 +568,82 @@ impl ReviewDetailsView {
         self.selected_file_index = 0;
         self.selected_line_index = 0;
         self.scroll_offset = 0;
+    }
+
+    /// Handle comments loaded. This updates the files with comments and lines with comments
+    /// so that the comment indicators are up to date.
+    fn handle_comments_loading_state(
+        &mut self,
+        params: &CommentsLoadParams,
+        state: &CommentsLoadingState,
+    ) {
+        if !self.relevant_comments_loading_state(params) {
+            // Ignore comments loading for different CommentsLoad requests
+            return;
+        };
+
+        if let CommentsLoadingState::Loaded(comments) = state {
+            self.files_with_file_comments = Arc::from(
+                comments
+                    .iter()
+                    .filter_map(|comment| {
+                        // Only include files with file-level comments and ignore line-level comments
+                        if comment.is_file_comment() {
+                            Some(comment.file_path.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<HashSet<String>>()
+                    .into_iter()
+                    .collect::<Vec<String>>(),
+            );
+            self.files_with_file_and_or_line_comments = Arc::from(
+                comments
+                    .iter()
+                    .map(|comment| comment.file_path.clone())
+                    .collect::<HashSet<String>>()
+                    .into_iter()
+                    .collect::<Vec<String>>(),
+            );
+            self.lines_with_comments = Arc::from(comments.iter().fold(
+                HashMap::new(),
+                |mut acc: HashMap<String, Vec<i64>>, comment| {
+                    if let Some(line_number) = comment.line_number {
+                        acc.entry(comment.file_path.clone())
+                            .or_default()
+                            .push(line_number);
+                    };
+                    acc
+                },
+            ));
+        };
+    }
+
+    /// Check if the current comments loading state is relevant to the current view
+    fn relevant_comments_loading_state(&self, params: &CommentsLoadParams) -> bool {
+        if let Some(self_params) = self.comments_load_params() {
+            params.equals(&self_params)
+        } else {
+            false
+        }
+    }
+
+    /// The params for the comments loading based on the current review context
+    fn comments_load_params(&self) -> Option<CommentsLoadParams> {
+        self.review.as_ref().map(|review| CommentsLoadParams {
+            review_id: Arc::from(review.id.to_string()),
+            file_path: None.into(),
+            line_number: None.into(),
+        })
+    }
+
+    /// Reload comment metadata for the current review
+    fn reload_comments(&self, app: &mut App) {
+        if let Some(params) = self.comments_load_params() {
+            // Load comments for the whole review
+            app.events.send(AppEvent::CommentsLoad(params));
+        }
     }
 
     /// Get the current file list based on the active file list type
@@ -700,10 +861,42 @@ impl ReviewDetailsView {
         } else {
             Style::default().fg(Color::White)
         };
-        let prefix = if is_selected { ">" } else { " " };
+        let prefix = if is_selected {
+            FILE_SELECTION_INDICATOR
+        } else {
+            " "
+        };
 
-        let content = format!("{} {}", prefix, diff_file.path.clone());
+        let content = format!(
+            "{}{} {}",
+            prefix,
+            self.comment_indicator(diff_file),
+            diff_file.path.clone()
+        );
         ListItem::new(content).style(style)
+    }
+
+    /// Get the comment indicator for a diff file based on its comment status
+    ///
+    /// Use different indicator for file comments and line comments and files that have both.
+    fn comment_indicator(&self, diff_file: &DiffFile) -> CommentIndicator {
+        if self
+            .files_with_file_and_or_line_comments
+            .contains(&diff_file.path)
+        {
+            let has_line_comment = self.lines_with_comments.contains_key(&diff_file.path);
+            let has_file_comment = self.files_with_file_comments.contains(&diff_file.path);
+
+            if has_file_comment && !has_line_comment {
+                CommentIndicator::FileComment
+            } else if !has_file_comment && has_line_comment {
+                CommentIndicator::LineComment
+            } else {
+                CommentIndicator::FileAndLineComment
+            }
+        } else {
+            CommentIndicator::NoComment
+        }
     }
 
     /// Render the diff content panel
@@ -761,10 +954,29 @@ impl ReviewDetailsView {
                 let is_selected_line = absolute_line_idx == self.selected_line_index;
                 let is_lines_mode = matches!(self.navigation_mode, NavigationMode::Lines);
 
+                // Check if this line has comments
+                let has_comments = self
+                    .get_selected_file()
+                    .map(|file| {
+                        self.lines_with_comments
+                            .get(&file.path)
+                            .map(|lines| lines.contains(&(absolute_line_idx as i64)))
+                            .unwrap_or(false)
+                    })
+                    .unwrap_or(false);
+
+                // Add comment indicator if the line has comments
+                let comment_prefix = if has_comments {
+                    LINE_COMMENT_INDICATOR
+                } else {
+                    " "
+                };
+                let display_text = format!("{comment_prefix} {line_text}");
+
                 if is_selected_line && is_lines_mode {
                     // Highlight selected line in lines mode
                     Line::from(Span::styled(
-                        *line_text,
+                        display_text,
                         Style::default()
                             .fg(Color::Black)
                             .bg(Color::White)
@@ -780,7 +992,7 @@ impl ReviewDetailsView {
                             .add_modifier(Modifier::BOLD),
                         _ => Style::default().fg(Color::White),
                     };
-                    Line::from(Span::styled(*line_text, style))
+                    Line::from(Span::styled(display_text, style))
                 }
             })
             .collect();
@@ -885,7 +1097,7 @@ mod tests {
         let debug_state = view.debug_state();
         assert_eq!(
             debug_state,
-            "review_state: Loading, review: None, diff_state: Init, scroll_offset: 0, selected_file_index: 0, selected_line_index: 0, navigation_mode: Files, active_file_list: NotViewed, viewed_files: []"
+            "review_state: Loading, review: None, diff_state: Init, scroll_offset: 0, selected_file_index: 0, selected_line_index: 0, navigation_mode: Files, active_file_list: NotViewed, viewed_files: [], files_with_comments: [], lines_with_comments: {}"
         );
     }
 
@@ -895,7 +1107,7 @@ mod tests {
         let view = ReviewDetailsView::new(review);
 
         let keybindings = view.get_keybindings();
-        assert_eq!(keybindings.len(), 8);
+        assert_eq!(keybindings.len(), 9);
         assert_eq!(keybindings[0].key, "↑/k");
         assert_eq!(keybindings[0].description, "Scroll up");
         assert_eq!(keybindings[1].key, "↓/j");
@@ -910,8 +1122,10 @@ mod tests {
         assert_eq!(keybindings[5].description, "Toggle navigation mode");
         assert_eq!(keybindings[6].key, "Esc");
         assert_eq!(keybindings[6].description, "Go back / Switch to Files mode");
-        assert_eq!(keybindings[7].key, "?");
-        assert_eq!(keybindings[7].description, "Help");
+        assert_eq!(keybindings[7].key, "c");
+        assert_eq!(keybindings[7].description, "Open comments");
+        assert_eq!(keybindings[8].key, "?");
+        assert_eq!(keybindings[8].description, "Help");
     }
 
     #[tokio::test]
@@ -1326,5 +1540,580 @@ mod tests {
         )));
 
         assert_snapshot!(render_app_to_terminal_backend(app))
+    }
+
+    #[tokio::test]
+    async fn test_review_details_view_open_comments_file_level() {
+        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let mut view = ReviewDetailsView::new(review.clone());
+        let mut app = create_test_app().await;
+
+        // Set up a diff with files
+        let files = vec![crate::models::DiffFile {
+            path: "src/main.rs".to_string(),
+            content: "line1\nline2\nline3".to_string(),
+        }];
+        let diff = Arc::new(crate::models::Diff::from_files(files));
+        view.diff = diff;
+        view.navigation_mode = NavigationMode::Files;
+        view.selected_file_index = 0;
+
+        // Initial state should have no pending events
+        assert!(!app.events.has_pending_events());
+
+        // Call open_comments (should open file-level comments)
+        view.open_comments(&mut app);
+
+        // Should have sent CommentsOpen event for file-level comments
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        match &*event {
+            crate::event::Event::App(AppEvent::CommentsOpen {
+                review_id,
+                file_path,
+                line_number,
+            }) => {
+                assert_eq!(review_id.as_ref(), review.id);
+                assert_eq!(file_path.as_ref(), "src/main.rs");
+                assert_eq!(*line_number, None); // File-level comments
+            }
+            _ => panic!("Expected CommentsOpen event, got: {event:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_review_details_view_open_comments_line_level() {
+        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let mut view = ReviewDetailsView::new(review.clone());
+        let mut app = create_test_app().await;
+
+        // Set up a diff with files
+        let files = vec![crate::models::DiffFile {
+            path: "src/lib.rs".to_string(),
+            content: "line1\nline2\nline3\nline4\nline5".to_string(),
+        }];
+        let diff = Arc::new(crate::models::Diff::from_files(files));
+        view.diff = diff;
+        view.navigation_mode = NavigationMode::Lines; // Switch to Lines mode
+        view.selected_file_index = 0;
+        view.selected_line_index = 2; // Select line 2 (0-indexed)
+
+        // Initial state should have no pending events
+        assert!(!app.events.has_pending_events());
+
+        // Call open_comments (should open line-level comments)
+        view.open_comments(&mut app);
+
+        // Should have sent CommentsOpen event for line-level comments
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        match &*event {
+            crate::event::Event::App(AppEvent::CommentsOpen {
+                review_id,
+                file_path,
+                line_number,
+            }) => {
+                assert_eq!(review_id.as_ref(), review.id);
+                assert_eq!(file_path.as_ref(), "src/lib.rs");
+                assert_eq!(*line_number, Some(2)); // Line-level comments (0-indexed)
+            }
+            _ => panic!("Expected CommentsOpen event, got: {event:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_review_details_view_open_comments_no_review() {
+        let mut view = ReviewDetailsView::new_loading();
+        let mut app = create_test_app().await;
+
+        // Set the review to None (which is the case for new_loading())
+        assert!(view.review.is_none());
+
+        // Call open_comments
+        view.open_comments(&mut app);
+
+        // Should not send any events since there's no review
+        assert!(!app.events.has_pending_events());
+    }
+
+    #[tokio::test]
+    async fn test_review_details_view_open_comments_no_files() {
+        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let mut view = ReviewDetailsView::new(review.clone());
+        let mut app = create_test_app().await;
+
+        // Keep the default empty diff (no files)
+        assert!(view.diff.files.is_empty());
+
+        // Call open_comments
+        view.open_comments(&mut app);
+
+        // Should not send any events since there are no files
+        assert!(!app.events.has_pending_events());
+    }
+
+    #[tokio::test]
+    async fn test_review_details_view_open_comments_file_index_out_of_bounds() {
+        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let mut view = ReviewDetailsView::new(review.clone());
+        let mut app = create_test_app().await;
+
+        // Set up a diff with one file
+        let files = vec![crate::models::DiffFile {
+            path: "src/main.rs".to_string(),
+            content: "line1\nline2".to_string(),
+        }];
+        let diff = Arc::new(crate::models::Diff::from_files(files));
+        view.diff = diff;
+        view.selected_file_index = 5; // Out of bounds index
+
+        // Call open_comments
+        view.open_comments(&mut app);
+
+        // Should not send any events since the file index is out of bounds
+        assert!(!app.events.has_pending_events());
+    }
+
+    #[tokio::test]
+    async fn test_review_details_view_open_comments_key_handling() {
+        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let mut view = ReviewDetailsView::new(review.clone());
+        let mut app = create_test_app().await;
+
+        // Set up a diff with files
+        let files = vec![crate::models::DiffFile {
+            path: "src/test.rs".to_string(),
+            content: "test content".to_string(),
+        }];
+        let diff = Arc::new(crate::models::Diff::from_files(files));
+        view.diff = diff;
+        view.selected_file_index = 0;
+
+        // Simulate pressing 'c' key to open comments
+        let key_event = ratatui::crossterm::event::KeyEvent {
+            code: ratatui::crossterm::event::KeyCode::Char('c'),
+            modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
+            kind: ratatui::crossterm::event::KeyEventKind::Press,
+            state: ratatui::crossterm::event::KeyEventState::empty(),
+        };
+
+        // Handle the key event
+        view.handle_key_events(&mut app, &key_event).unwrap();
+
+        // Should have sent CommentsOpen event
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        match &*event {
+            crate::event::Event::App(AppEvent::CommentsOpen {
+                review_id,
+                file_path,
+                line_number,
+            }) => {
+                assert_eq!(review_id.as_ref(), review.id);
+                assert_eq!(file_path.as_ref(), "src/test.rs");
+                assert_eq!(*line_number, None); // File-level since we're in Files navigation mode
+            }
+            _ => panic!("Expected CommentsOpen event, got: {event:?}"),
+        }
+    }
+
+    #[test]
+    fn test_comment_indicator_no_comments() {
+        let review = Review::test_review(());
+        let view = ReviewDetailsView::new(review);
+
+        let diff_file = crate::models::DiffFile {
+            path: "src/main.rs".to_string(),
+            content: "test content".to_string(),
+        };
+
+        // No comments set up
+        let indicator = view.comment_indicator(&diff_file);
+        assert_eq!(indicator, CommentIndicator::NoComment);
+    }
+
+    #[test]
+    fn test_comment_indicator_file_comments_only() {
+        let review = Review::test_review(());
+        let mut view = ReviewDetailsView::new(review);
+
+        let diff_file = crate::models::DiffFile {
+            path: "src/main.rs".to_string(),
+            content: "test content".to_string(),
+        };
+
+        // Set up file with file comments only
+        view.files_with_file_comments = Arc::new(vec!["src/main.rs".to_string()]);
+        view.files_with_file_and_or_line_comments = Arc::new(vec!["src/main.rs".to_string()]);
+        // No line comments
+
+        let indicator = view.comment_indicator(&diff_file);
+        assert_eq!(indicator, CommentIndicator::FileComment);
+    }
+
+    #[test]
+    fn test_comment_indicator_line_comments_only() {
+        let review = Review::test_review(());
+        let mut view = ReviewDetailsView::new(review);
+
+        let diff_file = crate::models::DiffFile {
+            path: "src/main.rs".to_string(),
+            content: "test content".to_string(),
+        };
+
+        // Set up file with line comments only
+        view.files_with_file_and_or_line_comments = Arc::new(vec!["src/main.rs".to_string()]);
+        // No file comments, but has line comments
+        let mut lines_with_comments = std::collections::HashMap::new();
+        lines_with_comments.insert("src/main.rs".to_string(), vec![1, 2, 3]);
+        view.lines_with_comments = Arc::new(lines_with_comments);
+
+        let indicator = view.comment_indicator(&diff_file);
+        assert_eq!(indicator, CommentIndicator::LineComment);
+    }
+
+    #[test]
+    fn test_comment_indicator_file_and_line_comments() {
+        let review = Review::test_review(());
+        let mut view = ReviewDetailsView::new(review);
+
+        let diff_file = crate::models::DiffFile {
+            path: "src/main.rs".to_string(),
+            content: "test content".to_string(),
+        };
+
+        // Set up file with both file and line comments
+        view.files_with_file_comments = Arc::new(vec!["src/main.rs".to_string()]);
+        view.files_with_file_and_or_line_comments = Arc::new(vec!["src/main.rs".to_string()]);
+        let mut lines_with_comments = std::collections::HashMap::new();
+        lines_with_comments.insert("src/main.rs".to_string(), vec![5, 10]);
+        view.lines_with_comments = Arc::new(lines_with_comments);
+
+        let indicator = view.comment_indicator(&diff_file);
+        assert_eq!(indicator, CommentIndicator::FileAndLineComment);
+    }
+
+    #[tokio::test]
+    async fn test_reload_comments_with_review() {
+        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let view = ReviewDetailsView::new(review.clone());
+        let mut app = create_test_app().await;
+
+        // Call reload_comments
+        view.reload_comments(&mut app);
+
+        // Should send CommentsLoad event for the whole review
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        match &*event {
+            crate::event::Event::App(AppEvent::CommentsLoad(params)) => {
+                assert_eq!(params.review_id.as_ref(), review.id);
+                assert!(params.file_path.as_ref().is_none());
+                assert!(params.line_number.as_ref().is_none());
+            }
+            _ => panic!("Expected CommentsLoad event, got: {event:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_reload_comments_without_review() {
+        let view = ReviewDetailsView::new_loading();
+        let mut app = create_test_app().await;
+
+        // Call reload_comments (should not send any event since no review)
+        view.reload_comments(&mut app);
+
+        // Should not send any events
+        assert!(!app.events.has_pending_events());
+    }
+
+    #[test]
+    fn test_comments_load_params_with_review() {
+        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let view = ReviewDetailsView::new(review.clone());
+
+        let params = view.comments_load_params();
+        assert!(params.is_some());
+
+        let params = params.unwrap();
+        assert_eq!(params.review_id.as_ref(), review.id);
+        assert!(params.file_path.as_ref().is_none());
+        assert!(params.line_number.as_ref().is_none());
+    }
+
+    #[test]
+    fn test_comments_load_params_without_review() {
+        let view = ReviewDetailsView::new_loading();
+
+        let params = view.comments_load_params();
+        assert!(params.is_none());
+    }
+
+    #[test]
+    fn test_relevant_comments_loading_state_matching_params() {
+        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let view = ReviewDetailsView::new(review.clone());
+
+        let params = crate::services::CommentsLoadParams {
+            review_id: Arc::from(review.id.clone()),
+            file_path: Arc::new(None),
+            line_number: Arc::new(None),
+        };
+
+        let is_relevant = view.relevant_comments_loading_state(&params);
+        assert!(is_relevant);
+    }
+
+    #[test]
+    fn test_relevant_comments_loading_state_different_review_id() {
+        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let view = ReviewDetailsView::new(review.clone());
+
+        let params = crate::services::CommentsLoadParams {
+            review_id: Arc::from("different-review-id".to_string()),
+            file_path: Arc::new(None),
+            line_number: Arc::new(None),
+        };
+
+        let is_relevant = view.relevant_comments_loading_state(&params);
+        assert!(!is_relevant);
+    }
+
+    #[test]
+    fn test_relevant_comments_loading_state_without_review() {
+        let view = ReviewDetailsView::new_loading();
+
+        let params = crate::services::CommentsLoadParams {
+            review_id: Arc::from("any-review-id".to_string()),
+            file_path: Arc::new(None),
+            line_number: Arc::new(None),
+        };
+
+        let is_relevant = view.relevant_comments_loading_state(&params);
+        assert!(!is_relevant);
+    }
+
+    #[test]
+    fn test_handle_comments_loading_state_not_relevant() {
+        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let mut view = ReviewDetailsView::new(review.clone());
+
+        // Set up initial state
+        let initial_files_with_comments = view.files_with_file_comments.clone();
+        let initial_lines_with_comments = view.lines_with_comments.clone();
+
+        // Load comments for a different review
+        let params = crate::services::CommentsLoadParams {
+            review_id: Arc::from("different-review-id".to_string()),
+            file_path: Arc::new(None),
+            line_number: Arc::new(None),
+        };
+
+        // Create dummy comments
+        let comments = vec![crate::models::Comment::test_comment(
+            "different-review-id",
+            "src/main.rs",
+            None,
+            "File comment",
+        )];
+
+        let state = crate::services::CommentsLoadingState::Loaded(Arc::new(comments));
+        view.handle_comments_loading_state(&params, &state);
+
+        // State should not change since params are not relevant
+        assert!(Arc::ptr_eq(
+            &view.files_with_file_comments,
+            &initial_files_with_comments
+        ));
+        assert!(Arc::ptr_eq(
+            &view.lines_with_comments,
+            &initial_lines_with_comments
+        ));
+    }
+
+    #[test]
+    fn test_handle_comments_loading_state_loaded_file_comments() {
+        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let mut view = ReviewDetailsView::new(review.clone());
+
+        let params = crate::services::CommentsLoadParams {
+            review_id: Arc::from(review.id.clone()),
+            file_path: Arc::new(None),
+            line_number: Arc::new(None),
+        };
+
+        // Create test comments - file comments only
+        let comments = vec![
+            crate::models::Comment::test_comment(&review.id, "src/main.rs", None, "File comment"),
+            crate::models::Comment::test_comment(
+                &review.id,
+                "src/lib.rs",
+                None,
+                "Another file comment",
+            ),
+        ];
+
+        let state = crate::services::CommentsLoadingState::Loaded(Arc::new(comments));
+        view.handle_comments_loading_state(&params, &state);
+
+        // Should update files with file comments
+        assert_eq!(view.files_with_file_comments.len(), 2);
+        assert!(
+            view.files_with_file_comments
+                .contains(&"src/main.rs".to_string())
+        );
+        assert!(
+            view.files_with_file_comments
+                .contains(&"src/lib.rs".to_string())
+        );
+
+        // Should update files with file and/or line comments
+        assert_eq!(view.files_with_file_and_or_line_comments.len(), 2);
+        assert!(
+            view.files_with_file_and_or_line_comments
+                .contains(&"src/main.rs".to_string())
+        );
+        assert!(
+            view.files_with_file_and_or_line_comments
+                .contains(&"src/lib.rs".to_string())
+        );
+
+        // No line comments
+        assert!(view.lines_with_comments.is_empty());
+    }
+
+    #[test]
+    fn test_handle_comments_loading_state_loaded_line_comments() {
+        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let mut view = ReviewDetailsView::new(review.clone());
+
+        let params = crate::services::CommentsLoadParams {
+            review_id: Arc::from(review.id.clone()),
+            file_path: Arc::new(None),
+            line_number: Arc::new(None),
+        };
+
+        // Create test comments - line comments only
+        let comments = vec![
+            crate::models::Comment::test_comment(
+                &review.id,
+                "src/main.rs",
+                Some(10),
+                "Line comment",
+            ),
+            crate::models::Comment::test_comment(
+                &review.id,
+                "src/main.rs",
+                Some(20),
+                "Another line comment",
+            ),
+        ];
+
+        let state = crate::services::CommentsLoadingState::Loaded(Arc::new(comments));
+        view.handle_comments_loading_state(&params, &state);
+
+        // No file comments (only line comments)
+        assert!(view.files_with_file_comments.is_empty());
+
+        // Should update files with file and/or line comments
+        assert_eq!(view.files_with_file_and_or_line_comments.len(), 1);
+        assert!(
+            view.files_with_file_and_or_line_comments
+                .contains(&"src/main.rs".to_string())
+        );
+
+        // Should update lines with comments
+        assert_eq!(view.lines_with_comments.len(), 1);
+        let main_rs_lines = view.lines_with_comments.get("src/main.rs").unwrap();
+        assert_eq!(main_rs_lines.len(), 2);
+        assert!(main_rs_lines.contains(&10));
+        assert!(main_rs_lines.contains(&20));
+    }
+
+    #[test]
+    fn test_handle_comments_loading_state_loaded_mixed_comments() {
+        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let mut view = ReviewDetailsView::new(review.clone());
+
+        let params = crate::services::CommentsLoadParams {
+            review_id: Arc::from(review.id.clone()),
+            file_path: Arc::new(None),
+            line_number: Arc::new(None),
+        };
+
+        // Create test comments - mix of file and line comments
+        let comments = vec![
+            crate::models::Comment::test_comment(&review.id, "src/main.rs", None, "File comment"),
+            crate::models::Comment::test_comment(
+                &review.id,
+                "src/main.rs",
+                Some(15),
+                "Line comment",
+            ),
+            crate::models::Comment::test_comment(
+                &review.id,
+                "src/lib.rs",
+                Some(25),
+                "Another line comment",
+            ),
+        ];
+
+        let state = crate::services::CommentsLoadingState::Loaded(Arc::new(comments));
+        view.handle_comments_loading_state(&params, &state);
+
+        // Should have file comments
+        assert_eq!(view.files_with_file_comments.len(), 1);
+        assert!(
+            view.files_with_file_comments
+                .contains(&"src/main.rs".to_string())
+        );
+
+        // Should update files with file and/or line comments
+        assert_eq!(view.files_with_file_and_or_line_comments.len(), 2);
+        assert!(
+            view.files_with_file_and_or_line_comments
+                .contains(&"src/main.rs".to_string())
+        );
+        assert!(
+            view.files_with_file_and_or_line_comments
+                .contains(&"src/lib.rs".to_string())
+        );
+
+        // Should update lines with comments
+        assert_eq!(view.lines_with_comments.len(), 2);
+
+        let main_rs_lines = view.lines_with_comments.get("src/main.rs").unwrap();
+        assert_eq!(main_rs_lines.len(), 1);
+        assert!(main_rs_lines.contains(&15));
+
+        let lib_rs_lines = view.lines_with_comments.get("src/lib.rs").unwrap();
+        assert_eq!(lib_rs_lines.len(), 1);
+        assert!(lib_rs_lines.contains(&25));
+    }
+
+    #[tokio::test]
+    async fn test_handle_comment_created_event_triggers_reload() {
+        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let mut view = ReviewDetailsView::new(review.clone());
+        let mut app = create_test_app().await;
+
+        // Create a dummy comment
+        let comment =
+            crate::models::Comment::test_comment(&review.id, "src/main.rs", None, "New comment");
+
+        // Handle CommentCreated event
+        view.handle_app_events(&mut app, &AppEvent::CommentCreated(Arc::new(comment)));
+
+        // Should trigger reload of comments
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        match &*event {
+            crate::event::Event::App(AppEvent::CommentsLoad(params)) => {
+                assert_eq!(params.review_id.as_ref(), review.id);
+                assert!(params.file_path.as_ref().is_none());
+                assert!(params.line_number.as_ref().is_none());
+            }
+            _ => panic!("Expected CommentsLoad event, got: {event:?}"),
+        }
     }
 }

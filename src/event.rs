@@ -7,10 +7,10 @@ use ratatui::crossterm::event::{Event as CrosstermEvent, KeyEvent};
 use tokio::sync::mpsc;
 
 use crate::{
-    models::Review,
+    models::{Comment, Review},
     services::{
-        GitBranchesLoadingState, GitDiffLoadingState, ReviewCreateData, ReviewLoadingState,
-        ReviewsLoadingState,
+        CommentsLoadParams, CommentsLoadingState, GitBranchesLoadingState, GitDiffLoadingState,
+        ReviewCreateData, ReviewLoadingState, ReviewsLoadingState,
     },
     views::KeyBinding,
 };
@@ -146,6 +146,33 @@ pub enum AppEvent {
         review_id: Arc<ReviewId>,
         error: Arc<str>,
     },
+
+    /// Open comments view for a file or line.
+    CommentsOpen {
+        review_id: Arc<ReviewId>,
+        file_path: Arc<str>,
+        line_number: Option<i64>,
+    },
+    /// Load comments for a review, file or line.
+    CommentsLoad(CommentsLoadParams),
+    /// Comments are being loaded.
+    CommentsLoading(CommentsLoadParams),
+    /// Propagates the current loading state of comments.
+    CommentsLoadingState {
+        params: CommentsLoadParams,
+        state: CommentsLoadingState,
+    },
+    /// Create a new comment.
+    CommentCreate {
+        review_id: Arc<ReviewId>,
+        file_path: Arc<str>,
+        line_number: Option<i64>,
+        content: Arc<str>,
+    },
+    /// Comment was created successfully.
+    CommentCreated(Arc<Comment>),
+    /// Error occurred while creating a comment.
+    CommentCreateError(Arc<str>),
 }
 
 /// Terminal event handler.

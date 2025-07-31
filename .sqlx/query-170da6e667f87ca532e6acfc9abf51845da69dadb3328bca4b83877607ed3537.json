@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT id as \"id!\", review_id as \"review_id!\", file_path as \"file_path!\", line_number, content as \"content!\", created_at as \"created_at!\"\n            FROM comments\n            WHERE review_id = ? AND file_path = ?\n            ORDER BY created_at DESC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "review_id!",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "file_path!",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "line_number",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "content!",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!",
+        "ordinal": 5,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "170da6e667f87ca532e6acfc9abf51845da69dadb3328bca4b83877607ed3537"
+}
