@@ -1,5 +1,6 @@
 use std::future::Future;
 
+use crate::database::Database;
 use crate::event::{AppEvent, EventHandler};
 
 pub mod comment_service;
@@ -19,13 +20,18 @@ pub use review_service::ReviewLoadingState;
 pub use review_service::ReviewService;
 pub use review_service::ReviewsLoadingState;
 
+/// Context struct containing the app state that services need access to
+pub struct ServiceContext<'a> {
+    pub database: &'a Database,
+    pub repo_path: &'a str,
+    pub events: &'a mut EventHandler,
+}
+
 /// Trait for services that can handle app events
 pub trait ServiceHandler {
     /// Handle an app event and potentially send new events through the event handler
     fn handle_app_event<'a>(
         event: &'a AppEvent,
-        database: &'a crate::database::Database,
-        repo_path: &'a str,
-        events: &'a mut EventHandler,
+        context: ServiceContext<'a>,
     ) -> std::pin::Pin<Box<dyn Future<Output = color_eyre::Result<()>> + Send + 'a>>;
 }

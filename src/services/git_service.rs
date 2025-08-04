@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use crate::event::{AppEvent, EventHandler};
 use crate::models::{Diff, DiffFile};
-use crate::services::ServiceHandler;
+use crate::services::{ServiceContext, ServiceHandler};
 
 /// State of Git branches loading process
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -291,29 +291,33 @@ impl GitService {
 impl ServiceHandler for GitService {
     fn handle_app_event<'a>(
         event: &'a AppEvent,
-        _database: &'a crate::database::Database,
-        repo_path: &'a str,
-        events: &'a mut EventHandler,
+        context: ServiceContext<'a>,
     ) -> Pin<Box<dyn Future<Output = color_eyre::Result<()>> + Send + 'a>> {
         Box::pin(async move {
             match event {
                 AppEvent::GitBranchesLoad => {
-                    Self::handle_git_branches_load(events);
+                    Self::handle_git_branches_load(context.events);
                 }
                 AppEvent::GitBranchesLoading => {
-                    Self::handle_git_branches_loading(repo_path, events).await;
+                    Self::handle_git_branches_loading(context.repo_path, context.events).await;
                 }
                 AppEvent::GitDiffLoad {
                     base_sha,
                     target_sha,
                 } => {
-                    Self::handle_git_diff_load(base_sha, target_sha, events);
+                    Self::handle_git_diff_load(base_sha, target_sha, context.events);
                 }
                 AppEvent::GitDiffLoading {
                     base_sha,
                     target_sha,
                 } => {
-                    Self::handle_git_diff_loading(repo_path, base_sha, target_sha, events).await;
+                    Self::handle_git_diff_loading(
+                        context.repo_path,
+                        base_sha,
+                        target_sha,
+                        context.events,
+                    )
+                    .await;
                 }
                 _ => {
                     // Other events are ignored
@@ -556,9 +560,16 @@ mod tests {
             repo_path: ".".to_string(),
         };
         // Handle GitBranchesLoad event
-        GitService::handle_app_event(&AppEvent::GitBranchesLoad, &app.database, ".", &mut events)
-            .await
-            .unwrap();
+        GitService::handle_app_event(
+            &AppEvent::GitBranchesLoad,
+            ServiceContext {
+                database: &app.database,
+                repo_path: ".",
+                events: &mut events,
+            },
+        )
+        .await
+        .unwrap();
 
         // Should have sent GitBranchesLoading and GitBranchesLoadingState(Loading) events
         assert!(events.has_pending_events());
@@ -605,9 +616,11 @@ mod tests {
         // Handle GitBranchesLoading event
         GitService::handle_app_event(
             &AppEvent::GitBranchesLoading,
-            &app.database,
-            &app.repo_path,
-            &mut events,
+            ServiceContext {
+                database: &app.database,
+                repo_path: &app.repo_path,
+                events: &mut events,
+            },
         )
         .await
         .unwrap();
@@ -665,9 +678,11 @@ mod tests {
         // Handle GitBranchesLoading event
         GitService::handle_app_event(
             &AppEvent::GitBranchesLoading,
-            &app.database,
-            &app.repo_path,
-            &mut events,
+            ServiceContext {
+                database: &app.database,
+                repo_path: &app.repo_path,
+                events: &mut events,
+            },
         )
         .await
         .unwrap();

@@ -4,7 +4,7 @@ use crate::{
     database::Database,
     event::{AppEvent, EventHandler, ReviewId},
     models::FileView,
-    services::ServiceHandler,
+    services::{ServiceContext, ServiceHandler},
 };
 
 /// Service for handling file view operations
@@ -13,9 +13,7 @@ pub struct FileViewService;
 impl ServiceHandler for FileViewService {
     fn handle_app_event<'a>(
         event: &'a AppEvent,
-        database: &'a crate::database::Database,
-        _repo_path: &'a str,
-        events: &'a mut EventHandler,
+        context: ServiceContext<'a>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = color_eyre::Result<()>> + Send + 'a>>
     {
         Box::pin(async move {
@@ -24,10 +22,17 @@ impl ServiceHandler for FileViewService {
                     review_id,
                     file_path,
                 } => {
-                    Self::handle_file_view_toggle(database, events, review_id, file_path).await?;
+                    Self::handle_file_view_toggle(
+                        context.database,
+                        context.events,
+                        review_id,
+                        file_path,
+                    )
+                    .await?;
                 }
                 AppEvent::FileViewsLoad { review_id } => {
-                    Self::handle_file_views_load(database, events, review_id).await?;
+                    Self::handle_file_views_load(context.database, context.events, review_id)
+                        .await?;
                 }
                 _ => {
                     // Event not handled by this service
@@ -169,9 +174,16 @@ mod tests {
             view_stack: vec![],
             repo_path: ".".to_string(),
         };
-        FileViewService::handle_app_event(&event, &app.database, ".", &mut events)
-            .await
-            .unwrap();
+        FileViewService::handle_app_event(
+            &event,
+            ServiceContext {
+                database: &app.database,
+                repo_path: ".",
+                events: &mut events,
+            },
+        )
+        .await
+        .unwrap();
 
         // Verify file is now viewed
         assert!(
@@ -235,9 +247,16 @@ mod tests {
             view_stack: vec![],
             repo_path: ".".to_string(),
         };
-        FileViewService::handle_app_event(&event, &app.database, ".", &mut events)
-            .await
-            .unwrap();
+        FileViewService::handle_app_event(
+            &event,
+            ServiceContext {
+                database: &app.database,
+                repo_path: ".",
+                events: &mut events,
+            },
+        )
+        .await
+        .unwrap();
 
         // Verify file is now unviewed
         assert!(
@@ -287,9 +306,16 @@ mod tests {
             view_stack: vec![],
             repo_path: ".".to_string(),
         };
-        FileViewService::handle_app_event(&event, &app.database, ".", &mut events)
-            .await
-            .unwrap();
+        FileViewService::handle_app_event(
+            &event,
+            ServiceContext {
+                database: &app.database,
+                repo_path: ".",
+                events: &mut events,
+            },
+        )
+        .await
+        .unwrap();
 
         // Check loading event was sent
         let loading_event = events.try_recv().unwrap();
@@ -334,9 +360,16 @@ mod tests {
             view_stack: vec![],
             repo_path: ".".to_string(),
         };
-        FileViewService::handle_app_event(&event, &app.database, ".", &mut events)
-            .await
-            .unwrap();
+        FileViewService::handle_app_event(
+            &event,
+            ServiceContext {
+                database: &app.database,
+                repo_path: ".",
+                events: &mut events,
+            },
+        )
+        .await
+        .unwrap();
 
         // Skip loading event
         events.try_recv().unwrap();
@@ -370,9 +403,16 @@ mod tests {
             view_stack: vec![],
             repo_path: ".".to_string(),
         };
-        FileViewService::handle_app_event(&event, &app.database, ".", &mut events)
-            .await
-            .unwrap();
+        FileViewService::handle_app_event(
+            &event,
+            ServiceContext {
+                database: &app.database,
+                repo_path: ".",
+                events: &mut events,
+            },
+        )
+        .await
+        .unwrap();
 
         // No events should be sent
         assert!(!events.has_pending_events());

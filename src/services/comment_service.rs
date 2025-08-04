@@ -4,7 +4,7 @@ use crate::{
     database::Database,
     event::{AppEvent, EventHandler, ReviewId},
     models::Comment,
-    services::ServiceHandler,
+    services::{ServiceContext, ServiceHandler},
 };
 
 /// Loading state for comments
@@ -45,15 +45,13 @@ pub struct CommentService;
 impl ServiceHandler for CommentService {
     fn handle_app_event<'a>(
         event: &'a AppEvent,
-        database: &'a crate::database::Database,
-        _repo_path: &'a str,
-        events: &'a mut EventHandler,
+        context: ServiceContext<'a>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = color_eyre::Result<()>> + Send + 'a>>
     {
         Box::pin(async move {
             match event {
                 AppEvent::CommentsLoad(params) => {
-                    Self::handle_comments_load(database, events, params).await?;
+                    Self::handle_comments_load(context.database, context.events, params).await?;
                 }
                 AppEvent::CommentCreate {
                     review_id,
@@ -62,8 +60,8 @@ impl ServiceHandler for CommentService {
                     content,
                 } => {
                     Self::handle_comment_create(
-                        database,
-                        events,
+                        context.database,
+                        context.events,
                         review_id,
                         file_path,
                         line_number,

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::ServiceHandler;
+use super::{ServiceContext, ServiceHandler};
 
 use crate::{
     database::Database,
@@ -229,22 +229,22 @@ impl ReviewService {
 impl ServiceHandler for ReviewService {
     fn handle_app_event<'a>(
         event: &'a AppEvent,
-        database: &'a crate::database::Database,
-        _repo_path: &'a str,
-        events: &'a mut EventHandler,
+        context: ServiceContext<'a>,
     ) -> std::pin::Pin<Box<dyn Future<Output = color_eyre::Result<()>> + Send + 'a>> {
         Box::pin(async move {
             match event {
-                AppEvent::ReviewsLoad => Self::handle_reviews_load(events),
-                AppEvent::ReviewsLoading => Self::handle_reviews_loading(database, events).await,
+                AppEvent::ReviewsLoad => Self::handle_reviews_load(context.events),
+                AppEvent::ReviewsLoading => {
+                    Self::handle_reviews_loading(context.database, context.events).await
+                }
                 AppEvent::ReviewCreateSubmit(data) => {
-                    Self::handle_review_create_submit(data, database, events).await
+                    Self::handle_review_create_submit(data, context.database, context.events).await
                 }
                 AppEvent::ReviewDelete(review_id) => {
-                    Self::handle_review_delete(review_id, database, events).await
+                    Self::handle_review_delete(review_id, context.database, context.events).await
                 }
                 AppEvent::ReviewLoad(review_id) => {
-                    Self::handle_review_load(review_id, database, events).await
+                    Self::handle_review_load(review_id, context.database, context.events).await
                 }
                 _ => {
                     // Other events are not handled by ReviewService
@@ -502,9 +502,11 @@ mod tests {
 
         ReviewService::handle_app_event(
             &AppEvent::ReviewsLoad,
-            &app.database,
-            &app.repo_path,
-            &mut events,
+            ServiceContext {
+                database: &app.database,
+                repo_path: &app.repo_path,
+                events: &mut events,
+            },
         )
         .await
         .unwrap();
@@ -534,9 +536,11 @@ mod tests {
 
         ReviewService::handle_app_event(
             &AppEvent::ReviewsLoading,
-            &app.database,
-            &app.repo_path,
-            &mut events,
+            ServiceContext {
+                database: &app.database,
+                repo_path: &app.repo_path,
+                events: &mut events,
+            },
         )
         .await
         .unwrap();
@@ -568,9 +572,11 @@ mod tests {
 
         ReviewService::handle_app_event(
             &AppEvent::ReviewsLoading,
-            &app.database,
-            &app.repo_path,
-            &mut events,
+            ServiceContext {
+                database: &app.database,
+                repo_path: &app.repo_path,
+                events: &mut events,
+            },
         )
         .await
         .unwrap();
@@ -602,9 +608,11 @@ mod tests {
         // Test that other events are ignored
         ReviewService::handle_app_event(
             &AppEvent::Quit,
-            &app.database,
-            &app.repo_path,
-            &mut events,
+            ServiceContext {
+                database: &app.database,
+                repo_path: &app.repo_path,
+                events: &mut events,
+            },
         )
         .await
         .unwrap();
@@ -635,9 +643,11 @@ mod tests {
 
         ReviewService::handle_app_event(
             &AppEvent::ReviewCreateSubmit(data.into()),
-            &app.database,
-            &app.repo_path,
-            &mut events,
+            ServiceContext {
+                database: &app.database,
+                repo_path: &app.repo_path,
+                events: &mut events,
+            },
         )
         .await
         .unwrap();
@@ -682,9 +692,11 @@ mod tests {
         // Test empty branches submission
         ReviewService::handle_app_event(
             &AppEvent::ReviewCreateSubmit(data.into()),
-            &app.database,
-            &app.repo_path,
-            &mut events,
+            ServiceContext {
+                database: &app.database,
+                repo_path: &app.repo_path,
+                events: &mut events,
+            },
         )
         .await
         .unwrap();
@@ -733,9 +745,11 @@ mod tests {
         // Test review deletion
         ReviewService::handle_app_event(
             &AppEvent::ReviewDelete(review_id_to_delete.clone()),
-            &app.database,
-            &app.repo_path,
-            &mut events,
+            ServiceContext {
+                database: &app.database,
+                repo_path: &app.repo_path,
+                events: &mut events,
+            },
         )
         .await
         .unwrap();
@@ -781,9 +795,11 @@ mod tests {
         // Test deletion with non-existent ID
         ReviewService::handle_app_event(
             &AppEvent::ReviewDelete("non-existent-id".into()),
-            &app.database,
-            ".",
-            &mut events,
+            ServiceContext {
+                database: &app.database,
+                repo_path: ".",
+                events: &mut events,
+            },
         )
         .await
         .unwrap();
@@ -820,9 +836,16 @@ mod tests {
             repo_path: ".".to_string(),
         };
 
-        ReviewService::handle_app_event(&AppEvent::ReviewsLoading, &app.database, ".", &mut events)
-            .await
-            .unwrap();
+        ReviewService::handle_app_event(
+            &AppEvent::ReviewsLoading,
+            ServiceContext {
+                database: &app.database,
+                repo_path: ".",
+                events: &mut events,
+            },
+        )
+        .await
+        .unwrap();
 
         // Should have sent a ReviewsLoadingError event due to missing table
         assert!(events.has_pending_events());
@@ -853,9 +876,11 @@ mod tests {
         // Test loading the review
         ReviewService::handle_app_event(
             &AppEvent::ReviewLoad(review.id.clone().into()),
-            &app.database,
-            ".",
-            &mut events,
+            ServiceContext {
+                database: &app.database,
+                repo_path: ".",
+                events: &mut events,
+            },
         )
         .await
         .unwrap();
@@ -890,9 +915,11 @@ mod tests {
         let non_existent_id = "non-existent-id";
         ReviewService::handle_app_event(
             &AppEvent::ReviewLoad(non_existent_id.into()),
-            &database,
-            ".",
-            &mut events,
+            ServiceContext {
+                database: &database,
+                repo_path: ".",
+                events: &mut events,
+            },
         )
         .await
         .unwrap();
@@ -928,9 +955,11 @@ mod tests {
         // Test loading a review when the table doesn't exist (will cause a database error)
         ReviewService::handle_app_event(
             &AppEvent::ReviewLoad("some-id".into()),
-            &database,
-            &repo_path,
-            &mut events,
+            ServiceContext {
+                database: &database,
+                repo_path: &repo_path,
+                events: &mut events,
+            },
         )
         .await
         .unwrap();
