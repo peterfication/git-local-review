@@ -2,7 +2,7 @@ default:
   just --list
 
 # Run all steps of CI
-ci: db-prepare run-version db-schema-dump format lint test build doc
+ci: db-prepare run-version cli-help-dump db-schema-dump format lint test build doc
 
 # Run the application
 run:
@@ -11,6 +11,10 @@ run:
 # Run the application and print the version
 run-version:
   cargo run -- --version
+
+# Dump the CLI help to a file
+cli-help-dump:
+  cargo run -- --help > cli_help.txt
 
 # Format all files
 format: format-rust format-rest
