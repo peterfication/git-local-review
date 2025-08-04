@@ -1,11 +1,12 @@
-# CLAUDE.md
+# AGENT.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to coding agents (e.g. Claude Code (claude.ai/code)) when working with code in this repository.
 
 ## Documentation
 
 - **[`README.md`](README.md)**: User-facing documentation with installation, usage and development instructions
-- **`CLAUDE.md**: This file - technical architecture and development guidance for Claude Code
+- **[`ARCHITECTURE.md`](ARCHITECTURE.md)**: Notes about the software architecture of this application
+- **[`KEYBINDINGS.md`](KEYBINDINGS.md)**: Documentation about the keybindings of the application
 
 Make sure to keep the documentation files up-to-date when making changes.
 
@@ -17,6 +18,8 @@ This is a Rust-based Terminal User Interface (TUI) application for reviewing Git
 
 All commands are available via `just` (task runner). See README.md for user-focused quick start instructions.
 
+Some examples:
+
 - **Run the application**: `just run` or `cargo run`
 - **Format code**: `just format` (runs `cargo fmt --all`)
 - **Lint code**: `just lint` (runs `cargo clippy --all-targets --all-features -- -D warnings`)
@@ -24,6 +27,8 @@ All commands are available via `just` (task runner). See README.md for user-focu
 - **Build**: `just build` (runs `cargo build`)
 - **Generate docs**: `just doc` (runs `cargo doc --no-deps --all-features`)
 - **Run full CI pipeline**: `just ci` (format, lint, test, build, doc)
+
+After a changeset, run `just ci` to verify the changes and fix occurring errors so that the code quality standards are upheld.
 
 ## Architecture
 
@@ -101,17 +106,9 @@ All commands are available via `just` (task runner). See README.md for user-focu
    - `ReviewDeleteConfirm(Arc<str>)`: Open delete confirmation dialog
    - `ReviewDelete(Arc<str>)`: Execute review deletion
 
-### Database Schema
+### Database Schema (SQLite)
 
-SQLite database with embedded migrations:
-
-```sql
-CREATE TABLE reviews (
-    id TEXT PRIMARY KEY,      -- UUID v4
-    title TEXT NOT NULL,      -- User-provided title
-    created_at TEXT NOT NULL  -- ISO 8601 timestamp
-);
-```
+See [schema.sql](schema.sql).
 
 ### Performance Optimizations
 
@@ -211,13 +208,3 @@ Key dependencies:
 - **Documented**: Public APIs have comprehensive documentation
 - **Type Safe**: Extensive use of strong types and enums for correctness
 - **Performance Focused**: Arc optimizations for efficient memory usage
-
-### Key Recent Improvements
-
-- **Arc Event System**: Eliminated expensive event cloning with `Arc<Event>` wrapper
-- **ReviewsLoadingState Optimization**: Uses `Arc<[Review]>` for efficient data sharing
-- **Event Payload Optimization**: Arc-wrapped data in events (`Arc<ReviewCreateData>`, etc.)
-- **View Handler Efficiency**: Optimized pattern matching to minimize cloning
-- **String Optimization**: `Arc<str>` for shared string data to reduce allocations
-
-After a changeset, run `just ci` to verify the changes and fix occurring errors so that the code quality standards are upheld.
