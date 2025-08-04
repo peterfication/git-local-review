@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO reviews (id, created_at, updated_at, base_branch, target_branch, base_sha, target_sha)\n            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "5e4158920a1386758efaaf8d4e7bcf594c28493b2c5cf7d8f933d3fa8aba60ee"
+}

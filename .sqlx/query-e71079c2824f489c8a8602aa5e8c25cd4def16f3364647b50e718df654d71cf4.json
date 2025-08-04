@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT OR IGNORE INTO file_views (review_id, file_path, created_at)\n            VALUES (?1, ?2, ?3)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "e71079c2824f489c8a8602aa5e8c25cd4def16f3364647b50e718df654d71cf4"
+}

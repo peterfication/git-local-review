@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            DELETE FROM file_views\n            WHERE review_id = ?1 AND file_path = ?2\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "cf5f73470a071339d7f187e7e99dbac1579cf0f0380e9efa051d06195af02e9c"
+}
