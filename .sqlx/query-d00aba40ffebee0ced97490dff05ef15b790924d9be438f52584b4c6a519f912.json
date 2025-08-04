@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT id as \"id!\", created_at as \"created_at!\", updated_at as \"updated_at!\", base_branch as \"base_branch!\", target_branch as \"target_branch!\", base_sha, target_sha\n            FROM reviews\n            WHERE id = ?1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at!",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "base_branch!",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "target_branch!",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "base_sha",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "target_sha",
+        "ordinal": 6,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "d00aba40ffebee0ced97490dff05ef15b790924d9be438f52584b4c6a519f912"
+}

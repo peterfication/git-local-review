@@ -115,59 +115,100 @@ impl Review {
     }
 
     pub async fn save(&self, pool: &SqlitePool) -> Result<(), sqlx::Error> {
-        sqlx::query(
+        let created_at = self.created_at.to_rfc3339();
+        let updated_at = self.updated_at.to_rfc3339();
+        sqlx::query!(
             r#"
             INSERT INTO reviews (id, created_at, updated_at, base_branch, target_branch, base_sha, target_sha)
             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
             "#,
+            self.id,
+            created_at,
+            updated_at,
+            self.base_branch,
+            self.target_branch,
+            self.base_sha,
+            self.target_sha
         )
-        .bind(&self.id)
-        .bind(self.created_at.to_rfc3339())
-        .bind(self.updated_at.to_rfc3339())
-        .bind(&self.base_branch)
-        .bind(&self.target_branch)
-        .bind(&self.base_sha)
-        .bind(&self.target_sha)
         .execute(pool)
         .await?;
         Ok(())
     }
 
     pub async fn list_all(pool: &SqlitePool) -> Result<Vec<Review>, sqlx::Error> {
-        let reviews = sqlx::query_as::<_, Review>(
+        let rows = sqlx::query!(
             r#"
-            SELECT id, created_at, updated_at, base_branch, target_branch, base_sha, target_sha
+            SELECT id as "id!", created_at as "created_at!", updated_at as "updated_at!", base_branch as "base_branch!", target_branch as "target_branch!", base_sha, target_sha
             FROM reviews
             ORDER BY created_at DESC
-            "#,
+            "#
         )
         .fetch_all(pool)
         .await?;
+
+        let mut reviews = Vec::new();
+        for row in rows {
+            let created_at = DateTime::parse_from_rfc3339(&row.created_at)
+                .map_err(|e| sqlx::Error::Decode(Box::new(e)))?
+                .with_timezone(&Utc);
+            let updated_at = DateTime::parse_from_rfc3339(&row.updated_at)
+                .map_err(|e| sqlx::Error::Decode(Box::new(e)))?
+                .with_timezone(&Utc);
+            reviews.push(Review {
+                id: row.id,
+                created_at,
+                updated_at,
+                base_branch: row.base_branch,
+                target_branch: row.target_branch,
+                base_sha: row.base_sha,
+                target_sha: row.target_sha,
+            });
+        }
         Ok(reviews)
     }
 
     pub async fn find_by_id(pool: &SqlitePool, id: &str) -> Result<Option<Review>, sqlx::Error> {
-        let review = sqlx::query_as::<_, Review>(
+        let row = sqlx::query!(
             r#"
-            SELECT id, created_at, updated_at, base_branch, target_branch, base_sha, target_sha
+            SELECT id as "id!", created_at as "created_at!", updated_at as "updated_at!", base_branch as "base_branch!", target_branch as "target_branch!", base_sha, target_sha
             FROM reviews
             WHERE id = ?1
             "#,
+            id
         )
-        .bind(id)
         .fetch_optional(pool)
         .await?;
-        Ok(review)
+
+        match row {
+            Some(row) => {
+                let created_at = DateTime::parse_from_rfc3339(&row.created_at)
+                    .map_err(|e| sqlx::Error::Decode(Box::new(e)))?
+                    .with_timezone(&Utc);
+                let updated_at = DateTime::parse_from_rfc3339(&row.updated_at)
+                    .map_err(|e| sqlx::Error::Decode(Box::new(e)))?
+                    .with_timezone(&Utc);
+                Ok(Some(Review {
+                    id: row.id,
+                    created_at,
+                    updated_at,
+                    base_branch: row.base_branch,
+                    target_branch: row.target_branch,
+                    base_sha: row.base_sha,
+                    target_sha: row.target_sha,
+                }))
+            }
+            None => Ok(None),
+        }
     }
 
     pub async fn delete(&self, pool: &SqlitePool) -> Result<(), sqlx::Error> {
-        sqlx::query(
+        sqlx::query!(
             r#"
             DELETE FROM reviews
             WHERE id = ?1
             "#,
+            self.id
         )
-        .bind(&self.id)
         .execute(pool)
         .await?;
         Ok(())

@@ -38,15 +38,16 @@ impl FileView {
         review_id: &str,
         file_path: &str,
     ) -> Result<(), sqlx::Error> {
-        sqlx::query(
+        let created_at = Utc::now().to_rfc3339();
+        sqlx::query!(
             r#"
             INSERT OR IGNORE INTO file_views (review_id, file_path, created_at)
             VALUES (?1, ?2, ?3)
             "#,
+            review_id,
+            file_path,
+            created_at
         )
-        .bind(review_id)
-        .bind(file_path)
-        .bind(Utc::now().to_rfc3339())
         .execute(pool)
         .await?;
         Ok(())
@@ -58,14 +59,14 @@ impl FileView {
         review_id: &str,
         file_path: &str,
     ) -> Result<(), sqlx::Error> {
-        sqlx::query(
+        sqlx::query!(
             r#"
             DELETE FROM file_views
             WHERE review_id = ?1 AND file_path = ?2
             "#,
+            review_id,
+            file_path
         )
-        .bind(review_id)
-        .bind(file_path)
         .execute(pool)
         .await?;
         Ok(())
@@ -76,15 +77,15 @@ impl FileView {
         pool: &SqlitePool,
         review_id: &str,
     ) -> Result<Vec<String>, sqlx::Error> {
-        let file_paths = sqlx::query_scalar::<_, String>(
+        let file_paths = sqlx::query_scalar!(
             r#"
             SELECT file_path
             FROM file_views
             WHERE review_id = ?1
             ORDER BY created_at ASC
             "#,
+            review_id
         )
-        .bind(review_id)
         .fetch_all(pool)
         .await?;
         Ok(file_paths)
@@ -96,15 +97,15 @@ impl FileView {
         review_id: &str,
         file_path: &str,
     ) -> Result<bool, sqlx::Error> {
-        let count: i64 = sqlx::query_scalar(
+        let count: i64 = sqlx::query_scalar!(
             r#"
             SELECT COUNT(*)
             FROM file_views
             WHERE review_id = ?1 AND file_path = ?2
             "#,
+            review_id,
+            file_path
         )
-        .bind(review_id)
-        .bind(file_path)
         .fetch_one(pool)
         .await?;
         Ok(count > 0)
@@ -115,29 +116,42 @@ impl FileView {
         pool: &SqlitePool,
         review_id: &str,
     ) -> Result<Vec<FileView>, sqlx::Error> {
-        let file_views = sqlx::query_as::<_, FileView>(
+        let rows = sqlx::query!(
             r#"
-            SELECT id, review_id, file_path, created_at
+            SELECT id as "id!", review_id as "review_id!", file_path as "file_path!", created_at as "created_at!"
             FROM file_views
             WHERE review_id = ?1
             ORDER BY created_at ASC
             "#,
+            review_id
         )
-        .bind(review_id)
         .fetch_all(pool)
         .await?;
+
+        let mut file_views = Vec::new();
+        for row in rows {
+            let created_at = DateTime::parse_from_rfc3339(&row.created_at)
+                .map_err(|e| sqlx::Error::Decode(Box::new(e)))?
+                .with_timezone(&Utc);
+            file_views.push(FileView {
+                id: row.id,
+                review_id: row.review_id,
+                file_path: row.file_path,
+                created_at,
+            });
+        }
         Ok(file_views)
     }
 
     /// Delete all file views for a review (used when review is deleted)
     pub async fn delete_for_review(pool: &SqlitePool, review_id: &str) -> Result<(), sqlx::Error> {
-        sqlx::query(
+        sqlx::query!(
             r#"
             DELETE FROM file_views
             WHERE review_id = ?1
             "#,
+            review_id
         )
-        .bind(review_id)
         .execute(pool)
         .await?;
         Ok(())

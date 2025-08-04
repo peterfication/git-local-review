@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT id as \"id!\", review_id as \"review_id!\", file_path as \"file_path!\", created_at as \"created_at!\"\n            FROM file_views\n            WHERE review_id = ?1\n            ORDER BY created_at ASC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "review_id!",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "file_path!",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "24b9bbc14ba63dc7b9235912c66794dd5d30cdb8b148efb52f15b5ad407adb2a"
+}
