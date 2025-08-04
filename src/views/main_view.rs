@@ -349,6 +349,7 @@ mod tests {
             events: crate::event::EventHandler::new_for_test(),
             database,
             view_stack: vec![Box::new(MainView::new())],
+            repo_path: ".".to_string(),
         }
     }
 

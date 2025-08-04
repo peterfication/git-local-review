@@ -7,7 +7,7 @@ use crate::{
     event::{AppEvent, Event},
     services::{
         CommentService, CommentsLoadParams, FileViewService, GitService, ReviewService,
-        ServiceHandler,
+        ServiceContext, ServiceHandler,
     },
     views::{
         CommentsView, ConfirmationDialogView, HelpModalView, KeyBinding, ReviewCreateView,
@@ -82,8 +82,14 @@ impl EventProcessor {
         ];
 
         for handler in services {
-            handler(event, &app.database, &mut app.events).await?;
+            let context = ServiceContext {
+                database: &app.database,
+                repo_path: &app.repo_path,
+                events: &mut app.events,
+            };
+            handler(event, context).await?;
         }
+
         Ok(())
     }
 
@@ -174,6 +180,7 @@ mod tests {
             events: crate::event::EventHandler::new_for_test(),
             database,
             view_stack: vec![Box::new(MainView::new())],
+            repo_path: ".".to_string(),
         }
     }
 

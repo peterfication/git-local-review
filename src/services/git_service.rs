@@ -6,10 +6,9 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::database::Database;
 use crate::event::{AppEvent, EventHandler};
 use crate::models::{Diff, DiffFile};
-use crate::services::ServiceHandler;
+use crate::services::{ServiceContext, ServiceHandler};
 
 /// State of Git branches loading process
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -252,8 +251,8 @@ impl GitService {
     }
 
     /// Actually load Git branches from repository
-    async fn handle_git_branches_loading(events: &mut EventHandler) {
-        match Self::get_branches(".") {
+    async fn handle_git_branches_loading(repo_path: &str, events: &mut EventHandler) {
+        match Self::get_branches(repo_path) {
             Ok(branches) => {
                 events.send(AppEvent::GitBranchesLoadingState(
                     GitBranchesLoadingState::Loaded(branches),
@@ -269,11 +268,12 @@ impl GitService {
 
     /// Actually load Git diff from repository
     async fn handle_git_diff_loading(
+        repo_path: &str,
         base_sha: &Arc<str>,
         target_sha: &Arc<str>,
         events: &mut EventHandler,
     ) {
-        match Self::get_diff_between_shas(".", base_sha, target_sha) {
+        match Self::get_diff_between_shas(repo_path, base_sha, target_sha) {
             Ok(diff) => {
                 events.send(AppEvent::GitDiffLoadingState(GitDiffLoadingState::Loaded(
                     Arc::new(diff),
@@ -291,28 +291,33 @@ impl GitService {
 impl ServiceHandler for GitService {
     fn handle_app_event<'a>(
         event: &'a AppEvent,
-        _database: &'a Database,
-        events: &'a mut EventHandler,
+        context: ServiceContext<'a>,
     ) -> Pin<Box<dyn Future<Output = color_eyre::Result<()>> + Send + 'a>> {
         Box::pin(async move {
             match event {
                 AppEvent::GitBranchesLoad => {
-                    Self::handle_git_branches_load(events);
+                    Self::handle_git_branches_load(context.events);
                 }
                 AppEvent::GitBranchesLoading => {
-                    Self::handle_git_branches_loading(events).await;
+                    Self::handle_git_branches_loading(context.repo_path, context.events).await;
                 }
                 AppEvent::GitDiffLoad {
                     base_sha,
                     target_sha,
                 } => {
-                    Self::handle_git_diff_load(base_sha, target_sha, events);
+                    Self::handle_git_diff_load(base_sha, target_sha, context.events);
                 }
                 AppEvent::GitDiffLoading {
                     base_sha,
                     target_sha,
                 } => {
-                    Self::handle_git_diff_loading(base_sha, target_sha, events).await;
+                    Self::handle_git_diff_loading(
+                        context.repo_path,
+                        base_sha,
+                        target_sha,
+                        context.events,
+                    )
+                    .await;
                 }
                 _ => {
                     // Other events are ignored
@@ -547,10 +552,24 @@ mod tests {
         // Initially no events
         assert!(!events.has_pending_events());
 
+        let app = crate::app::App {
+            running: true,
+            events: crate::event::EventHandler::new_for_test(),
+            database,
+            view_stack: vec![],
+            repo_path: ".".to_string(),
+        };
         // Handle GitBranchesLoad event
-        GitService::handle_app_event(&AppEvent::GitBranchesLoad, &database, &mut events)
-            .await
-            .unwrap();
+        GitService::handle_app_event(
+            &AppEvent::GitBranchesLoad,
+            ServiceContext {
+                database: &app.database,
+                repo_path: ".",
+                events: &mut events,
+            },
+        )
+        .await
+        .unwrap();
 
         // Should have sent GitBranchesLoading and GitBranchesLoadingState(Loading) events
         assert!(events.has_pending_events());
@@ -587,10 +606,24 @@ mod tests {
         // Initially no events
         assert!(!events.has_pending_events());
 
+        let app = crate::app::App {
+            running: true,
+            events: crate::event::EventHandler::new_for_test(),
+            database,
+            view_stack: vec![],
+            repo_path: temp_dir.path().to_string_lossy().to_string(),
+        };
         // Handle GitBranchesLoading event
-        GitService::handle_app_event(&AppEvent::GitBranchesLoading, &database, &mut events)
-            .await
-            .unwrap();
+        GitService::handle_app_event(
+            &AppEvent::GitBranchesLoading,
+            ServiceContext {
+                database: &app.database,
+                repo_path: &app.repo_path,
+                events: &mut events,
+            },
+        )
+        .await
+        .unwrap();
 
         // Should have sent GitBranchesLoadingState(Loaded) event
         assert!(events.has_pending_events());
@@ -635,10 +668,24 @@ mod tests {
         // Initially no events
         assert!(!events.has_pending_events());
 
+        let app = crate::app::App {
+            running: true,
+            events: crate::event::EventHandler::new_for_test(),
+            database,
+            view_stack: vec![],
+            repo_path: temp_dir.path().to_string_lossy().to_string(),
+        };
         // Handle GitBranchesLoading event
-        GitService::handle_app_event(&AppEvent::GitBranchesLoading, &database, &mut events)
-            .await
-            .unwrap();
+        GitService::handle_app_event(
+            &AppEvent::GitBranchesLoading,
+            ServiceContext {
+                database: &app.database,
+                repo_path: &app.repo_path,
+                events: &mut events,
+            },
+        )
+        .await
+        .unwrap();
 
         // Should have sent GitBranchesLoadingState(Error) event
         assert!(events.has_pending_events());
@@ -743,7 +790,8 @@ mod tests {
         assert!(!events.has_pending_events());
 
         // Call the private function
-        GitService::handle_git_branches_loading(&mut events).await;
+        GitService::handle_git_branches_loading(&temp_dir.path().to_string_lossy(), &mut events)
+            .await;
 
         // Should have sent GitBranchesLoadingState(Loaded) event
         assert!(events.has_pending_events());
@@ -782,7 +830,8 @@ mod tests {
         assert!(!events.has_pending_events());
 
         // Call the private function
-        GitService::handle_git_branches_loading(&mut events).await;
+        GitService::handle_git_branches_loading(&temp_dir.path().to_string_lossy(), &mut events)
+            .await;
 
         // Should have sent GitBranchesLoadingState(Error) event
         assert!(events.has_pending_events());

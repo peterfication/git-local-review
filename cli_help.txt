@@ -1,0 +1,8 @@
+A Terminal User Interface (TUI) for reviewing Git changes with local SQLite state storage.
+
+Usage: git-local-review [OPTIONS]
+
+Options:
+      --repo-path <REPO_PATH>  Path to the Git repository to review [default: .]
+  -h, --help                   Print help
+  -V, --version                Print version

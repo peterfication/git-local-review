@@ -17,6 +17,8 @@ pub struct App {
     pub database: Database,
     /// Current view stack.
     pub view_stack: Vec<Box<dyn ViewHandler>>,
+    /// Path to the Git repository being reviewed.
+    pub repo_path: String,
 }
 
 impl Default for App {
@@ -35,7 +37,13 @@ impl App {
             events: EventHandler::new(),
             database,
             view_stack: vec![Box::new(MainView::new())],
+            repo_path: String::new(),
         })
+    }
+
+    /// Sets the repository path.
+    pub fn set_repo_path(&mut self, repo_path: String) {
+        self.repo_path = repo_path;
     }
 
     /// Run the application's main loop.
@@ -127,25 +135,18 @@ mod tests {
             events: EventHandler::new_for_test(),
             database,
             view_stack: vec![Box::new(MainView::new())],
+            repo_path: ".".to_string(),
         }
     }
 
     #[tokio::test]
     async fn test_app_new() {
-        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        sqlx::migrate!().run(&pool).await.unwrap();
-
-        let database = Database::from_pool(pool);
-
-        let app = App {
-            running: true,
-            events: EventHandler::new(),
-            database,
-            view_stack: vec![Box::new(MainView::new())],
-        };
+        let mut app = App::new().await.unwrap();
+        app.set_repo_path(".".to_string());
 
         assert!(app.running);
         assert_eq!(app.view_stack.len(), 1);
+        assert_eq!(app.repo_path, ".");
     }
 
     #[tokio::test]
@@ -330,6 +331,7 @@ mod tests {
             events: EventHandler::new(),
             database: Database::from_pool(pool),
             view_stack: vec![Box::new(MainView::new())],
+            repo_path: ".".to_string(),
         };
 
         // Tick should not change anything

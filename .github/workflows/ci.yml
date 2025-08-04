@@ -54,6 +54,19 @@ jobs:
       - name: Check that the schema didn't change
         run: git diff --exit-code schema.sql
 
+  cli-help-check:
+    name: CLI help check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Dump CLI help output
+        run: cargo run -- --help > cli_help.txt
+      - name: Check that the text didn't change
+        run: git diff --exit-code cli_help.txt
+
   clippy:
     name: clippy
     runs-on: ubuntu-latest

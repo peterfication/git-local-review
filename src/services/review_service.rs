@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::ServiceHandler;
+use super::{ServiceContext, ServiceHandler};
 
 use crate::{
     database::Database,
@@ -229,21 +229,22 @@ impl ReviewService {
 impl ServiceHandler for ReviewService {
     fn handle_app_event<'a>(
         event: &'a AppEvent,
-        database: &'a Database,
-        events: &'a mut EventHandler,
+        context: ServiceContext<'a>,
     ) -> std::pin::Pin<Box<dyn Future<Output = color_eyre::Result<()>> + Send + 'a>> {
         Box::pin(async move {
             match event {
-                AppEvent::ReviewsLoad => Self::handle_reviews_load(events),
-                AppEvent::ReviewsLoading => Self::handle_reviews_loading(database, events).await,
+                AppEvent::ReviewsLoad => Self::handle_reviews_load(context.events),
+                AppEvent::ReviewsLoading => {
+                    Self::handle_reviews_loading(context.database, context.events).await
+                }
                 AppEvent::ReviewCreateSubmit(data) => {
-                    Self::handle_review_create_submit(data, database, events).await
+                    Self::handle_review_create_submit(data, context.database, context.events).await
                 }
                 AppEvent::ReviewDelete(review_id) => {
-                    Self::handle_review_delete(review_id, database, events).await
+                    Self::handle_review_delete(review_id, context.database, context.events).await
                 }
                 AppEvent::ReviewLoad(review_id) => {
-                    Self::handle_review_load(review_id, database, events).await
+                    Self::handle_review_load(review_id, context.database, context.events).await
                 }
                 _ => {
                     // Other events are not handled by ReviewService
@@ -491,10 +492,24 @@ mod tests {
     async fn test_handle_app_event_reviews_load() {
         let database = create_test_database().await;
         let mut events = EventHandler::new_for_test();
+        let app = crate::app::App {
+            running: true,
+            events: crate::event::EventHandler::new_for_test(),
+            database,
+            view_stack: vec![],
+            repo_path: ".".to_string(),
+        };
 
-        ReviewService::handle_app_event(&AppEvent::ReviewsLoad, &database, &mut events)
-            .await
-            .unwrap();
+        ReviewService::handle_app_event(
+            &AppEvent::ReviewsLoad,
+            ServiceContext {
+                database: &app.database,
+                repo_path: &app.repo_path,
+                events: &mut events,
+            },
+        )
+        .await
+        .unwrap();
 
         // Should have sent a ReviewsLoading event
         assert!(events.has_pending_events());
@@ -511,9 +526,24 @@ mod tests {
         let review = Review::test_review(());
         review.save(database.pool()).await.unwrap();
 
-        ReviewService::handle_app_event(&AppEvent::ReviewsLoading, &database, &mut events)
-            .await
-            .unwrap();
+        let app = crate::app::App {
+            running: true,
+            events: crate::event::EventHandler::new_for_test(),
+            database,
+            view_stack: vec![],
+            repo_path: ".".to_string(),
+        };
+
+        ReviewService::handle_app_event(
+            &AppEvent::ReviewsLoading,
+            ServiceContext {
+                database: &app.database,
+                repo_path: &app.repo_path,
+                events: &mut events,
+            },
+        )
+        .await
+        .unwrap();
 
         // Should have sent a ReviewsLoadingState event with the review
         assert!(events.has_pending_events());
@@ -532,10 +562,24 @@ mod tests {
     async fn test_handle_app_event_reviews_loading_empty() {
         let database = create_test_database().await;
         let mut events = EventHandler::new_for_test();
+        let app = crate::app::App {
+            running: true,
+            events: crate::event::EventHandler::new_for_test(),
+            database,
+            view_stack: vec![],
+            repo_path: ".".to_string(),
+        };
 
-        ReviewService::handle_app_event(&AppEvent::ReviewsLoading, &database, &mut events)
-            .await
-            .unwrap();
+        ReviewService::handle_app_event(
+            &AppEvent::ReviewsLoading,
+            ServiceContext {
+                database: &app.database,
+                repo_path: &app.repo_path,
+                events: &mut events,
+            },
+        )
+        .await
+        .unwrap();
 
         // Should have sent a ReviewsLoadingState event with empty list
         assert!(events.has_pending_events());
@@ -553,11 +597,25 @@ mod tests {
     async fn test_handle_app_event_other_events() {
         let database = create_test_database().await;
         let mut events = EventHandler::new_for_test();
+        let app = crate::app::App {
+            running: true,
+            events: crate::event::EventHandler::new_for_test(),
+            database,
+            view_stack: vec![],
+            repo_path: ".".to_string(),
+        };
 
         // Test that other events are ignored
-        ReviewService::handle_app_event(&AppEvent::Quit, &database, &mut events)
-            .await
-            .unwrap();
+        ReviewService::handle_app_event(
+            &AppEvent::Quit,
+            ServiceContext {
+                database: &app.database,
+                repo_path: &app.repo_path,
+                events: &mut events,
+            },
+        )
+        .await
+        .unwrap();
 
         // Should not have sent any events
         assert!(!events.has_pending_events());
@@ -575,10 +633,21 @@ mod tests {
             target_sha: None,
         };
 
+        let app = crate::app::App {
+            running: true,
+            events: crate::event::EventHandler::new_for_test(),
+            database,
+            view_stack: vec![],
+            repo_path: ".".to_string(),
+        };
+
         ReviewService::handle_app_event(
             &AppEvent::ReviewCreateSubmit(data.into()),
-            &database,
-            &mut events,
+            ServiceContext {
+                database: &app.database,
+                repo_path: &app.repo_path,
+                events: &mut events,
+            },
         )
         .await
         .unwrap();
@@ -595,7 +664,7 @@ mod tests {
         assert!(matches!(*event2, Event::App(AppEvent::ReviewCreated(_))));
 
         // Verify the review was created
-        let reviews = Review::list_all(database.pool()).await.unwrap();
+        let reviews = Review::list_all(app.database.pool()).await.unwrap();
         assert_eq!(reviews.len(), 1);
         assert_eq!(reviews[0].target_branch, "feature/created");
     }
@@ -612,11 +681,22 @@ mod tests {
             target_sha: None,
         };
 
+        let app = crate::app::App {
+            running: true,
+            events: crate::event::EventHandler::new_for_test(),
+            database,
+            view_stack: vec![],
+            repo_path: ".".to_string(),
+        };
+
         // Test empty branches submission
         ReviewService::handle_app_event(
             &AppEvent::ReviewCreateSubmit(data.into()),
-            &database,
-            &mut events,
+            ServiceContext {
+                database: &app.database,
+                repo_path: &app.repo_path,
+                events: &mut events,
+            },
         )
         .await
         .unwrap();
@@ -635,7 +715,7 @@ mod tests {
         assert!(!events.has_pending_events());
 
         // Verify no review was created
-        let reviews = Review::list_all(database.pool()).await.unwrap();
+        let reviews = Review::list_all(app.database.pool()).await.unwrap();
         assert_eq!(reviews.len(), 0);
     }
 
@@ -644,21 +724,32 @@ mod tests {
         let database = create_test_database().await;
         let mut events = EventHandler::new_for_test();
 
+        let app = crate::app::App {
+            running: true,
+            events: crate::event::EventHandler::new_for_test(),
+            database,
+            view_stack: vec![],
+            repo_path: ".".to_string(),
+        };
+
         // Create two reviews
         let review1 = Review::test_review(TestReviewParams::new().base_branch("main"));
         let review2 = Review::test_review(TestReviewParams::new().base_branch("dev"));
-        review1.save(database.pool()).await.unwrap();
-        review2.save(database.pool()).await.unwrap();
+        review1.save(app.database.pool()).await.unwrap();
+        review2.save(app.database.pool()).await.unwrap();
 
         // Load reviews to get IDs (they will be ordered by created_at DESC)
-        let reviews = Review::list_all(database.pool()).await.unwrap();
+        let reviews = Review::list_all(app.database.pool()).await.unwrap();
         let review_id_to_delete: Arc<ReviewId> = reviews[0].id.clone().into();
 
         // Test review deletion
         ReviewService::handle_app_event(
             &AppEvent::ReviewDelete(review_id_to_delete.clone()),
-            &database,
-            &mut events,
+            ServiceContext {
+                database: &app.database,
+                repo_path: &app.repo_path,
+                events: &mut events,
+            },
         )
         .await
         .unwrap();
@@ -678,7 +769,7 @@ mod tests {
         assert!(!events.has_pending_events());
 
         // Review should be deleted from database
-        let review = Review::find_by_id(database.pool(), &review_id_to_delete)
+        let review = Review::find_by_id(app.database.pool(), &review_id_to_delete)
             .await
             .unwrap();
         assert!(review.is_none());
@@ -689,15 +780,26 @@ mod tests {
         let database = create_test_database().await;
         let mut events = EventHandler::new_for_test();
 
+        let app = crate::app::App {
+            running: true,
+            events: crate::event::EventHandler::new_for_test(),
+            database,
+            view_stack: vec![],
+            repo_path: ".".to_string(),
+        };
+
         // Create a review but try to delete with non-existent ID
         let review = Review::test_review(());
-        review.save(database.pool()).await.unwrap();
+        review.save(app.database.pool()).await.unwrap();
 
         // Test deletion with non-existent ID
         ReviewService::handle_app_event(
             &AppEvent::ReviewDelete("non-existent-id".into()),
-            &database,
-            &mut events,
+            ServiceContext {
+                database: &app.database,
+                repo_path: ".",
+                events: &mut events,
+            },
         )
         .await
         .unwrap();
@@ -713,7 +815,7 @@ mod tests {
         assert!(!events.has_pending_events());
 
         // Original review should still be there
-        let reviews = Review::list_all(database.pool()).await.unwrap();
+        let reviews = Review::list_all(app.database.pool()).await.unwrap();
         assert_eq!(reviews.len(), 1);
         assert_eq!(reviews[0].base_branch, "default");
     }
@@ -726,10 +828,24 @@ mod tests {
         let database = Database::from_pool(pool);
 
         let mut events = EventHandler::new_for_test();
+        let app = crate::app::App {
+            running: true,
+            events: crate::event::EventHandler::new_for_test(),
+            database,
+            view_stack: vec![],
+            repo_path: ".".to_string(),
+        };
 
-        ReviewService::handle_app_event(&AppEvent::ReviewsLoading, &database, &mut events)
-            .await
-            .unwrap();
+        ReviewService::handle_app_event(
+            &AppEvent::ReviewsLoading,
+            ServiceContext {
+                database: &app.database,
+                repo_path: ".",
+                events: &mut events,
+            },
+        )
+        .await
+        .unwrap();
 
         // Should have sent a ReviewsLoadingError event due to missing table
         assert!(events.has_pending_events());
@@ -745,15 +861,26 @@ mod tests {
         let database = create_test_database().await;
         let mut events = EventHandler::new_for_test();
 
+        let app = crate::app::App {
+            running: true,
+            events: crate::event::EventHandler::new_for_test(),
+            database,
+            view_stack: vec![],
+            repo_path: ".".to_string(),
+        };
+
         // Create a test review
         let review = Review::test_review(());
-        review.save(database.pool()).await.unwrap();
+        review.save(app.database.pool()).await.unwrap();
 
         // Test loading the review
         ReviewService::handle_app_event(
             &AppEvent::ReviewLoad(review.id.clone().into()),
-            &database,
-            &mut events,
+            ServiceContext {
+                database: &app.database,
+                repo_path: ".",
+                events: &mut events,
+            },
         )
         .await
         .unwrap();
@@ -788,8 +915,11 @@ mod tests {
         let non_existent_id = "non-existent-id";
         ReviewService::handle_app_event(
             &AppEvent::ReviewLoad(non_existent_id.into()),
-            &database,
-            &mut events,
+            ServiceContext {
+                database: &database,
+                repo_path: ".",
+                events: &mut events,
+            },
         )
         .await
         .unwrap();
@@ -820,12 +950,16 @@ mod tests {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         let database = Database::from_pool(pool);
         let mut events = EventHandler::new_for_test();
+        let repo_path = ".".to_string();
 
         // Test loading a review when the table doesn't exist (will cause a database error)
         ReviewService::handle_app_event(
             &AppEvent::ReviewLoad("some-id".into()),
-            &database,
-            &mut events,
+            ServiceContext {
+                database: &database,
+                repo_path: &repo_path,
+                events: &mut events,
+            },
         )
         .await
         .unwrap();

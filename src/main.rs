@@ -7,7 +7,11 @@ use clap::Parser;
 #[command(
     about = "A Terminal User Interface (TUI) for reviewing Git changes with local SQLite state storage."
 )]
-struct Cli {}
+struct Cli {
+    /// Path to the Git repository to review
+    #[arg(long, default_value = ".")]
+    repo_path: String,
+}
 
 pub mod app;
 pub mod database;
@@ -24,9 +28,13 @@ pub mod views;
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
-    let app = App::new().await?;
-    // Support for command line arguments like `--version`
-    let _cli = Cli::parse();
+    // The App needs to be created before parsing CLI arguments so that the
+    // database is being created when running with the argument "--version" for CI.
+    let mut app = App::new().await?;
+
+    // Parse command line arguments
+    let cli = Cli::parse();
+    app.set_repo_path(cli.repo_path);
 
     crate::logging::setup_logging();
     log::info!("Starting application");

@@ -1052,6 +1052,7 @@ mod tests {
             events: crate::event::EventHandler::new_for_test(),
             database,
             view_stack: vec![],
+            repo_path: ".".to_string(),
         }
     }
 
