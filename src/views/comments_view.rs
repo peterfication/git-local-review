@@ -149,7 +149,16 @@ impl CommentsView {
         }
     }
 
+    /// Open help dialog with the keybindings of this view
+    fn help(&self, app: &mut App) {
+        app.events.send(AppEvent::HelpOpen(self.get_keybindings()));
+    }
+
     fn handle_enter(&mut self, app: &mut App) {
+        if self.focus_state != FocusState::Input {
+            return;
+        }
+
         if !self.input_text.trim().is_empty() {
             // Send event to create comment
             match &self.target {
@@ -193,7 +202,15 @@ impl CommentsView {
     }
 
     fn handle_backspace(&mut self) {
+        if self.focus_state != FocusState::Input {
+            return;
+        }
+
         self.input_text.pop();
+    }
+
+    fn close(&self, app: &mut App) {
+        app.events.send(AppEvent::ViewClose);
     }
 
     fn handle_char(&mut self, char: char, app: &mut App) {
@@ -209,6 +226,7 @@ impl CommentsView {
                 'k' => self.move_selection_up(),
                 'r' => self.handle_toggle_selected_comment(app),
                 'R' => self.handle_toggle_all_comments(app),
+                '?' => self.help(app),
                 _ => {
                     // Ignore other characters when not focused on input
                 }
@@ -316,19 +334,9 @@ impl ViewHandler for CommentsView {
             KeyCode::Up => self.move_selection_up(),
             KeyCode::Down => self.move_selection_down(),
             KeyCode::Char(c) => self.handle_char(c, app),
-            KeyCode::Backspace => {
-                if self.focus_state == FocusState::Input {
-                    self.handle_backspace();
-                }
-            }
-            KeyCode::Enter => {
-                if self.focus_state == FocusState::Input {
-                    self.handle_enter(app);
-                }
-            }
-            KeyCode::Esc => {
-                app.events.send(AppEvent::ViewClose);
-            }
+            KeyCode::Backspace => self.handle_backspace(),
+            KeyCode::Enter => self.handle_enter(app),
+            KeyCode::Esc => self.close(app),
             _ => {}
         }
         Ok(())
