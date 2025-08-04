@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE comments SET resolved = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "78d6470bfaa573b9f81d82b3c96633f52896ebf374df43cb8a93064d60f2e4c2"
+}

@@ -69,6 +69,50 @@ impl ServiceHandler for CommentService {
                     )
                     .await?;
                 }
+                AppEvent::CommentMarkResolved { comment_id } => {
+                    Self::handle_comment_mark_resolved(
+                        context.database,
+                        context.events,
+                        comment_id,
+                    )
+                    .await?;
+                }
+                AppEvent::CommentsMarkAllResolved {
+                    review_id,
+                    file_path,
+                    line_number,
+                } => {
+                    Self::handle_comments_mark_all_resolved(
+                        context.database,
+                        context.events,
+                        review_id,
+                        file_path,
+                        *line_number,
+                    )
+                    .await?;
+                }
+                AppEvent::CommentToggleResolved { comment_id } => {
+                    Self::handle_comment_toggle_resolved(
+                        context.database,
+                        context.events,
+                        comment_id,
+                    )
+                    .await?;
+                }
+                AppEvent::CommentsToggleAllResolved {
+                    review_id,
+                    file_path,
+                    line_number,
+                } => {
+                    Self::handle_comments_toggle_all_resolved(
+                        context.database,
+                        context.events,
+                        review_id,
+                        file_path,
+                        *line_number,
+                    )
+                    .await?;
+                }
                 _ => {
                     // Event not handled by this service
                 }
@@ -200,6 +244,217 @@ impl CommentService {
         line_number: i64,
     ) -> color_eyre::Result<bool> {
         Comment::line_has_comments(database.pool(), review_id, file_path, line_number).await
+    }
+
+    /// Mark a single comment as resolved
+    async fn handle_comment_mark_resolved(
+        database: &Database,
+        events: &mut EventHandler,
+        comment_id: &str,
+    ) -> color_eyre::Result<()> {
+        let pool = database.pool();
+
+        // Find the comment by ID
+        let mut comment = Comment::find_by_id(pool, comment_id)
+            .await?
+            .ok_or_else(|| color_eyre::eyre::eyre!("Comment not found: {}", comment_id))?;
+
+        // Mark as resolved
+        match comment.mark_resolved(pool).await {
+            Ok(()) => {
+                events.send(AppEvent::CommentMarkedResolved {
+                    comment_id: comment_id.into(),
+                });
+            }
+            Err(error) => {
+                events.send(AppEvent::CommentMarkResolvedError {
+                    comment_id: comment_id.into(),
+                    error: Arc::from(format!("Failed to mark comment as resolved: {error}")),
+                });
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Mark all comments as resolved for a specific target
+    async fn handle_comments_mark_all_resolved(
+        database: &Database,
+        events: &mut EventHandler,
+        review_id: &str,
+        file_path: &str,
+        line_number: Option<i64>,
+    ) -> color_eyre::Result<()> {
+        let pool = database.pool();
+
+        let result = match line_number {
+            Some(line_number_matched) => {
+                // Mark all comments for specific line as resolved
+                Comment::mark_all_resolved_for_line(pool, review_id, file_path, line_number_matched)
+                    .await
+            }
+            None => {
+                // Mark all comments for file as resolved
+                Comment::mark_all_resolved_for_file(pool, review_id, file_path).await
+            }
+        };
+
+        match result {
+            Ok(()) => {
+                events.send(AppEvent::CommentsMarkedAllResolved {
+                    review_id: review_id.into(),
+                    file_path: file_path.into(),
+                    line_number,
+                });
+            }
+            Err(error) => {
+                events.send(AppEvent::CommentsMarkAllResolvedError {
+                    review_id: review_id.into(),
+                    file_path: file_path.into(),
+                    line_number,
+                    error: Arc::from(format!("Failed to mark all comments as resolved: {error}")),
+                });
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Toggle a single comment's resolved state
+    async fn handle_comment_toggle_resolved(
+        database: &Database,
+        events: &mut EventHandler,
+        comment_id: &str,
+    ) -> color_eyre::Result<()> {
+        let pool = database.pool();
+
+        // Find the comment by ID
+        let mut comment = Comment::find_by_id(pool, comment_id)
+            .await?
+            .ok_or_else(|| color_eyre::eyre::eyre!("Comment not found: {}", comment_id))?;
+
+        // Toggle the resolved state
+        let new_resolved_state = !comment.resolved;
+        match comment.set_resolved(pool, new_resolved_state).await {
+            Ok(()) => {
+                events.send(AppEvent::CommentToggledResolved {
+                    comment_id: comment_id.into(),
+                    resolved: new_resolved_state,
+                });
+            }
+            Err(error) => {
+                events.send(AppEvent::CommentToggleResolvedError {
+                    comment_id: comment_id.into(),
+                    error: Arc::from(format!("Failed to toggle comment resolved state: {error}")),
+                });
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Toggle resolved state for all comments in a specific target
+    async fn handle_comments_toggle_all_resolved(
+        database: &Database,
+        events: &mut EventHandler,
+        review_id: &str,
+        file_path: &str,
+        line_number: Option<i64>,
+    ) -> color_eyre::Result<()> {
+        let pool = database.pool();
+
+        // First, get all comments for the target to determine the majority state
+        let comments = match line_number {
+            Some(line_number_matched) => {
+                Comment::find_for_line(pool, review_id, file_path, line_number_matched).await?
+            }
+            None => Comment::find_for_file(pool, review_id, file_path).await?,
+        };
+
+        if comments.is_empty() {
+            // No comments to toggle
+            events.send(AppEvent::CommentsToggledAllResolved {
+                review_id: review_id.into(),
+                file_path: file_path.into(),
+                line_number,
+                resolved_count: 0,
+                unresolved_count: 0,
+            });
+            return Ok(());
+        }
+
+        // Count resolved vs unresolved comments
+        let resolved_count = comments.iter().filter(|c| c.resolved).count();
+        let unresolved_count = comments.len() - resolved_count;
+
+        // If more comments are unresolved, resolve all. Otherwise, unresolve all.
+        let target_resolved_state = unresolved_count >= resolved_count;
+
+        // Update all comments to the target state
+        let result = if target_resolved_state {
+            // Mark all as resolved
+            match line_number {
+                Some(line_number_matched) => {
+                    Comment::mark_all_resolved_for_line(
+                        pool,
+                        review_id,
+                        file_path,
+                        line_number_matched,
+                    )
+                    .await
+                }
+                None => Comment::mark_all_resolved_for_file(pool, review_id, file_path).await,
+            }
+        } else {
+            // Mark all as unresolved
+            match line_number {
+                Some(line_number_matched) => {
+                    Comment::mark_all_unresolved_for_line(
+                        pool,
+                        review_id,
+                        file_path,
+                        line_number_matched,
+                    )
+                    .await
+                }
+                None => Comment::mark_all_unresolved_for_file(pool, review_id, file_path).await,
+            }
+        };
+
+        match result {
+            Ok(()) => {
+                let final_resolved_count = if target_resolved_state {
+                    comments.len()
+                } else {
+                    0
+                };
+                let final_unresolved_count = if target_resolved_state {
+                    0
+                } else {
+                    comments.len()
+                };
+
+                events.send(AppEvent::CommentsToggledAllResolved {
+                    review_id: review_id.into(),
+                    file_path: file_path.into(),
+                    line_number,
+                    resolved_count: final_resolved_count,
+                    unresolved_count: final_unresolved_count,
+                });
+            }
+            Err(error) => {
+                events.send(AppEvent::CommentsToggleAllResolvedError {
+                    review_id: review_id.into(),
+                    file_path: file_path.into(),
+                    line_number,
+                    error: Arc::from(format!(
+                        "Failed to toggle all comments resolved state: {error}"
+                    )),
+                });
+            }
+        }
+
+        Ok(())
     }
 }
 

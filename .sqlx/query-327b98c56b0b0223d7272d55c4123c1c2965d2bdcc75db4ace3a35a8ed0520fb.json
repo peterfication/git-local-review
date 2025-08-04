@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE comments SET resolved = FALSE WHERE review_id = ? AND file_path = ? AND line_number = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "327b98c56b0b0223d7272d55c4123c1c2965d2bdcc75db4ace3a35a8ed0520fb"
+}

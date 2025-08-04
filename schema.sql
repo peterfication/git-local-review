@@ -28,10 +28,12 @@ CREATE TABLE comments (
     file_path TEXT NOT NULL,
     line_number INTEGER,  -- NULL for file-level comments
     content TEXT NOT NULL,
-    created_at TEXT NOT NULL,
+    created_at TEXT NOT NULL, resolved BOOLEAN NOT NULL DEFAULT FALSE,
     FOREIGN KEY (review_id) REFERENCES reviews (id) ON DELETE CASCADE
 );
 CREATE INDEX idx_comments_review_id ON comments (review_id);
 CREATE INDEX idx_comments_file_path ON comments (review_id, file_path);
 CREATE INDEX idx_comments_line ON comments (review_id, file_path, line_number);
 CREATE INDEX idx_comments_created_at ON comments (created_at DESC);
+CREATE INDEX idx_comments_resolved ON comments(resolved);
+CREATE INDEX idx_comments_review_resolved ON comments(review_id, resolved);

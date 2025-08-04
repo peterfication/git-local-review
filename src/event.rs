@@ -173,6 +173,67 @@ pub enum AppEvent {
     CommentCreated(Arc<Comment>),
     /// Error occurred while creating a comment.
     CommentCreateError(Arc<str>),
+    /// Mark a comment as resolved.
+    CommentMarkResolved { comment_id: Arc<str> },
+    /// Comment was marked as resolved successfully.
+    CommentMarkedResolved { comment_id: Arc<str> },
+    /// Error occurred while marking comment as resolved.
+    CommentMarkResolvedError {
+        comment_id: Arc<str>,
+        error: Arc<str>,
+    },
+    /// Toggle a comment's resolved state.
+    CommentToggleResolved { comment_id: Arc<str> },
+    /// Comment's resolved state was toggled successfully.
+    CommentToggledResolved {
+        comment_id: Arc<str>,
+        resolved: bool,
+    },
+    /// Error occurred while toggling comment resolved state.
+    CommentToggleResolvedError {
+        comment_id: Arc<str>,
+        error: Arc<str>,
+    },
+    /// Mark all comments as resolved for a specific target.
+    CommentsMarkAllResolved {
+        review_id: Arc<ReviewId>,
+        file_path: Arc<str>,
+        line_number: Option<i64>,
+    },
+    /// All comments were marked as resolved successfully.
+    CommentsMarkedAllResolved {
+        review_id: Arc<ReviewId>,
+        file_path: Arc<str>,
+        line_number: Option<i64>,
+    },
+    /// Error occurred while marking all comments as resolved.
+    CommentsMarkAllResolvedError {
+        review_id: Arc<ReviewId>,
+        file_path: Arc<str>,
+        line_number: Option<i64>,
+        error: Arc<str>,
+    },
+    /// Toggle resolved state for all comments in a specific target.
+    CommentsToggleAllResolved {
+        review_id: Arc<ReviewId>,
+        file_path: Arc<str>,
+        line_number: Option<i64>,
+    },
+    /// All comments resolved state was toggled successfully.
+    CommentsToggledAllResolved {
+        review_id: Arc<ReviewId>,
+        file_path: Arc<str>,
+        line_number: Option<i64>,
+        resolved_count: usize,
+        unresolved_count: usize,
+    },
+    /// Error occurred while toggling all comments resolved state.
+    CommentsToggleAllResolvedError {
+        review_id: Arc<ReviewId>,
+        file_path: Arc<str>,
+        line_number: Option<i64>,
+        error: Arc<str>,
+    },
 }
 
 /// Terminal event handler.
