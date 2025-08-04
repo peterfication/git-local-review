@@ -178,7 +178,7 @@ mod tests {
             &event,
             ServiceContext {
                 database: &app.database,
-                repo_path: ".",
+                repo_path: &app.repo_path,
                 events: &mut events,
             },
         )
@@ -251,7 +251,7 @@ mod tests {
             &event,
             ServiceContext {
                 database: &app.database,
-                repo_path: ".",
+                repo_path: &app.repo_path,
                 events: &mut events,
             },
         )
@@ -310,7 +310,7 @@ mod tests {
             &event,
             ServiceContext {
                 database: &app.database,
-                repo_path: ".",
+                repo_path: &app.repo_path,
                 events: &mut events,
             },
         )

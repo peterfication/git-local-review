@@ -564,7 +564,7 @@ mod tests {
             &AppEvent::GitBranchesLoad,
             ServiceContext {
                 database: &app.database,
-                repo_path: ".",
+                repo_path: &app.repo_path,
                 events: &mut events,
             },
         )
