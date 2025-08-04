@@ -23,6 +23,7 @@ const FILE_SELECTION_INDICATOR: &str = super::SELECTION_INDICATOR;
 const FILE_COMMENT_INDICATOR: &str = "●";
 const LINE_COMMENT_INDICATOR: &str = "■";
 const FILE_AND_LINE_COMMENT_INDICATOR: &str = "#";
+const RESOLVED_COMMENT_INDICATOR: &str = "_";
 
 #[derive(Debug, Clone)]
 pub enum NavigationMode {
@@ -43,6 +44,7 @@ pub enum CommentIndicator {
     FileComment,
     LineComment,
     FileAndLineComment,
+    ResolvedComment,
 }
 
 impl fmt::Display for CommentIndicator {
@@ -52,6 +54,7 @@ impl fmt::Display for CommentIndicator {
             CommentIndicator::FileComment => f.write_str(FILE_COMMENT_INDICATOR),
             CommentIndicator::LineComment => f.write_str(LINE_COMMENT_INDICATOR),
             CommentIndicator::FileAndLineComment => f.write_str(FILE_AND_LINE_COMMENT_INDICATOR),
+            CommentIndicator::ResolvedComment => f.write_str(RESOLVED_COMMENT_INDICATOR),
         }
     }
 }
@@ -83,6 +86,10 @@ pub struct ReviewDetailsView {
     files_with_file_and_or_line_comments: Arc<Vec<String>>,
     /// Map of file paths to line numbers with comments (for line comment indicators)
     lines_with_comments: Arc<HashMap<String, Vec<i64>>>,
+    /// Files that have only resolved comments (for resolved comment indicators)
+    files_with_only_resolved_comments: Arc<Vec<String>>,
+    /// Map of file paths to line numbers with only resolved comments
+    lines_with_only_resolved_comments: Arc<HashMap<String, Vec<i64>>>,
 }
 
 const CONTENT_HEIGHT: usize = 15; // Default content height for scrolling
@@ -104,6 +111,8 @@ impl ReviewDetailsView {
             files_with_file_comments: Arc::new(vec![]),
             files_with_file_and_or_line_comments: Arc::new(vec![]),
             lines_with_comments: Arc::new(HashMap::new()),
+            files_with_only_resolved_comments: Arc::new(vec![]),
+            lines_with_only_resolved_comments: Arc::new(HashMap::new()),
         }
     }
 
@@ -122,6 +131,8 @@ impl ReviewDetailsView {
             files_with_file_comments: Arc::new(vec![]),
             files_with_file_and_or_line_comments: Arc::new(vec![]),
             lines_with_comments: Arc::new(HashMap::new()),
+            files_with_only_resolved_comments: Arc::new(vec![]),
+            lines_with_only_resolved_comments: Arc::new(HashMap::new()),
         }
     }
 }
@@ -583,11 +594,15 @@ impl ReviewDetailsView {
         };
 
         if let CommentsLoadingState::Loaded(comments) = state {
+            // Separate unresolved and resolved comments
+            let unresolved_comments: Vec<_> = comments.iter().filter(|c| !c.resolved).collect();
+            let _resolved_comments: Vec<_> = comments.iter().filter(|c| c.resolved).collect();
+
+            // Track files with unresolved file-level comments
             self.files_with_file_comments = Arc::from(
-                comments
+                unresolved_comments
                     .iter()
                     .filter_map(|comment| {
-                        // Only include files with file-level comments and ignore line-level comments
                         if comment.is_file_comment() {
                             Some(comment.file_path.clone())
                         } else {
@@ -598,15 +613,19 @@ impl ReviewDetailsView {
                     .into_iter()
                     .collect::<Vec<String>>(),
             );
+
+            // Track files with any unresolved comments
             self.files_with_file_and_or_line_comments = Arc::from(
-                comments
+                unresolved_comments
                     .iter()
                     .map(|comment| comment.file_path.clone())
                     .collect::<HashSet<String>>()
                     .into_iter()
                     .collect::<Vec<String>>(),
             );
-            self.lines_with_comments = Arc::from(comments.iter().fold(
+
+            // Track lines with unresolved comments
+            self.lines_with_comments = Arc::from(unresolved_comments.iter().fold(
                 HashMap::new(),
                 |mut acc: HashMap<String, Vec<i64>>, comment| {
                     if let Some(line_number) = comment.line_number {
@@ -617,6 +636,65 @@ impl ReviewDetailsView {
                     acc
                 },
             ));
+
+            // Track files that only have resolved comments
+            let all_files_with_comments: HashSet<String> =
+                comments.iter().map(|c| c.file_path.clone()).collect();
+            let files_with_unresolved_comments: HashSet<String> = unresolved_comments
+                .iter()
+                .map(|c| c.file_path.clone())
+                .collect();
+
+            self.files_with_only_resolved_comments = Arc::from(
+                all_files_with_comments
+                    .difference(&files_with_unresolved_comments)
+                    .cloned()
+                    .collect::<Vec<String>>(),
+            );
+
+            // Track lines that only have resolved comments
+            let all_lines_with_comments: HashMap<String, HashSet<i64>> = comments.iter().fold(
+                HashMap::new(),
+                |mut acc: HashMap<String, HashSet<i64>>, comment| {
+                    if let Some(line_number) = comment.line_number {
+                        acc.entry(comment.file_path.clone())
+                            .or_default()
+                            .insert(line_number);
+                    };
+                    acc
+                },
+            );
+            let lines_with_unresolved_comments: HashMap<String, HashSet<i64>> =
+                unresolved_comments.iter().fold(
+                    HashMap::new(),
+                    |mut acc: HashMap<String, HashSet<i64>>, comment| {
+                        if let Some(line_number) = comment.line_number {
+                            acc.entry(comment.file_path.clone())
+                                .or_default()
+                                .insert(line_number);
+                        };
+                        acc
+                    },
+                );
+
+            self.lines_with_only_resolved_comments = Arc::from(
+                all_lines_with_comments
+                    .iter()
+                    .filter_map(|(file_path, all_lines)| {
+                        let unresolved_lines = lines_with_unresolved_comments
+                            .get(file_path)
+                            .cloned()
+                            .unwrap_or_default();
+                        let resolved_only_lines: Vec<i64> =
+                            all_lines.difference(&unresolved_lines).cloned().collect();
+                        if resolved_only_lines.is_empty() {
+                            None
+                        } else {
+                            Some((file_path.clone(), resolved_only_lines))
+                        }
+                    })
+                    .collect::<HashMap<String, Vec<i64>>>(),
+            );
         };
     }
 
@@ -879,7 +957,9 @@ impl ReviewDetailsView {
     /// Get the comment indicator for a diff file based on its comment status
     ///
     /// Use different indicator for file comments and line comments and files that have both.
+    /// Files with only resolved comments show the resolved indicator.
     fn comment_indicator(&self, diff_file: &DiffFile) -> CommentIndicator {
+        // Check if file has any unresolved comments
         if self
             .files_with_file_and_or_line_comments
             .contains(&diff_file.path)
@@ -894,6 +974,12 @@ impl ReviewDetailsView {
             } else {
                 CommentIndicator::FileAndLineComment
             }
+        } else if self
+            .files_with_only_resolved_comments
+            .contains(&diff_file.path)
+        {
+            // File has only resolved comments
+            CommentIndicator::ResolvedComment
         } else {
             CommentIndicator::NoComment
         }
@@ -965,9 +1051,22 @@ impl ReviewDetailsView {
                     })
                     .unwrap_or(false);
 
-                // Add comment indicator if the line has comments
+                // Check if the line has only resolved comments
+                let has_only_resolved_comments = self
+                    .get_selected_file()
+                    .map(|file| {
+                        self.lines_with_only_resolved_comments
+                            .get(&file.path)
+                            .map(|lines| lines.contains(&(absolute_line_idx as i64)))
+                            .unwrap_or(false)
+                    })
+                    .unwrap_or(false);
+
+                // Add comment indicator based on comment status
                 let comment_prefix = if has_comments {
                     LINE_COMMENT_INDICATOR
+                } else if has_only_resolved_comments {
+                    RESOLVED_COMMENT_INDICATOR
                 } else {
                     " "
                 };

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n            SELECT id as \"id!\", review_id as \"review_id!\", file_path as \"file_path!\", line_number, content as \"content!\", created_at as \"created_at!\"\n            FROM comments\n            WHERE review_id = ? AND file_path = ?\n            ORDER BY created_at DESC\n            ",
+  "query": "\n            SELECT id as \"id!\", review_id as \"review_id!\", file_path as \"file_path!\", line_number, content as \"content!\", resolved as \"resolved!\", created_at as \"created_at!\"\n            FROM comments\n            WHERE review_id = ? AND file_path = ? AND line_number = ?\n            ORDER BY created_at DESC\n            ",
   "describe": {
     "columns": [
       {
@@ -29,13 +29,18 @@
         "type_info": "Text"
       },
       {
-        "name": "created_at!",
+        "name": "resolved!",
         "ordinal": 5,
+        "type_info": "Bool"
+      },
+      {
+        "name": "created_at!",
+        "ordinal": 6,
         "type_info": "Text"
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 3
     },
     "nullable": [
       true,
@@ -43,8 +48,9 @@
       false,
       true,
       false,
+      false,
       false
     ]
   },
-  "hash": "170da6e667f87ca532e6acfc9abf51845da69dadb3328bca4b83877607ed3537"
+  "hash": "616b3bca057c34f3814feb9880c79712bdf644defd9b6a95c03bd584f29ee1bd"
 }

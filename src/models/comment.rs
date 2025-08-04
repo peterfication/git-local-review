@@ -15,6 +15,7 @@ pub struct Comment {
     pub file_path: String,
     pub line_number: Option<i64>, // None for file-level comments
     pub content: String,
+    pub resolved: bool,
     pub created_at: DateTime<Utc>,
 }
 
@@ -51,6 +52,7 @@ impl Comment {
             file_path: file_path.to_string(),
             line_number,
             content: content.to_string(),
+            resolved: false,
             created_at: time_provider.now(),
         }
     }
@@ -63,25 +65,93 @@ impl Comment {
         self.line_number.is_some()
     }
 
+    pub fn is_resolved(&self) -> bool {
+        self.resolved
+    }
+
+    /// Mark comment as resolved or unresolved
+    pub async fn set_resolved(
+        &mut self,
+        pool: &SqlitePool,
+        resolved: bool,
+    ) -> color_eyre::Result<()> {
+        self.resolved = resolved;
+        sqlx::query!(
+            "UPDATE comments SET resolved = ? WHERE id = ?",
+            resolved,
+            self.id
+        )
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Mark comment as resolved
+    pub async fn mark_resolved(&mut self, pool: &SqlitePool) -> color_eyre::Result<()> {
+        self.set_resolved(pool, true).await
+    }
+
+    /// Mark comment as unresolved
+    pub async fn mark_unresolved(&mut self, pool: &SqlitePool) -> color_eyre::Result<()> {
+        self.set_resolved(pool, false).await
+    }
+
     /// Create a new comment in the database
     pub async fn create(&self, pool: &SqlitePool) -> color_eyre::Result<()> {
         let created_at_str = self.created_at.to_rfc3339();
         sqlx::query!(
             r#"
-            INSERT INTO comments (id, review_id, file_path, line_number, content, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO comments (id, review_id, file_path, line_number, content, resolved, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             "#,
             self.id,
             self.review_id,
             self.file_path,
             self.line_number,
             self.content,
+            self.resolved,
             created_at_str
         )
         .execute(pool)
         .await?;
 
         Ok(())
+    }
+
+    /// Find a comment by ID
+    pub async fn find_by_id(
+        pool: &SqlitePool,
+        comment_id: &str,
+    ) -> color_eyre::Result<Option<Comment>> {
+        let row = sqlx::query!(
+            r#"
+            SELECT id as "id!", review_id as "review_id!", file_path as "file_path!", line_number, content as "content!", resolved as "resolved!", created_at as "created_at!"
+            FROM comments
+            WHERE id = ?
+            "#,
+            comment_id,
+        )
+        .fetch_optional(pool)
+        .await?;
+
+        match row {
+            Some(row) => {
+                let created_at = DateTime::parse_from_rfc3339(&row.created_at)
+                    .map_err(|e| color_eyre::eyre::eyre!("Failed to parse created_at: {}", e))?
+                    .with_timezone(&Utc);
+
+                Ok(Some(Comment {
+                    id: row.id,
+                    review_id: row.review_id,
+                    file_path: row.file_path,
+                    line_number: row.line_number,
+                    content: row.content,
+                    resolved: row.resolved,
+                    created_at,
+                }))
+            }
+            None => Ok(None),
+        }
     }
 
     /// Find comments for a specific review
@@ -91,7 +161,7 @@ impl Comment {
     ) -> color_eyre::Result<Vec<Comment>> {
         let rows = sqlx::query!(
             r#"
-            SELECT id as "id!", review_id as "review_id!", file_path as "file_path!", line_number, content as "content!", created_at as "created_at!"
+            SELECT id as "id!", review_id as "review_id!", file_path as "file_path!", line_number, content as "content!", resolved as "resolved!", created_at as "created_at!"
             FROM comments
             WHERE review_id = ?
             ORDER BY created_at DESC
@@ -113,6 +183,7 @@ impl Comment {
                 file_path: row.file_path,
                 line_number: row.line_number,
                 content: row.content,
+                resolved: row.resolved,
                 created_at,
             });
         }
@@ -128,7 +199,7 @@ impl Comment {
     ) -> color_eyre::Result<Vec<Comment>> {
         let rows = sqlx::query!(
             r#"
-            SELECT id as "id!", review_id as "review_id!", file_path as "file_path!", line_number, content as "content!", created_at as "created_at!"
+            SELECT id as "id!", review_id as "review_id!", file_path as "file_path!", line_number, content as "content!", resolved as "resolved!", created_at as "created_at!"
             FROM comments
             WHERE review_id = ? AND file_path = ?
             ORDER BY created_at DESC
@@ -151,6 +222,7 @@ impl Comment {
                 file_path: row.file_path,
                 line_number: row.line_number,
                 content: row.content,
+                resolved: row.resolved,
                 created_at,
             });
         }
@@ -167,7 +239,7 @@ impl Comment {
     ) -> color_eyre::Result<Vec<Comment>> {
         let rows = sqlx::query!(
             r#"
-            SELECT id as "id!", review_id as "review_id!", file_path as "file_path!", line_number, content as "content!", created_at as "created_at!"
+            SELECT id as "id!", review_id as "review_id!", file_path as "file_path!", line_number, content as "content!", resolved as "resolved!", created_at as "created_at!"
             FROM comments
             WHERE review_id = ? AND file_path = ? AND line_number = ?
             ORDER BY created_at DESC
@@ -191,6 +263,7 @@ impl Comment {
                 file_path: row.file_path,
                 line_number: row.line_number,
                 content: row.content,
+                resolved: row.resolved,
                 created_at,
             });
         }
@@ -257,6 +330,121 @@ impl Comment {
             .execute(pool)
             .await?;
 
+        Ok(())
+    }
+
+    /// Check if a file has only resolved comments (returns true if no comments or all are resolved)
+    pub async fn file_has_only_resolved_comments(
+        pool: &SqlitePool,
+        review_id: &str,
+        file_path: &str,
+    ) -> color_eyre::Result<bool> {
+        let unresolved_count: i64 = sqlx::query_scalar!(
+            r#"
+            SELECT COUNT(*) as count
+            FROM comments
+            WHERE review_id = ? AND file_path = ? AND resolved = FALSE
+            "#,
+            review_id,
+            file_path
+        )
+        .fetch_one(pool)
+        .await?;
+
+        Ok(unresolved_count == 0)
+    }
+
+    /// Check if a specific line has only resolved comments (returns true if no comments or all are resolved)
+    pub async fn line_has_only_resolved_comments(
+        pool: &SqlitePool,
+        review_id: &str,
+        file_path: &str,
+        line_number: i64,
+    ) -> color_eyre::Result<bool> {
+        let unresolved_count: i64 = sqlx::query_scalar!(
+            r#"
+            SELECT COUNT(*) as count
+            FROM comments
+            WHERE review_id = ? AND file_path = ? AND line_number = ? AND resolved = FALSE
+            "#,
+            review_id,
+            file_path,
+            line_number
+        )
+        .fetch_one(pool)
+        .await?;
+
+        Ok(unresolved_count == 0)
+    }
+
+    /// Mark all comments as resolved for a specific file
+    pub async fn mark_all_resolved_for_file(
+        pool: &SqlitePool,
+        review_id: &str,
+        file_path: &str,
+    ) -> color_eyre::Result<()> {
+        sqlx::query!(
+            "UPDATE comments SET resolved = TRUE WHERE review_id = ? AND file_path = ?",
+            review_id,
+            file_path
+        )
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Mark all comments as resolved for a specific line
+    pub async fn mark_all_resolved_for_line(
+        pool: &SqlitePool,
+        review_id: &str,
+        file_path: &str,
+        line_number: i64,
+    ) -> color_eyre::Result<()> {
+        sqlx::query!(
+                    "UPDATE comments SET resolved = TRUE WHERE review_id = ? AND file_path = ? AND line_number = ?",
+                    review_id,
+                    file_path,
+                    line_number
+                )
+                .execute(pool)
+                .await?;
+        Ok(())
+    }
+
+    /// Mark all comments as unresolved for a specific file
+    pub async fn mark_all_unresolved_for_file(
+        pool: &SqlitePool,
+        review_id: &str,
+        file_path: &str,
+    ) -> color_eyre::Result<()> {
+        sqlx::query!(
+            "UPDATE comments SET resolved = FALSE WHERE review_id = ? AND file_path = ?",
+            review_id,
+            file_path
+        )
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Mark all comments as unresolved for a specific line
+    ///
+    /// If `line_number` is `None`, it will do nothing.
+    pub async fn mark_all_unresolved_for_line(
+        pool: &SqlitePool,
+        review_id: &str,
+        file_path: &str,
+        line_number: i64,
+    ) -> color_eyre::Result<()> {
+        sqlx::query!(
+                    "UPDATE comments SET resolved = FALSE WHERE review_id = ? AND file_path = ? AND line_number = ?",
+                    review_id,
+                    file_path,
+                    line_number
+                )
+                .execute(pool)
+                .await?;
         Ok(())
     }
 
