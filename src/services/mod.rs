@@ -1,6 +1,5 @@
 use std::future::Future;
 
-use crate::database::Database;
 use crate::event::{AppEvent, EventHandler};
 
 pub mod comment_service;
@@ -25,7 +24,8 @@ pub trait ServiceHandler {
     /// Handle an app event and potentially send new events through the event handler
     fn handle_app_event<'a>(
         event: &'a AppEvent,
-        database: &'a Database,
+        database: &'a crate::database::Database,
+        repo_path: &'a str,
         events: &'a mut EventHandler,
     ) -> std::pin::Pin<Box<dyn Future<Output = color_eyre::Result<()>> + Send + 'a>>;
 }

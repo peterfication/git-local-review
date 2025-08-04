@@ -45,7 +45,8 @@ pub struct CommentService;
 impl ServiceHandler for CommentService {
     fn handle_app_event<'a>(
         event: &'a AppEvent,
-        database: &'a Database,
+        database: &'a crate::database::Database,
+        _repo_path: &'a str,
         events: &'a mut EventHandler,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = color_eyre::Result<()>> + Send + 'a>>
     {

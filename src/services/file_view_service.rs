@@ -13,7 +13,8 @@ pub struct FileViewService;
 impl ServiceHandler for FileViewService {
     fn handle_app_event<'a>(
         event: &'a AppEvent,
-        database: &'a Database,
+        database: &'a crate::database::Database,
+        _repo_path: &'a str,
         events: &'a mut EventHandler,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = color_eyre::Result<()>> + Send + 'a>>
     {
@@ -161,13 +162,20 @@ mod tests {
             file_path: Arc::from(file_path),
         };
 
-        FileViewService::handle_app_event(&event, &database, &mut events)
+        let app = crate::app::App {
+            running: true,
+            events: EventHandler::new_for_test(),
+            database,
+            view_stack: vec![],
+            repo_path: ".".to_string(),
+        };
+        FileViewService::handle_app_event(&event, &app.database, ".", &mut events)
             .await
             .unwrap();
 
         // Verify file is now viewed
         assert!(
-            FileView::is_file_viewed(database.pool(), &review.id, file_path)
+            FileView::is_file_viewed(app.database.pool(), &review.id, file_path)
                 .await
                 .unwrap()
         );
@@ -220,13 +228,20 @@ mod tests {
             file_path: Arc::from(file_path),
         };
 
-        FileViewService::handle_app_event(&event, &database, &mut events)
+        let app = crate::app::App {
+            running: true,
+            events: EventHandler::new_for_test(),
+            database,
+            view_stack: vec![],
+            repo_path: ".".to_string(),
+        };
+        FileViewService::handle_app_event(&event, &app.database, ".", &mut events)
             .await
             .unwrap();
 
         // Verify file is now unviewed
         assert!(
-            !FileView::is_file_viewed(database.pool(), &review.id, file_path)
+            !FileView::is_file_viewed(app.database.pool(), &review.id, file_path)
                 .await
                 .unwrap()
         );
@@ -265,7 +280,14 @@ mod tests {
             review_id: Arc::from(review.id.as_str()),
         };
 
-        FileViewService::handle_app_event(&event, &database, &mut events)
+        let app = crate::app::App {
+            running: true,
+            events: EventHandler::new_for_test(),
+            database,
+            view_stack: vec![],
+            repo_path: ".".to_string(),
+        };
+        FileViewService::handle_app_event(&event, &app.database, ".", &mut events)
             .await
             .unwrap();
 
@@ -305,7 +327,14 @@ mod tests {
             review_id: Arc::from(review.id.as_str()),
         };
 
-        FileViewService::handle_app_event(&event, &database, &mut events)
+        let app = crate::app::App {
+            running: true,
+            events: EventHandler::new_for_test(),
+            database,
+            view_stack: vec![],
+            repo_path: ".".to_string(),
+        };
+        FileViewService::handle_app_event(&event, &app.database, ".", &mut events)
             .await
             .unwrap();
 
@@ -334,7 +363,14 @@ mod tests {
         // Send an unrelated event
         let event = AppEvent::Quit;
 
-        FileViewService::handle_app_event(&event, &database, &mut events)
+        let app = crate::app::App {
+            running: true,
+            events: EventHandler::new_for_test(),
+            database,
+            view_stack: vec![],
+            repo_path: ".".to_string(),
+        };
+        FileViewService::handle_app_event(&event, &app.database, ".", &mut events)
             .await
             .unwrap();
 
