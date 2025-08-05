@@ -11,9 +11,10 @@ description = "A Terminal User Interface (TUI) for reviewing Git changes with lo
 
 exclude = [
   ".github",
-  "CLAUDE.md",
+  "AGENT.md",
   "lefthook.yml",
   "dprint.json",
+  "assets/screenshot.png",
   "src/**/*.snap",
 ]
 
