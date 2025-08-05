@@ -1144,7 +1144,7 @@ mod tests {
         app::App,
         database::Database,
         event::{Event, EventHandler},
-        models::{Comment, Diff, DiffFile, Review, review::TestReviewParams},
+        models::{Comment, Diff, DiffFile, Review, review::ReviewParams},
         services::{CommentsLoadParams, CommentsLoadingState},
         test_utils::render_app_to_terminal_backend,
     };
@@ -1240,9 +1240,9 @@ mod tests {
     #[tokio::test]
     async fn test_review_details_view_line_navigation_keys() {
         let review = Review::test_review(
-            TestReviewParams::new()
-                .base_sha("abc123")
-                .target_sha("def456"),
+            ReviewParams::new()
+                .base_sha_str("abc123")
+                .target_sha_str("def456"),
         );
         let mut view = ReviewDetailsView::new(review);
         let mut app = create_test_app().await;
@@ -1283,7 +1283,7 @@ mod tests {
         view.selected_line_index = 5;
 
         // Load a new review - should reset current line
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let review = Review::test_review(ReviewParams::new().base_branch("main"));
         view.handle_app_events(
             &mut app,
             &AppEvent::ReviewLoadingState(ReviewLoadingState::Loaded(Arc::from(review))),
@@ -1351,7 +1351,7 @@ mod tests {
     #[tokio::test]
     async fn test_review_details_view_handles_review_loading_state_loaded_event() {
         let mut view = ReviewDetailsView::new_loading();
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let review = Review::test_review(ReviewParams::new().base_branch("main"));
         let mut app = create_test_app().await;
 
         view.handle_app_events(
@@ -1498,7 +1498,7 @@ mod tests {
         view.scroll_offset = 5;
 
         // Load a new review - should reset scroll
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let review = Review::test_review(ReviewParams::new().base_branch("main"));
         view.handle_app_events(
             &mut app,
             &AppEvent::ReviewLoadingState(ReviewLoadingState::Loaded(Arc::from(review))),
@@ -1552,7 +1552,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_review_details_view_render_loaded_state_diff_init() {
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let review = Review::test_review(ReviewParams::new().base_branch("main"));
         let view = ReviewDetailsView::new(review);
         let app = App {
             view_stack: vec![Box::new(view)],
@@ -1565,9 +1565,9 @@ mod tests {
     #[tokio::test]
     async fn test_review_details_view_render_loaded_state_diff_loading() {
         let review = Review::test_review(
-            TestReviewParams::new()
+            ReviewParams::new()
                 .base_branch("develop")
-                .base_sha("asdf1234"),
+                .base_sha_str("asdf1234"),
         );
         let view = ReviewDetailsView::new(review);
 
@@ -1584,9 +1584,9 @@ mod tests {
     #[tokio::test]
     async fn test_review_details_view_render_loaded_state_diff_error() {
         let review = Review::test_review(
-            TestReviewParams::new()
+            ReviewParams::new()
                 .base_branch("feature")
-                .base_sha("jkl09876"),
+                .base_sha_str("jkl09876"),
         );
         let view = ReviewDetailsView::new(review);
 
@@ -1605,7 +1605,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_review_details_view_render_loaded_state_diff_loaded_no_files() {
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let review = Review::test_review(ReviewParams::new().base_branch("main"));
         let view = ReviewDetailsView::new(review);
 
         let files = vec![];
@@ -1624,7 +1624,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_review_details_view_render_loaded_state_diff_loaded_with_files() {
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let review = Review::test_review(ReviewParams::new().base_branch("main"));
         let view = ReviewDetailsView::new(review);
 
         // Simulate diff content being loaded
@@ -1653,7 +1653,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_review_details_view_open_comments_file_level() {
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let review = Review::test_review(ReviewParams::new().base_branch("main"));
         let mut view = ReviewDetailsView::new(review.clone());
         let mut app = create_test_app().await;
 
@@ -1692,7 +1692,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_review_details_view_open_comments_line_level() {
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let review = Review::test_review(ReviewParams::new().base_branch("main"));
         let mut view = ReviewDetailsView::new(review.clone());
         let mut app = create_test_app().await;
 
@@ -1747,7 +1747,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_review_details_view_open_comments_no_files() {
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let review = Review::test_review(ReviewParams::new().base_branch("main"));
         let mut view = ReviewDetailsView::new(review.clone());
         let mut app = create_test_app().await;
 
@@ -1763,7 +1763,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_review_details_view_open_comments_file_index_out_of_bounds() {
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let review = Review::test_review(ReviewParams::new().base_branch("main"));
         let mut view = ReviewDetailsView::new(review.clone());
         let mut app = create_test_app().await;
 
@@ -1785,7 +1785,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_review_details_view_open_comments_key_handling() {
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let review = Review::test_review(ReviewParams::new().base_branch("main"));
         let mut view = ReviewDetailsView::new(review.clone());
         let mut app = create_test_app().await;
 
@@ -1904,7 +1904,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_reload_comments_with_review() {
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let review = Review::test_review(ReviewParams::new().base_branch("main"));
         let view = ReviewDetailsView::new(review.clone());
         let mut app = create_test_app().await;
 
@@ -1938,7 +1938,7 @@ mod tests {
 
     #[test]
     fn test_comments_load_params_with_review() {
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let review = Review::test_review(ReviewParams::new().base_branch("main"));
         let view = ReviewDetailsView::new(review.clone());
 
         let params = view.comments_load_params();
@@ -1960,7 +1960,7 @@ mod tests {
 
     #[test]
     fn test_relevant_comments_loading_state_matching_params() {
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let review = Review::test_review(ReviewParams::new().base_branch("main"));
         let view = ReviewDetailsView::new(review.clone());
 
         let params = CommentsLoadParams {
@@ -1975,7 +1975,7 @@ mod tests {
 
     #[test]
     fn test_relevant_comments_loading_state_different_review_id() {
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let review = Review::test_review(ReviewParams::new().base_branch("main"));
         let view = ReviewDetailsView::new(review.clone());
 
         let params = CommentsLoadParams {
@@ -2004,7 +2004,7 @@ mod tests {
 
     #[test]
     fn test_handle_comments_loading_state_not_relevant() {
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let review = Review::test_review(ReviewParams::new().base_branch("main"));
         let mut view = ReviewDetailsView::new(review.clone());
 
         // Set up initial state
@@ -2042,7 +2042,7 @@ mod tests {
 
     #[test]
     fn test_handle_comments_loading_state_loaded_file_comments() {
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let review = Review::test_review(ReviewParams::new().base_branch("main"));
         let mut view = ReviewDetailsView::new(review.clone());
 
         let params = CommentsLoadParams {
@@ -2088,7 +2088,7 @@ mod tests {
 
     #[test]
     fn test_handle_comments_loading_state_loaded_line_comments() {
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let review = Review::test_review(ReviewParams::new().base_branch("main"));
         let mut view = ReviewDetailsView::new(review.clone());
 
         let params = CommentsLoadParams {
@@ -2126,7 +2126,7 @@ mod tests {
 
     #[test]
     fn test_handle_comments_loading_state_loaded_mixed_comments() {
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let review = Review::test_review(ReviewParams::new().base_branch("main"));
         let mut view = ReviewDetailsView::new(review.clone());
 
         let params = CommentsLoadParams {
@@ -2177,7 +2177,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_comment_created_event_triggers_reload() {
-        let review = Review::test_review(TestReviewParams::new().base_branch("main"));
+        let review = Review::test_review(ReviewParams::new().base_branch("main"));
         let mut view = ReviewDetailsView::new(review.clone());
         let mut app = create_test_app().await;
 

@@ -316,7 +316,7 @@ mod tests {
     use crate::{
         database::Database,
         event::{AppEvent, Event},
-        models::review::{Review, TestReviewParams},
+        models::review::{Review, ReviewParams},
         services::review_service::ReviewCreateData,
         test_utils::{fixed_time, render_app_to_terminal_backend},
         time_provider::MockTimeProvider,
@@ -334,15 +334,15 @@ mod tests {
         let time_provider2 = MockTimeProvider::new(time2);
 
         let review1 = Review::test_review_with_time_provider(
-            TestReviewParams::default()
+            ReviewParams::default()
                 .base_branch("main")
-                .base_sha("abcd1234"),
+                .base_sha_str("abcd1234"),
             &time_provider1,
         );
         let review2 = Review::test_review_with_time_provider(
-            TestReviewParams::default()
+            ReviewParams::default()
                 .base_branch("dev")
-                .base_sha("bbcd1234"),
+                .base_sha_str("bbcd1234"),
             &time_provider2,
         );
         review1.save(&pool).await.unwrap();

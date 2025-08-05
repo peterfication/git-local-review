@@ -96,11 +96,12 @@ impl ReviewService {
             }
         };
 
-        let review = Review::new_with_shas(
-            data.base_branch.trim().to_string(),
-            data.target_branch.trim().to_string(),
-            base_sha,
-            target_sha,
+        let review = Review::new(
+            Review::builder()
+                .base_branch(data.base_branch.trim().to_string())
+                .target_branch(data.target_branch.trim().to_string())
+                .base_sha(base_sha)
+                .target_sha(target_sha),
         );
         review.save(database.pool()).await?;
         log::info!("Created review: {}", review.title());
@@ -264,7 +265,7 @@ mod tests {
     use crate::{
         app::App,
         event::{Event, EventHandler, ReviewId},
-        models::review::TestReviewParams,
+        models::review::ReviewParams,
     };
 
     async fn create_test_database() -> Database {
@@ -738,8 +739,8 @@ mod tests {
         };
 
         // Create two reviews
-        let review1 = Review::test_review(TestReviewParams::new().base_branch("main"));
-        let review2 = Review::test_review(TestReviewParams::new().base_branch("dev"));
+        let review1 = Review::test_review(ReviewParams::new().base_branch("main"));
+        let review2 = Review::test_review(ReviewParams::new().base_branch("dev"));
         review1.save(app.database.pool()).await.unwrap();
         review2.save(app.database.pool()).await.unwrap();
 
