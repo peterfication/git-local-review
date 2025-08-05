@@ -344,7 +344,7 @@ mod tests {
         let mut app = create_test_app().await;
 
         // Create a review to have data for testing
-        let review = Review::test_review(());
+        let review = Review::builder().build();
         review.save(app.database.pool()).await.unwrap();
         let reviews = vec![review];
 
@@ -373,7 +373,7 @@ mod tests {
         let mut app = create_test_app().await;
 
         // Create a review to have data for testing
-        let review = Review::test_review(());
+        let review = Review::builder().build();
         review.save(app.database.pool()).await.unwrap();
         let reviews = vec![review];
 

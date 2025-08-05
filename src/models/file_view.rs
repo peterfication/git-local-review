@@ -173,7 +173,7 @@ mod tests {
     }
 
     async fn create_test_review(pool: &SqlitePool) -> Review {
-        let review = Review::test_review(());
+        let review = Review::builder().build();
         review.save(pool).await.unwrap();
         review
     }

@@ -825,7 +825,7 @@ mod tests {
         let mut events = EventHandler::new_for_test();
 
         // Create a test review first to satisfy foreign key constraint
-        let review = Review::test_review(());
+        let review = Review::builder().build();
         review.save(database.pool()).await.unwrap();
 
         // Create a file comment
@@ -880,7 +880,7 @@ mod tests {
         let mut events = EventHandler::new_for_test();
 
         // Create a test review first to satisfy foreign key constraint
-        let review = Review::test_review(());
+        let review = Review::builder().build();
         review.save(database.pool()).await.unwrap();
 
         // Create a line comment
@@ -967,7 +967,7 @@ mod tests {
         let mut events = EventHandler::new_for_test();
 
         // Create a test review first to satisfy foreign key constraint
-        let review = Review::test_review(());
+        let review = Review::builder().build();
         review.save(database.pool()).await.unwrap();
 
         // Create a test comment first
@@ -1025,7 +1025,7 @@ mod tests {
         let mut events = EventHandler::new_for_test();
 
         // Create a test review first to satisfy foreign key constraint
-        let review = Review::test_review(());
+        let review = Review::builder().build();
         review.save(database.pool()).await.unwrap();
 
         // Create a test line comment
@@ -1093,7 +1093,7 @@ mod tests {
         let database = create_test_database().await;
 
         // Create a test review first to satisfy foreign key constraint
-        let review = Review::test_review(());
+        let review = Review::builder().build();
         review.save(database.pool()).await.unwrap();
 
         // Create test comments

@@ -465,6 +465,8 @@ mod tests {
 
     use sqlx::SqlitePool;
 
+    use crate::models::Review;
+
     async fn create_test_pool() -> SqlitePool {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         sqlx::migrate!().run(&pool).await.unwrap();
@@ -503,7 +505,7 @@ mod tests {
         let pool = create_test_pool().await;
 
         // Create a test review first to satisfy foreign key constraint
-        let review = crate::models::Review::test_review(());
+        let review = Review::builder().build();
         review.save(&pool).await.unwrap();
 
         // Create file comment
@@ -557,7 +559,7 @@ mod tests {
         let pool = create_test_pool().await;
 
         // Create a test review first to satisfy foreign key constraint
-        let review = crate::models::Review::test_review(());
+        let review = Review::builder().build();
         review.save(&pool).await.unwrap();
 
         let comment = Comment::new(&review.id, "src/main.rs", None, "Test comment");
@@ -586,7 +588,7 @@ mod tests {
         let pool = create_test_pool().await;
 
         // Create a test review first to satisfy foreign key constraint
-        let review = crate::models::Review::test_review(());
+        let review = Review::builder().build();
         review.save(&pool).await.unwrap();
 
         // Create multiple comments for the same review
