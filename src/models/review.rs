@@ -30,10 +30,6 @@ impl Review {
         ReviewBuilder::new()
     }
 
-    pub fn new(builder: ReviewBuilder) -> Self {
-        builder.build()
-    }
-
     /// Returns a human-readable title for the review in the format "base_branch -> target_branch"
     pub fn title(&self) -> String {
         let default_sha = "unknown".to_string();
@@ -48,19 +44,6 @@ impl Review {
             "{} ({}) -> {} ({})",
             self.base_branch, base_sha_short, self.target_branch, target_sha_short
         )
-    }
-
-    #[cfg(test)]
-    pub fn test_review(builder: ReviewBuilder) -> Self {
-        builder.build()
-    }
-
-    #[cfg(test)]
-    pub fn test_review_with_time_provider(
-        builder: ReviewBuilder,
-        time_provider: &dyn TimeProvider,
-    ) -> Self {
-        builder.build_with_time_provider(time_provider)
     }
 
     pub async fn save(&self, pool: &SqlitePool) -> Result<(), sqlx::Error> {
@@ -239,9 +222,6 @@ impl Default for ReviewBuilder {
 }
 
 #[cfg(test)]
-pub type ReviewParams = ReviewBuilder;
-
-#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -253,25 +233,6 @@ mod tests {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         sqlx::migrate!().run(&pool).await.unwrap();
         pool
-    }
-
-    #[test]
-    fn test_review_new() {
-        let base_branch = "main".to_string();
-        let target_branch = "feature/test".to_string();
-        let review = Review::new(
-            Review::builder()
-                .base_branch(base_branch.clone())
-                .target_branch(target_branch.clone()),
-        );
-
-        assert!(!review.id.is_empty());
-        assert_eq!(review.created_at, review.updated_at);
-        assert_eq!(review.base_branch, base_branch);
-        assert_eq!(review.target_branch, target_branch);
-
-        // ID should be a valid UUID
-        assert!(uuid::Uuid::parse_str(&review.id).is_ok());
     }
 
     #[test]
@@ -319,15 +280,14 @@ mod tests {
 
     #[test]
     fn test_title() {
-        let review = Review::test_review(Review::builder());
+        let review = Review::builder().build();
         assert_eq!(review.title(), "default (unknown) -> default (unknown)");
-        let custom_review = Review::test_review(
-            ReviewBuilder::new()
-                .base_branch("main")
-                .target_branch("feature/test")
-                .base_sha(Some("abcd1234".to_string()))
-                .target_sha(Some("efgh5678".to_string())),
-        );
+        let custom_review = Review::builder()
+            .base_branch("main")
+            .target_branch("feature/test")
+            .base_sha(Some("abcd1234".to_string()))
+            .target_sha(Some("efgh5678".to_string()))
+            .build();
         assert_eq!(
             custom_review.title(),
             "main (abcd123) -> feature/test (efgh567)"
@@ -337,7 +297,7 @@ mod tests {
     #[tokio::test]
     async fn test_review_save_and_list() {
         let pool = create_test_pool().await;
-        let review = Review::test_review(Review::builder());
+        let review = Review::builder().build();
 
         // Save the review
         review.save(&pool).await.unwrap();
@@ -356,11 +316,10 @@ mod tests {
         let pool = create_test_pool().await;
         let base_branch = "main".to_string();
         let target_branch = "feature/test".to_string();
-        let review = Review::test_review(
-            ReviewBuilder::new()
-                .base_branch(&base_branch)
-                .target_branch(&target_branch),
-        );
+        let review = Review::builder()
+            .base_branch(&base_branch)
+            .target_branch(&target_branch)
+            .build();
 
         // Save the review
         review.save(&pool).await.unwrap();
@@ -401,14 +360,12 @@ mod tests {
         let time_provider1 = MockTimeProvider::new(time1);
         let time_provider2 = MockTimeProvider::new(time2);
 
-        let review1 = Review::test_review_with_time_provider(
-            Review::builder().base_branch("First Review"),
-            &time_provider1,
-        );
-        let review2 = Review::test_review_with_time_provider(
-            Review::builder().base_branch("Second Review"),
-            &time_provider2,
-        );
+        let review1 = Review::builder()
+            .base_branch("main")
+            .build_with_time_provider(&time_provider1);
+        let review2 = Review::builder()
+            .base_branch("dev")
+            .build_with_time_provider(&time_provider2);
 
         // Save in order
         review1.save(&pool).await.unwrap();
@@ -418,8 +375,8 @@ mod tests {
 
         assert_eq!(reviews.len(), 2);
         // Should be ordered by created_at DESC, so newest first
-        assert_eq!(reviews[0].base_branch, "Second Review");
-        assert_eq!(reviews[1].base_branch, "First Review");
+        assert_eq!(reviews[0].base_branch, "dev");
+        assert_eq!(reviews[1].base_branch, "main");
         assert!(reviews[0].created_at > reviews[1].created_at);
     }
 
@@ -427,8 +384,8 @@ mod tests {
     async fn test_review_save_duplicate_id_fails() {
         let pool = create_test_pool().await;
 
-        let review1 = Review::test_review(Review::builder());
-        let mut review2 = Review::test_review(Review::builder());
+        let review1 = Review::builder().build();
+        let mut review2 = Review::builder().build();
 
         // Make them have the same ID
         review2.id = review1.id.clone();
@@ -443,7 +400,7 @@ mod tests {
     #[tokio::test]
     async fn test_review_find_by_id() {
         let pool = create_test_pool().await;
-        let review = Review::test_review(Review::builder());
+        let review = Review::builder().build();
 
         // Save the review
         review.save(&pool).await.unwrap();
@@ -464,7 +421,7 @@ mod tests {
     #[tokio::test]
     async fn test_review_delete() {
         let pool = create_test_pool().await;
-        let review = Review::test_review(Review::builder());
+        let review = Review::builder().build();
 
         // Save the review
         review.save(&pool).await.unwrap();
@@ -489,14 +446,12 @@ mod tests {
         let time_provider1 = MockTimeProvider::new(time1);
         let time_provider2 = MockTimeProvider::new(time2);
 
-        let review1 = Review::test_review_with_time_provider(
-            Review::builder().base_branch("main"),
-            &time_provider1,
-        );
-        let mut review2 = Review::test_review_with_time_provider(
-            Review::builder().base_branch("dev"),
-            &time_provider2,
-        );
+        let review1 = Review::builder()
+            .base_branch("main")
+            .build_with_time_provider(&time_provider1);
+        let mut review2 = Review::builder()
+            .base_branch("dev")
+            .build_with_time_provider(&time_provider2);
 
         // Make review2 have the same ID as review1
         review2.id = review1.id.clone();
@@ -510,14 +465,12 @@ mod tests {
         let fixed_time = fixed_time();
         let time_provider = MockTimeProvider::new(fixed_time);
 
-        let review1 = Review::test_review_with_time_provider(
-            Review::builder().base_branch("Same Title"),
-            &time_provider,
-        );
-        let review2 = Review::test_review_with_time_provider(
-            Review::builder().base_branch("Same Title"),
-            &time_provider,
-        );
+        let review1 = Review::builder()
+            .base_branch("main")
+            .build_with_time_provider(&time_provider);
+        let review2 = Review::builder()
+            .base_branch("main")
+            .build_with_time_provider(&time_provider);
 
         // Should not be equal despite same base_branch and timestamps because IDs are different
         assert_ne!(review1, review2);
@@ -525,7 +478,7 @@ mod tests {
 
     #[test]
     fn test_review_eq_self() {
-        let review = Review::test_review(Review::builder());
+        let review = Review::builder().build();
 
         // Should be equal to itself
         assert_eq!(review, review);
@@ -533,7 +486,7 @@ mod tests {
 
     #[test]
     fn test_review_eq_clone() {
-        let review1 = Review::test_review(Review::builder());
+        let review1 = Review::builder().build();
         let review2 = review1.clone();
 
         // Clone should be equal to original
@@ -543,26 +496,25 @@ mod tests {
     #[test]
     fn test_review_test_helper() {
         // Test with all defaults
-        let review1 = Review::test_review(Review::builder());
+        let review1 = Review::builder().build();
         assert_eq!(review1.base_branch, "default");
         assert_eq!(review1.target_branch, "default");
 
         // Test with custom base_branch only
-        let review2 = Review::test_review(ReviewBuilder::new().base_branch("Custom Title"));
+        let review2 = Review::builder().base_branch("Custom Title").build();
         assert_eq!(review2.base_branch, "Custom Title");
         assert_eq!(review2.target_branch, "default");
 
         // Test with all custom values
-        let review3 = Review::test_review(
-            ReviewBuilder::new()
-                .base_branch("main")
-                .target_branch("feature/test"),
-        );
+        let review3 = Review::builder()
+            .base_branch("main")
+            .target_branch("feature/test")
+            .build();
         assert_eq!(review3.base_branch, "main");
         assert_eq!(review3.target_branch, "feature/test");
 
         // Test using Default trait
-        let review4 = Review::test_review(Review::builder());
+        let review4 = Review::builder().build();
         assert_eq!(review4.base_branch, "default");
         assert_eq!(review4.target_branch, "default");
     }
@@ -598,13 +550,12 @@ mod tests {
         let base_sha = Some("abc123def456789".to_string());
         let target_sha = Some("987654321fedcba".to_string());
 
-        let review = Review::new(
-            Review::builder()
-                .base_branch("main")
-                .target_branch("feature/test")
-                .base_sha(base_sha.clone())
-                .target_sha(target_sha.clone()),
-        );
+        let review = Review::builder()
+            .base_branch("main")
+            .target_branch("feature/test")
+            .base_sha(base_sha.clone())
+            .target_sha(target_sha.clone())
+            .build();
 
         // Verify SHAs are set correctly
         assert_eq!(review.base_sha, base_sha);
@@ -629,13 +580,12 @@ mod tests {
         let base_sha = Some("abc123".to_string());
         let target_sha = Some("def456".to_string());
 
-        let review = Review::new(
-            Review::builder()
-                .base_branch("main")
-                .target_branch("feature/test")
-                .base_sha(base_sha.clone())
-                .target_sha(target_sha.clone()),
-        );
+        let review = Review::builder()
+            .base_branch("main")
+            .target_branch("feature/test")
+            .base_sha(base_sha.clone())
+            .target_sha(target_sha.clone())
+            .build();
 
         assert_eq!(review.base_branch, "main");
         assert_eq!(review.target_branch, "feature/test");
@@ -646,13 +596,12 @@ mod tests {
 
     #[test]
     fn test_review_test_helper_with_shas() {
-        let review = Review::test_review(
-            ReviewBuilder::new()
-                .base_branch("main")
-                .target_branch("feature/test")
-                .base_sha(Some("abc123".to_string()))
-                .target_sha(Some("def456".to_string())),
-        );
+        let review = Review::builder()
+            .base_branch("main")
+            .target_branch("feature/test")
+            .base_sha(Some("abc123".to_string()))
+            .target_sha(Some("def456".to_string()))
+            .build();
 
         assert_eq!(review.base_branch, "main");
         assert_eq!(review.target_branch, "feature/test");

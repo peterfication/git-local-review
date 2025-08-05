@@ -148,7 +148,7 @@ mod tests {
     }
 
     async fn create_test_review(database: &Database) -> Review {
-        let review = Review::test_review(Review::builder());
+        let review = Review::builder().build();
         review.save(database.pool()).await.unwrap();
         review
     }

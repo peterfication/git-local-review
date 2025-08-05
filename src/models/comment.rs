@@ -505,7 +505,7 @@ mod tests {
         let pool = create_test_pool().await;
 
         // Create a test review first to satisfy foreign key constraint
-        let review = Review::test_review(Review::builder());
+        let review = Review::builder().build();
         review.save(&pool).await.unwrap();
 
         // Create file comment
@@ -559,7 +559,7 @@ mod tests {
         let pool = create_test_pool().await;
 
         // Create a test review first to satisfy foreign key constraint
-        let review = Review::test_review(Review::builder());
+        let review = Review::builder().build();
         review.save(&pool).await.unwrap();
 
         let comment = Comment::new(&review.id, "src/main.rs", None, "Test comment");
@@ -588,7 +588,7 @@ mod tests {
         let pool = create_test_pool().await;
 
         // Create a test review first to satisfy foreign key constraint
-        let review = Review::test_review(Review::builder());
+        let review = Review::builder().build();
         review.save(&pool).await.unwrap();
 
         // Create multiple comments for the same review

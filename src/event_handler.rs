@@ -276,7 +276,7 @@ mod tests {
         let mut app = create_test_app().await;
 
         // Create a review
-        let review = Review::test_review(Review::builder());
+        let review = Review::builder().build();
         review.save(app.database.pool()).await.unwrap();
         let review_id = review.id.clone();
 
