@@ -696,7 +696,7 @@ mod tests {
 
         view.selected_review_index = None;
 
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
         review.save(app.database.pool()).await.unwrap();
         let reviews = vec![review];
 
@@ -715,7 +715,7 @@ mod tests {
 
         view.selected_review_index = None;
 
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
         review.save(app.database.pool()).await.unwrap();
 
         view.handle_app_events(&mut app, &AppEvent::ReviewDelete("some_id".into()));
@@ -731,7 +731,7 @@ mod tests {
 
         view.selected_review_index = None;
 
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
         review.save(app.database.pool()).await.unwrap();
 
         view.handle_app_events(
@@ -768,7 +768,7 @@ mod tests {
         view.selected_review_index = Some(1);
 
         // Create a review and a smaller reviews list (only 1 item)
-        view.reviews = Arc::new([Review::test_review(())]);
+        view.reviews = Arc::new([Review::test_review(Review::builder())]);
         view.update_selection_after_reviews_change();
 
         // Should adjust selection to last valid index (0)
@@ -783,7 +783,7 @@ mod tests {
         view.selected_review_index = Some(0);
 
         // Create a reviews list for testing
-        view.reviews = Arc::new([Review::test_review(())]);
+        view.reviews = Arc::new([Review::test_review(Review::builder())]);
         view.update_selection_after_reviews_change();
 
         // Should preserve valid selection
@@ -798,7 +798,7 @@ mod tests {
         assert_eq!(view.selected_review_index, None);
 
         // Create a reviews list for testing
-        view.reviews = Arc::new([Review::test_review(())]);
+        view.reviews = Arc::new([Review::test_review(Review::builder())]);
         view.update_selection_after_reviews_change();
 
         // Should select first review

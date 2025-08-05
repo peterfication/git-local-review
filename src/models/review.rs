@@ -30,8 +30,8 @@ impl Review {
         ReviewBuilder::new()
     }
 
-    pub fn new(builder: impl Into<ReviewBuilder>) -> Self {
-        builder.into().build()
+    pub fn new(builder: ReviewBuilder) -> Self {
+        builder.build()
     }
 
     /// Returns a human-readable title for the review in the format "base_branch -> target_branch"
@@ -51,18 +51,16 @@ impl Review {
     }
 
     #[cfg(test)]
-    pub fn test_review(opts: impl Into<ReviewBuilder>) -> Self {
-        let opts = opts.into();
-        opts.build()
+    pub fn test_review(builder: ReviewBuilder) -> Self {
+        builder.build()
     }
 
     #[cfg(test)]
     pub fn test_review_with_time_provider(
-        opts: impl Into<ReviewBuilder>,
+        builder: ReviewBuilder,
         time_provider: &dyn TimeProvider,
     ) -> Self {
-        let opts = opts.into();
-        opts.build_with_time_provider(time_provider)
+        builder.build_with_time_provider(time_provider)
     }
 
     pub async fn save(&self, pool: &SqlitePool) -> Result<(), sqlx::Error> {
@@ -244,13 +242,6 @@ impl Default for ReviewBuilder {
 pub type ReviewParams = ReviewBuilder;
 
 #[cfg(test)]
-impl From<()> for ReviewBuilder {
-    fn from(_: ()) -> Self {
-        Self::new()
-    }
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -328,7 +319,7 @@ mod tests {
 
     #[test]
     fn test_title() {
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
         assert_eq!(review.title(), "default (unknown) -> default (unknown)");
         let custom_review = Review::test_review(
             ReviewBuilder::new()
@@ -346,7 +337,7 @@ mod tests {
     #[tokio::test]
     async fn test_review_save_and_list() {
         let pool = create_test_pool().await;
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
 
         // Save the review
         review.save(&pool).await.unwrap();
@@ -411,11 +402,11 @@ mod tests {
         let time_provider2 = MockTimeProvider::new(time2);
 
         let review1 = Review::test_review_with_time_provider(
-            ReviewBuilder::default().base_branch("First Review"),
+            Review::builder().base_branch("First Review"),
             &time_provider1,
         );
         let review2 = Review::test_review_with_time_provider(
-            ReviewBuilder::default().base_branch("Second Review"),
+            Review::builder().base_branch("Second Review"),
             &time_provider2,
         );
 
@@ -436,8 +427,8 @@ mod tests {
     async fn test_review_save_duplicate_id_fails() {
         let pool = create_test_pool().await;
 
-        let review1 = Review::test_review(());
-        let mut review2 = Review::test_review(());
+        let review1 = Review::test_review(Review::builder());
+        let mut review2 = Review::test_review(Review::builder());
 
         // Make them have the same ID
         review2.id = review1.id.clone();
@@ -452,7 +443,7 @@ mod tests {
     #[tokio::test]
     async fn test_review_find_by_id() {
         let pool = create_test_pool().await;
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
 
         // Save the review
         review.save(&pool).await.unwrap();
@@ -473,7 +464,7 @@ mod tests {
     #[tokio::test]
     async fn test_review_delete() {
         let pool = create_test_pool().await;
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
 
         // Save the review
         review.save(&pool).await.unwrap();
@@ -499,11 +490,11 @@ mod tests {
         let time_provider2 = MockTimeProvider::new(time2);
 
         let review1 = Review::test_review_with_time_provider(
-            ReviewBuilder::default().base_branch("main"),
+            Review::builder().base_branch("main"),
             &time_provider1,
         );
         let mut review2 = Review::test_review_with_time_provider(
-            ReviewBuilder::default().base_branch("dev"),
+            Review::builder().base_branch("dev"),
             &time_provider2,
         );
 
@@ -520,11 +511,11 @@ mod tests {
         let time_provider = MockTimeProvider::new(fixed_time);
 
         let review1 = Review::test_review_with_time_provider(
-            ReviewBuilder::default().base_branch("Same Title"),
+            Review::builder().base_branch("Same Title"),
             &time_provider,
         );
         let review2 = Review::test_review_with_time_provider(
-            ReviewBuilder::default().base_branch("Same Title"),
+            Review::builder().base_branch("Same Title"),
             &time_provider,
         );
 
@@ -534,7 +525,7 @@ mod tests {
 
     #[test]
     fn test_review_eq_self() {
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
 
         // Should be equal to itself
         assert_eq!(review, review);
@@ -542,7 +533,7 @@ mod tests {
 
     #[test]
     fn test_review_eq_clone() {
-        let review1 = Review::test_review(());
+        let review1 = Review::test_review(Review::builder());
         let review2 = review1.clone();
 
         // Clone should be equal to original
@@ -552,7 +543,7 @@ mod tests {
     #[test]
     fn test_review_test_helper() {
         // Test with all defaults
-        let review1 = Review::test_review(());
+        let review1 = Review::test_review(Review::builder());
         assert_eq!(review1.base_branch, "default");
         assert_eq!(review1.target_branch, "default");
 
@@ -571,7 +562,7 @@ mod tests {
         assert_eq!(review3.target_branch, "feature/test");
 
         // Test using Default trait
-        let review4 = Review::test_review(ReviewBuilder::default());
+        let review4 = Review::test_review(Review::builder());
         assert_eq!(review4.base_branch, "default");
         assert_eq!(review4.target_branch, "default");
     }

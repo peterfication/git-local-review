@@ -1166,7 +1166,7 @@ mod tests {
 
     #[test]
     fn test_review_details_view_creation() {
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
         let view = ReviewDetailsView::new(review.clone());
 
         assert_eq!(view.view_type(), ViewType::ReviewDetails);
@@ -1191,7 +1191,7 @@ mod tests {
 
     #[test]
     fn test_review_details_view_debug_state() {
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
         let view = ReviewDetailsView::new(review.clone());
 
         let debug_state = view.debug_state();
@@ -1212,7 +1212,7 @@ mod tests {
 
     #[test]
     fn test_review_details_view_keybindings() {
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
         let view = ReviewDetailsView::new(review);
 
         let keybindings = view.get_keybindings();
@@ -1294,7 +1294,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_review_details_view_handles_escape_key() {
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
         let mut view = ReviewDetailsView::new(review);
         let mut app = create_test_app().await;
 
@@ -1311,7 +1311,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_review_details_view_handles_escape_key_in_lines_mode() {
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
         let mut view = ReviewDetailsView::new(review);
         let mut app = create_test_app().await;
 
@@ -1330,7 +1330,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_review_details_view_handles_help_key() {
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
         let mut view = ReviewDetailsView::new(review);
         let mut app = create_test_app().await;
 
@@ -1407,7 +1407,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_review_details_view_scroll_down_basic() {
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
         let mut view = ReviewDetailsView::new(review);
         let _app = create_test_app().await;
 
@@ -1429,7 +1429,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_review_details_view_scroll_key_handling() {
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
         let mut view = ReviewDetailsView::new(review);
         let mut app = create_test_app().await;
 
@@ -1452,7 +1452,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_review_details_view_scroll_up() {
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
         let mut view = ReviewDetailsView::new(review);
         let mut app = create_test_app().await;
 
@@ -1476,7 +1476,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_review_details_view_scroll_up_bounds() {
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
         let mut view = ReviewDetailsView::new(review);
         let mut app = create_test_app().await;
 
@@ -1509,7 +1509,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_review_details_view_scroll_reset_on_error() {
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
         let mut view = ReviewDetailsView::new(review);
         let mut app = create_test_app().await;
 
@@ -1828,7 +1828,7 @@ mod tests {
 
     #[test]
     fn test_comment_indicator_no_comments() {
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
         let view = ReviewDetailsView::new(review);
 
         let diff_file = DiffFile {
@@ -1843,7 +1843,7 @@ mod tests {
 
     #[test]
     fn test_comment_indicator_file_comments_only() {
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
         let mut view = ReviewDetailsView::new(review);
 
         let diff_file = DiffFile {
@@ -1862,7 +1862,7 @@ mod tests {
 
     #[test]
     fn test_comment_indicator_line_comments_only() {
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
         let mut view = ReviewDetailsView::new(review);
 
         let diff_file = DiffFile {
@@ -1883,7 +1883,7 @@ mod tests {
 
     #[test]
     fn test_comment_indicator_file_and_line_comments() {
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
         let mut view = ReviewDetailsView::new(review);
 
         let diff_file = DiffFile {

@@ -529,7 +529,7 @@ mod tests {
         let mut events = EventHandler::new_for_test();
 
         // Create a test review
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
         review.save(database.pool()).await.unwrap();
 
         let app = App {
@@ -795,7 +795,7 @@ mod tests {
         };
 
         // Create a review but try to delete with non-existent ID
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
         review.save(app.database.pool()).await.unwrap();
 
         // Test deletion with non-existent ID
@@ -876,7 +876,7 @@ mod tests {
         };
 
         // Create a test review
-        let review = Review::test_review(());
+        let review = Review::test_review(Review::builder());
         review.save(app.database.pool()).await.unwrap();
 
         // Test loading the review
