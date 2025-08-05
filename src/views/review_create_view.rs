@@ -1,8 +1,11 @@
+#[cfg(test)]
+use std::any::Any;
+
 use std::sync::Arc;
 
 use ratatui::{
     buffer::Buffer,
-    crossterm::event::{KeyCode, KeyEvent},
+    crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers},
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     widgets::{Block, BorderType, Clear, List, ListItem, Paragraph, Widget},
@@ -231,7 +234,7 @@ impl ViewHandler for ReviewCreateView {
     }
 
     #[cfg(test)]
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 
@@ -242,9 +245,9 @@ impl ViewHandler for ReviewCreateView {
                 description: "Navigate branch list".to_string(),
                 key_event: KeyEvent {
                     code: KeyCode::Up,
-                    modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
-                    kind: ratatui::crossterm::event::KeyEventKind::Press,
-                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                    modifiers: KeyModifiers::empty(),
+                    kind: KeyEventKind::Press,
+                    state: KeyEventState::empty(),
                 },
             },
             KeyBinding {
@@ -252,9 +255,9 @@ impl ViewHandler for ReviewCreateView {
                 description: "Switch between input fields".to_string(),
                 key_event: KeyEvent {
                     code: KeyCode::Tab,
-                    modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
-                    kind: ratatui::crossterm::event::KeyEventKind::Press,
-                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                    modifiers: KeyModifiers::empty(),
+                    kind: KeyEventKind::Press,
+                    state: KeyEventState::empty(),
                 },
             },
             KeyBinding {
@@ -262,9 +265,9 @@ impl ViewHandler for ReviewCreateView {
                 description: "Create review".to_string(),
                 key_event: KeyEvent {
                     code: KeyCode::Enter,
-                    modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
-                    kind: ratatui::crossterm::event::KeyEventKind::Press,
-                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                    modifiers: KeyModifiers::empty(),
+                    kind: KeyEventKind::Press,
+                    state: KeyEventState::empty(),
                 },
             },
             KeyBinding {
@@ -272,16 +275,16 @@ impl ViewHandler for ReviewCreateView {
                 description: "Cancel and close popup".to_string(),
                 key_event: KeyEvent {
                     code: KeyCode::Esc,
-                    modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
-                    kind: ratatui::crossterm::event::KeyEventKind::Press,
-                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                    modifiers: KeyModifiers::empty(),
+                    kind: KeyEventKind::Press,
+                    state: KeyEventState::empty(),
                 },
             },
         ])
     }
 
     #[cfg(test)]
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self) -> &dyn Any {
         self
     }
 }
@@ -391,13 +394,16 @@ impl ReviewCreateView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::Database;
-    use crate::event::{AppEvent, Event};
-    use crate::test_utils::render_app_to_terminal_backend;
+
     use insta::assert_snapshot;
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
     use sqlx::SqlitePool;
 
-    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
+    use crate::{
+        database::Database,
+        event::{AppEvent, Event, EventHandler},
+        test_utils::render_app_to_terminal_backend,
+    };
 
     async fn create_test_app() -> App {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
@@ -407,7 +413,7 @@ mod tests {
 
         App {
             running: true,
-            events: crate::event::EventHandler::new_for_test(),
+            events: EventHandler::new_for_test(),
             database,
             view_stack: vec![],
             repo_path: ".".to_string(),

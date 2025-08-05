@@ -1,10 +1,6 @@
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::future::Future;
-use std::path::Path;
-use std::pin::Pin;
-use std::rc::Rc;
-use std::sync::Arc;
+use std::{
+    cell::RefCell, collections::HashMap, future::Future, path::Path, pin::Pin, rc::Rc, sync::Arc,
+};
 
 use crate::event::{AppEvent, EventHandler};
 use crate::models::{Diff, DiffFile};
@@ -331,8 +327,15 @@ impl ServiceHandler for GitService {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use std::fs;
     use tempfile::TempDir;
+
+    use crate::{
+        app::App,
+        database::Database,
+        event::{Event, EventHandler},
+    };
 
     fn create_test_git_repo() -> color_eyre::Result<TempDir> {
         let temp_dir = TempDir::new()?;
@@ -546,15 +549,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_git_branches_load_event() {
-        let database = crate::database::Database::new().await.unwrap();
-        let mut events = crate::event::EventHandler::new_for_test();
+        let database = Database::new().await.unwrap();
+        let mut events = EventHandler::new_for_test();
 
         // Initially no events
         assert!(!events.has_pending_events());
 
-        let app = crate::app::App {
+        let app = App {
             running: true,
-            events: crate::event::EventHandler::new_for_test(),
+            events: EventHandler::new_for_test(),
             database,
             view_stack: vec![],
             repo_path: ".".to_string(),
@@ -575,15 +578,12 @@ mod tests {
         assert!(events.has_pending_events());
 
         let event1 = events.try_recv().unwrap();
-        assert!(matches!(
-            *event1,
-            crate::event::Event::App(AppEvent::GitBranchesLoading)
-        ));
+        assert!(matches!(*event1, Event::App(AppEvent::GitBranchesLoading)));
 
         let event2 = events.try_recv().unwrap();
         assert!(matches!(
             *event2,
-            crate::event::Event::App(AppEvent::GitBranchesLoadingState(
+            Event::App(AppEvent::GitBranchesLoadingState(
                 GitBranchesLoadingState::Loading
             ))
         ));
@@ -595,20 +595,15 @@ mod tests {
     #[tokio::test]
     async fn test_handle_git_branches_loading_event_success() {
         let temp_dir = create_test_git_repo().unwrap();
-        let original_dir = std::env::current_dir().unwrap();
-
-        // Change to test repo directory
-        std::env::set_current_dir(temp_dir.path()).unwrap();
-
-        let database = crate::database::Database::new().await.unwrap();
-        let mut events = crate::event::EventHandler::new_for_test();
+        let database = Database::new().await.unwrap();
+        let mut events = EventHandler::new_for_test();
 
         // Initially no events
         assert!(!events.has_pending_events());
 
-        let app = crate::app::App {
+        let app = App {
             running: true,
-            events: crate::event::EventHandler::new_for_test(),
+            events: EventHandler::new_for_test(),
             database,
             view_stack: vec![],
             repo_path: temp_dir.path().to_string_lossy().to_string(),
@@ -629,9 +624,9 @@ mod tests {
         assert!(events.has_pending_events());
 
         let event = events.try_recv().unwrap();
-        if let crate::event::Event::App(AppEvent::GitBranchesLoadingState(
-            GitBranchesLoadingState::Loaded(branches),
-        )) = &*event
+        if let Event::App(AppEvent::GitBranchesLoadingState(GitBranchesLoadingState::Loaded(
+            branches,
+        ))) = &*event
         {
             // Should contain the test branches
             assert!(branches.len() >= 3);
@@ -646,31 +641,21 @@ mod tests {
 
         // No more events should be pending
         assert!(!events.has_pending_events());
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap_or_else(
-            // FIXLATER: Don't panic because in CI it doesn't work
-            |e| println!("Failed to restore original directory: {e}"),
-        );
     }
 
     #[tokio::test]
     async fn test_handle_git_branches_loading_event_error() {
-        let original_dir = std::env::current_dir().unwrap();
-
-        // Change to non-git directory
         let temp_dir = tempfile::TempDir::new().unwrap();
-        std::env::set_current_dir(temp_dir.path()).unwrap();
 
-        let database = crate::database::Database::new().await.unwrap();
-        let mut events = crate::event::EventHandler::new_for_test();
+        let database = Database::new().await.unwrap();
+        let mut events = EventHandler::new_for_test();
 
         // Initially no events
         assert!(!events.has_pending_events());
 
-        let app = crate::app::App {
+        let app = App {
             running: true,
-            events: crate::event::EventHandler::new_for_test(),
+            events: EventHandler::new_for_test(),
             database,
             view_stack: vec![],
             repo_path: temp_dir.path().to_string_lossy().to_string(),
@@ -691,9 +676,9 @@ mod tests {
         assert!(events.has_pending_events());
 
         let event = events.try_recv().unwrap();
-        if let crate::event::Event::App(AppEvent::GitBranchesLoadingState(
-            GitBranchesLoadingState::Error(error),
-        )) = &*event
+        if let Event::App(AppEvent::GitBranchesLoadingState(GitBranchesLoadingState::Error(
+            error,
+        ))) = &*event
         {
             // Should contain error message about not being a git repository
             assert!(error.contains("repository") || error.contains("not found"));
@@ -703,9 +688,6 @@ mod tests {
 
         // No more events should be pending
         assert!(!events.has_pending_events());
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[tokio::test]
@@ -747,7 +729,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_git_branches_load_function() {
-        let mut events = crate::event::EventHandler::new_for_test();
+        let mut events = EventHandler::new_for_test();
 
         // Initially no events
         assert!(!events.has_pending_events());
@@ -759,15 +741,12 @@ mod tests {
         assert!(events.has_pending_events());
 
         let event1 = events.try_recv().unwrap();
-        assert!(matches!(
-            *event1,
-            crate::event::Event::App(AppEvent::GitBranchesLoading)
-        ));
+        assert!(matches!(*event1, Event::App(AppEvent::GitBranchesLoading)));
 
         let event2 = events.try_recv().unwrap();
         assert!(matches!(
             *event2,
-            crate::event::Event::App(AppEvent::GitBranchesLoadingState(
+            Event::App(AppEvent::GitBranchesLoadingState(
                 GitBranchesLoadingState::Loading
             ))
         ));
@@ -779,12 +758,7 @@ mod tests {
     #[tokio::test]
     async fn test_handle_git_branches_loading_function_success() {
         let temp_dir = create_test_git_repo().unwrap();
-        let original_dir = std::env::current_dir().unwrap();
-
-        // Change to test repo directory
-        std::env::set_current_dir(temp_dir.path()).unwrap();
-
-        let mut events = crate::event::EventHandler::new_for_test();
+        let mut events = EventHandler::new_for_test();
 
         // Initially no events
         assert!(!events.has_pending_events());
@@ -797,9 +771,9 @@ mod tests {
         assert!(events.has_pending_events());
 
         let event = events.try_recv().unwrap();
-        if let crate::event::Event::App(AppEvent::GitBranchesLoadingState(
-            GitBranchesLoadingState::Loaded(branches),
-        )) = &*event
+        if let Event::App(AppEvent::GitBranchesLoadingState(GitBranchesLoadingState::Loaded(
+            branches,
+        ))) = &*event
         {
             // Should contain the test branches
             assert!(branches.len() >= 3);
@@ -811,20 +785,14 @@ mod tests {
 
         // No more events should be pending
         assert!(!events.has_pending_events());
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[tokio::test]
     async fn test_handle_git_branches_loading_function_error() {
-        let original_dir = std::env::current_dir().unwrap();
-
         // Change to non-git directory
         let temp_dir = tempfile::TempDir::new().unwrap();
-        std::env::set_current_dir(temp_dir.path()).unwrap();
 
-        let mut events = crate::event::EventHandler::new_for_test();
+        let mut events = EventHandler::new_for_test();
 
         // Initially no events
         assert!(!events.has_pending_events());
@@ -837,9 +805,9 @@ mod tests {
         assert!(events.has_pending_events());
 
         let event = events.try_recv().unwrap();
-        if let crate::event::Event::App(AppEvent::GitBranchesLoadingState(
-            GitBranchesLoadingState::Error(error),
-        )) = &*event
+        if let Event::App(AppEvent::GitBranchesLoadingState(GitBranchesLoadingState::Error(
+            error,
+        ))) = &*event
         {
             // Should contain error message
             assert!(!error.is_empty());
@@ -849,8 +817,5 @@ mod tests {
 
         // No more events should be pending
         assert!(!events.has_pending_events());
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
     }
 }

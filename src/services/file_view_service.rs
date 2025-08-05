@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{future::Future, pin::Pin, sync::Arc};
 
 use crate::{
     database::Database,
@@ -14,8 +14,7 @@ impl ServiceHandler for FileViewService {
     fn handle_app_event<'a>(
         event: &'a AppEvent,
         context: ServiceContext<'a>,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = color_eyre::Result<()>> + Send + 'a>>
-    {
+    ) -> Pin<Box<dyn Future<Output = color_eyre::Result<()>> + Send + 'a>> {
         Box::pin(async move {
             match event {
                 AppEvent::FileViewToggle {
@@ -132,8 +131,15 @@ impl FileViewService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{database::Database, event::EventHandler, models::Review};
+
     use sqlx::SqlitePool;
+
+    use crate::{
+        app::App,
+        database::Database,
+        event::{Event, EventHandler},
+        models::Review,
+    };
 
     async fn create_test_database() -> Database {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
@@ -167,7 +173,7 @@ mod tests {
             file_path: Arc::from(file_path),
         };
 
-        let app = crate::app::App {
+        let app = App {
             running: true,
             events: EventHandler::new_for_test(),
             database,
@@ -195,7 +201,7 @@ mod tests {
         // Check that success event was sent
         let sent_event = events.try_recv().unwrap();
         match &*sent_event {
-            crate::event::Event::App(AppEvent::FileViewToggled {
+            Event::App(AppEvent::FileViewToggled {
                 review_id,
                 file_path: sent_file_path,
                 is_viewed,
@@ -210,7 +216,7 @@ mod tests {
         // Check that file views reload event was sent
         let reload_event = events.try_recv().unwrap();
         match &*reload_event {
-            crate::event::Event::App(AppEvent::FileViewsLoad { review_id }) => {
+            Event::App(AppEvent::FileViewsLoad { review_id }) => {
                 assert_eq!(review_id.as_ref(), review.id);
             }
             _ => panic!("Expected FileViewsLoad event, got: {reload_event:?}"),
@@ -240,7 +246,7 @@ mod tests {
             file_path: Arc::from(file_path),
         };
 
-        let app = crate::app::App {
+        let app = App {
             running: true,
             events: EventHandler::new_for_test(),
             database,
@@ -268,7 +274,7 @@ mod tests {
         // Check that success event was sent
         let sent_event = events.try_recv().unwrap();
         match &*sent_event {
-            crate::event::Event::App(AppEvent::FileViewToggled {
+            Event::App(AppEvent::FileViewToggled {
                 review_id,
                 file_path: sent_file_path,
                 is_viewed,
@@ -299,7 +305,7 @@ mod tests {
             review_id: Arc::from(review.id.as_str()),
         };
 
-        let app = crate::app::App {
+        let app = App {
             running: true,
             events: EventHandler::new_for_test(),
             database,
@@ -320,7 +326,7 @@ mod tests {
         // Check loading event was sent
         let loading_event = events.try_recv().unwrap();
         match &*loading_event {
-            crate::event::Event::App(AppEvent::FileViewsLoading { review_id }) => {
+            Event::App(AppEvent::FileViewsLoading { review_id }) => {
                 assert_eq!(review_id.as_ref(), review.id);
             }
             _ => panic!("Expected FileViewsLoading event, got: {loading_event:?}"),
@@ -329,7 +335,7 @@ mod tests {
         // Check loaded event was sent
         let loaded_event = events.try_recv().unwrap();
         match &*loaded_event {
-            crate::event::Event::App(AppEvent::FileViewsLoaded {
+            Event::App(AppEvent::FileViewsLoaded {
                 review_id,
                 viewed_files,
             }) => {
@@ -353,7 +359,7 @@ mod tests {
             review_id: Arc::from(review.id.as_str()),
         };
 
-        let app = crate::app::App {
+        let app = App {
             running: true,
             events: EventHandler::new_for_test(),
             database,
@@ -364,7 +370,7 @@ mod tests {
             &event,
             ServiceContext {
                 database: &app.database,
-                repo_path: ".",
+                repo_path: &app.repo_path,
                 events: &mut events,
             },
         )
@@ -377,7 +383,7 @@ mod tests {
         // Check loaded event was sent with empty list
         let loaded_event = events.try_recv().unwrap();
         match &*loaded_event {
-            crate::event::Event::App(AppEvent::FileViewsLoaded {
+            Event::App(AppEvent::FileViewsLoaded {
                 review_id,
                 viewed_files,
             }) => {
@@ -396,7 +402,7 @@ mod tests {
         // Send an unrelated event
         let event = AppEvent::Quit;
 
-        let app = crate::app::App {
+        let app = App {
             running: true,
             events: EventHandler::new_for_test(),
             database,
@@ -407,7 +413,7 @@ mod tests {
             &event,
             ServiceContext {
                 database: &app.database,
-                repo_path: ".",
+                repo_path: &app.repo_path,
                 events: &mut events,
             },
         )

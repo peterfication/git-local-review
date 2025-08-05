@@ -462,6 +462,7 @@ impl Comment {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use sqlx::SqlitePool;
 
     async fn create_test_pool() -> SqlitePool {

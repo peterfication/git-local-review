@@ -1,8 +1,11 @@
+#[cfg(test)]
+use std::any::Any;
+
 use std::sync::Arc;
 
 use ratatui::{
     buffer::Buffer,
-    crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
+    crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers},
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style, Stylize},
     widgets::{Block, List, ListItem, Paragraph, Widget},
@@ -95,7 +98,7 @@ impl ViewHandler for MainView {
     }
 
     #[cfg(test)]
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 
@@ -107,8 +110,8 @@ impl ViewHandler for MainView {
                 key_event: KeyEvent {
                     code: KeyCode::Char('q'),
                     modifiers: KeyModifiers::empty(),
-                    kind: ratatui::crossterm::event::KeyEventKind::Press,
-                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                    kind: KeyEventKind::Press,
+                    state: KeyEventState::empty(),
                 },
             },
             KeyBinding {
@@ -117,8 +120,8 @@ impl ViewHandler for MainView {
                 key_event: KeyEvent {
                     code: KeyCode::Char('n'),
                     modifiers: KeyModifiers::empty(),
-                    kind: ratatui::crossterm::event::KeyEventKind::Press,
-                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                    kind: KeyEventKind::Press,
+                    state: KeyEventState::empty(),
                 },
             },
             KeyBinding {
@@ -127,8 +130,8 @@ impl ViewHandler for MainView {
                 key_event: KeyEvent {
                     code: KeyCode::Down,
                     modifiers: KeyModifiers::empty(),
-                    kind: ratatui::crossterm::event::KeyEventKind::Press,
-                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                    kind: KeyEventKind::Press,
+                    state: KeyEventState::empty(),
                 },
             },
             KeyBinding {
@@ -137,8 +140,8 @@ impl ViewHandler for MainView {
                 key_event: KeyEvent {
                     code: KeyCode::Char('d'),
                     modifiers: KeyModifiers::empty(),
-                    kind: ratatui::crossterm::event::KeyEventKind::Press,
-                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                    kind: KeyEventKind::Press,
+                    state: KeyEventState::empty(),
                 },
             },
             KeyBinding {
@@ -147,15 +150,15 @@ impl ViewHandler for MainView {
                 key_event: KeyEvent {
                     code: KeyCode::Char('o'),
                     modifiers: KeyModifiers::empty(),
-                    kind: ratatui::crossterm::event::KeyEventKind::Press,
-                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                    kind: KeyEventKind::Press,
+                    state: KeyEventState::empty(),
                 },
             },
         ])
     }
 
     #[cfg(test)]
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self) -> &dyn Any {
         self
     }
 }
@@ -306,15 +309,18 @@ impl MainView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::Database;
-    use crate::event::{AppEvent, Event};
-    use crate::models::review::{Review, TestReviewParams};
-    use crate::services::review_service::ReviewCreateData;
-    use crate::test_utils::{fixed_time, render_app_to_terminal_backend};
-    use crate::time_provider::MockTimeProvider;
+
     use insta::assert_snapshot;
-    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
     use sqlx::SqlitePool;
+
+    use crate::{
+        database::Database,
+        event::{AppEvent, Event},
+        models::review::{Review, TestReviewParams},
+        services::review_service::ReviewCreateData,
+        test_utils::{fixed_time, render_app_to_terminal_backend},
+        time_provider::MockTimeProvider,
+    };
 
     async fn create_test_app_with_reviews() -> App {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

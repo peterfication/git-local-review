@@ -111,11 +111,11 @@ impl App {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
     use sqlx::SqlitePool;
     use std::sync::Arc;
-
-    use super::*;
 
     use crate::{
         event::{AppEvent, Event},

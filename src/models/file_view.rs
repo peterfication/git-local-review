@@ -161,8 +161,10 @@ impl FileView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{models::Review, test_utils::fixed_time, time_provider::MockTimeProvider};
+
     use sqlx::SqlitePool;
+
+    use crate::{models::Review, test_utils::fixed_time, time_provider::MockTimeProvider};
 
     async fn create_test_pool() -> SqlitePool {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

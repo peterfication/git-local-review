@@ -1,3 +1,6 @@
+#[cfg(test)]
+use std::any::Any;
+
 use std::sync::Arc;
 
 use ratatui::{
@@ -156,7 +159,7 @@ impl ViewHandler for HelpModalView {
     }
 
     #[cfg(test)]
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 
@@ -167,7 +170,7 @@ impl ViewHandler for HelpModalView {
     }
 
     #[cfg(test)]
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self) -> &dyn Any {
         self
     }
 }
@@ -175,11 +178,17 @@ impl ViewHandler for HelpModalView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::Database;
-    use crate::test_utils::render_app_to_terminal_backend;
+
     use insta::assert_snapshot;
     use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
     use sqlx::SqlitePool;
+
+    use crate::{
+        database::Database,
+        event::{Event, EventHandler},
+        test_utils::render_app_to_terminal_backend,
+        views::{ConfirmationDialogView, MainView, ReviewCreateView},
+    };
 
     async fn create_test_app() -> App {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
@@ -189,7 +198,7 @@ mod tests {
 
         App {
             running: true,
-            events: crate::event::EventHandler::new_for_test(),
+            events: EventHandler::new_for_test(),
             database,
             view_stack: vec![],
             repo_path: ".".to_string(),
@@ -215,7 +224,7 @@ mod tests {
 
     #[test]
     fn test_help_modal_view_for_main_view() {
-        let main_view = crate::views::MainView::new();
+        let main_view = MainView::new();
         let keybindings = main_view.get_keybindings();
         let view = HelpModalView::new(Arc::clone(&keybindings));
         assert_eq!(view.keybindings.len(), 5);
@@ -224,7 +233,7 @@ mod tests {
 
     #[test]
     fn test_help_modal_view_for_review_create_view() {
-        let review_create_view = crate::views::ReviewCreateView::default();
+        let review_create_view = ReviewCreateView::default();
         let keybindings = review_create_view.get_keybindings();
         let view = HelpModalView::new(Arc::clone(&keybindings));
         assert_eq!(view.keybindings.len(), 4);
@@ -233,11 +242,8 @@ mod tests {
 
     #[test]
     fn test_help_modal_view_for_confirmation_dialog() {
-        let confirmation_view = crate::views::ConfirmationDialogView::new(
-            "Test".to_string(),
-            AppEvent::Quit,
-            AppEvent::ViewClose,
-        );
+        let confirmation_view =
+            ConfirmationDialogView::new("Test".to_string(), AppEvent::Quit, AppEvent::ViewClose);
         let keybindings = confirmation_view.get_keybindings();
         let view = HelpModalView::new(Arc::clone(&keybindings));
         assert_eq!(view.keybindings.len(), 2);
@@ -247,7 +253,7 @@ mod tests {
     #[tokio::test]
     async fn test_help_modal_view_handle_esc_key() {
         let mut app = create_test_app().await;
-        let main_view = crate::views::MainView::new();
+        let main_view = MainView::new();
         let keybindings = main_view.get_keybindings();
         let mut view = HelpModalView::new(keybindings);
         assert!(!app.events.has_pending_events());
@@ -263,16 +269,13 @@ mod tests {
 
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(
-            *event,
-            crate::event::Event::App(AppEvent::ViewClose)
-        ));
+        assert!(matches!(*event, Event::App(AppEvent::ViewClose)));
     }
 
     #[tokio::test]
     async fn test_help_modal_view_navigation() {
         let mut app = create_test_app().await;
-        let main_view = crate::views::MainView::new();
+        let main_view = MainView::new();
         let keybindings = main_view.get_keybindings();
         let mut view = HelpModalView::new(keybindings);
 
@@ -323,7 +326,7 @@ mod tests {
     #[tokio::test]
     async fn test_help_modal_view_navigation_wraparound() {
         let _app = create_test_app().await;
-        let main_view = crate::views::MainView::new();
+        let main_view = MainView::new();
         let keybindings = main_view.get_keybindings();
         let mut view = HelpModalView::new(keybindings);
 
@@ -344,7 +347,7 @@ mod tests {
     #[tokio::test]
     async fn test_help_modal_view_enter_sends_key_event() {
         let mut app = create_test_app().await;
-        let main_view = crate::views::MainView::new();
+        let main_view = MainView::new();
         let keybindings = main_view.get_keybindings();
         let mut view = HelpModalView::new(keybindings);
 
@@ -363,15 +366,12 @@ mod tests {
         // Should send HelpKeySelected
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
-        assert!(matches!(
-            *event,
-            crate::event::Event::App(AppEvent::HelpKeySelected(_))
-        ));
+        assert!(matches!(*event, Event::App(AppEvent::HelpKeySelected(_))));
     }
 
     #[tokio::test]
     async fn test_help_modal_view_render() {
-        let main_view = crate::views::MainView::new();
+        let main_view = MainView::new();
         let keybindings = main_view.get_keybindings();
         let view = HelpModalView::new(Arc::clone(&keybindings));
         let app = App {

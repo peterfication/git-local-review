@@ -1,6 +1,4 @@
-use std::sync::Arc;
-
-use super::{ServiceContext, ServiceHandler};
+use std::{future::Future, pin::Pin, sync::Arc};
 
 use crate::{
     database::Database,
@@ -8,6 +6,8 @@ use crate::{
     models::{Review, ReviewId},
     services::git_service::GitService,
 };
+
+use super::{ServiceContext, ServiceHandler};
 
 #[derive(Clone, Debug)]
 pub struct ReviewCreateData {
@@ -230,7 +230,7 @@ impl ServiceHandler for ReviewService {
     fn handle_app_event<'a>(
         event: &'a AppEvent,
         context: ServiceContext<'a>,
-    ) -> std::pin::Pin<Box<dyn Future<Output = color_eyre::Result<()>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = color_eyre::Result<()>> + Send + 'a>> {
         Box::pin(async move {
             match event {
                 AppEvent::ReviewsLoad => Self::handle_reviews_load(context.events),
@@ -258,9 +258,14 @@ impl ServiceHandler for ReviewService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::event::{Event, EventHandler, ReviewId};
-    use crate::models::review::TestReviewParams;
+
     use sqlx::SqlitePool;
+
+    use crate::{
+        app::App,
+        event::{Event, EventHandler, ReviewId},
+        models::review::TestReviewParams,
+    };
 
     async fn create_test_database() -> Database {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
@@ -492,9 +497,9 @@ mod tests {
     async fn test_handle_app_event_reviews_load() {
         let database = create_test_database().await;
         let mut events = EventHandler::new_for_test();
-        let app = crate::app::App {
+        let app = App {
             running: true,
-            events: crate::event::EventHandler::new_for_test(),
+            events: EventHandler::new_for_test(),
             database,
             view_stack: vec![],
             repo_path: ".".to_string(),
@@ -526,9 +531,9 @@ mod tests {
         let review = Review::test_review(());
         review.save(database.pool()).await.unwrap();
 
-        let app = crate::app::App {
+        let app = App {
             running: true,
-            events: crate::event::EventHandler::new_for_test(),
+            events: EventHandler::new_for_test(),
             database,
             view_stack: vec![],
             repo_path: ".".to_string(),
@@ -562,9 +567,9 @@ mod tests {
     async fn test_handle_app_event_reviews_loading_empty() {
         let database = create_test_database().await;
         let mut events = EventHandler::new_for_test();
-        let app = crate::app::App {
+        let app = App {
             running: true,
-            events: crate::event::EventHandler::new_for_test(),
+            events: EventHandler::new_for_test(),
             database,
             view_stack: vec![],
             repo_path: ".".to_string(),
@@ -597,9 +602,9 @@ mod tests {
     async fn test_handle_app_event_other_events() {
         let database = create_test_database().await;
         let mut events = EventHandler::new_for_test();
-        let app = crate::app::App {
+        let app = App {
             running: true,
-            events: crate::event::EventHandler::new_for_test(),
+            events: EventHandler::new_for_test(),
             database,
             view_stack: vec![],
             repo_path: ".".to_string(),
@@ -633,9 +638,9 @@ mod tests {
             target_sha: None,
         };
 
-        let app = crate::app::App {
+        let app = App {
             running: true,
-            events: crate::event::EventHandler::new_for_test(),
+            events: EventHandler::new_for_test(),
             database,
             view_stack: vec![],
             repo_path: ".".to_string(),
@@ -681,9 +686,9 @@ mod tests {
             target_sha: None,
         };
 
-        let app = crate::app::App {
+        let app = App {
             running: true,
-            events: crate::event::EventHandler::new_for_test(),
+            events: EventHandler::new_for_test(),
             database,
             view_stack: vec![],
             repo_path: ".".to_string(),
@@ -724,9 +729,9 @@ mod tests {
         let database = create_test_database().await;
         let mut events = EventHandler::new_for_test();
 
-        let app = crate::app::App {
+        let app = App {
             running: true,
-            events: crate::event::EventHandler::new_for_test(),
+            events: EventHandler::new_for_test(),
             database,
             view_stack: vec![],
             repo_path: ".".to_string(),
@@ -780,9 +785,9 @@ mod tests {
         let database = create_test_database().await;
         let mut events = EventHandler::new_for_test();
 
-        let app = crate::app::App {
+        let app = App {
             running: true,
-            events: crate::event::EventHandler::new_for_test(),
+            events: EventHandler::new_for_test(),
             database,
             view_stack: vec![],
             repo_path: ".".to_string(),
@@ -828,9 +833,9 @@ mod tests {
         let database = Database::from_pool(pool);
 
         let mut events = EventHandler::new_for_test();
-        let app = crate::app::App {
+        let app = App {
             running: true,
-            events: crate::event::EventHandler::new_for_test(),
+            events: EventHandler::new_for_test(),
             database,
             view_stack: vec![],
             repo_path: ".".to_string(),
@@ -861,9 +866,9 @@ mod tests {
         let database = create_test_database().await;
         let mut events = EventHandler::new_for_test();
 
-        let app = crate::app::App {
+        let app = App {
             running: true,
-            events: crate::event::EventHandler::new_for_test(),
+            events: EventHandler::new_for_test(),
             database,
             view_stack: vec![],
             repo_path: ".".to_string(),
