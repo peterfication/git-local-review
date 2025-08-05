@@ -1,6 +1,11 @@
-use std::collections::{HashMap, HashSet};
-use std::fmt;
-use std::sync::Arc;
+#[cfg(test)]
+use std::any::Any;
+
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+    sync::Arc,
+};
 
 use ratatui::{
     buffer::Buffer,
@@ -330,12 +335,12 @@ impl ViewHandler for ReviewDetailsView {
     }
 
     #[cfg(test)]
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 
     #[cfg(test)]
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self) -> &dyn Any {
         self
     }
 }
@@ -725,7 +730,7 @@ impl ReviewDetailsView {
     }
 
     /// Get the current file list based on the active file list type
-    fn get_current_file_list(&self) -> Vec<&crate::models::DiffFile> {
+    fn get_current_file_list(&self) -> Vec<&DiffFile> {
         match self.active_file_list {
             FileListType::NotViewed => self
                 .diff
@@ -743,7 +748,7 @@ impl ReviewDetailsView {
     }
 
     /// Get the currently selected file from the active file list
-    fn get_selected_file(&self) -> Option<&crate::models::DiffFile> {
+    fn get_selected_file(&self) -> Option<&DiffFile> {
         let current_files = self.get_current_file_list();
         current_files.get(self.selected_file_index).copied()
     }
@@ -1131,14 +1136,18 @@ impl ReviewDetailsView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use insta::assert_snapshot;
+    use sqlx::SqlitePool;
+
     use crate::{
         app::App,
         database::Database,
-        models::{Review, review::TestReviewParams},
+        event::{Event, EventHandler},
+        models::{Comment, Diff, DiffFile, Review, review::TestReviewParams},
+        services::{CommentsLoadParams, CommentsLoadingState},
         test_utils::render_app_to_terminal_backend,
     };
-    use insta::assert_snapshot;
-    use sqlx::SqlitePool;
 
     async fn create_test_app() -> App {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
@@ -1148,7 +1157,7 @@ mod tests {
 
         App {
             running: true,
-            events: crate::event::EventHandler::new_for_test(),
+            events: EventHandler::new_for_test(),
             database,
             view_stack: vec![],
             repo_path: ".".to_string(),
@@ -1295,7 +1304,7 @@ mod tests {
         // Should send ViewClose event when in Files mode
         let event = app.events.try_recv().unwrap();
         match *event {
-            crate::event::Event::App(AppEvent::ViewClose) => {}
+            Event::App(AppEvent::ViewClose) => {}
             _ => panic!("Expected ViewClose event"),
         }
     }
@@ -1334,7 +1343,7 @@ mod tests {
         // Should send HelpOpen event
         let event = app.events.try_recv().unwrap();
         match &*event {
-            crate::event::Event::App(AppEvent::HelpOpen(_)) => {}
+            Event::App(AppEvent::HelpOpen(_)) => {}
             _ => panic!("Expected HelpOpen event"),
         }
     }
@@ -1607,7 +1616,7 @@ mod tests {
         };
 
         app.handle_app_events(&AppEvent::GitDiffLoadingState(GitDiffLoadingState::Loaded(
-            Arc::new(crate::models::Diff::from_files(files)),
+            Arc::new(Diff::from_files(files)),
         )));
 
         assert_snapshot!(render_app_to_terminal_backend(app))
@@ -1625,7 +1634,7 @@ mod tests {
  This is a test file
 -Old line to remove
 +New line to add"#;
-        let files = vec![crate::models::DiffFile {
+        let files = vec![DiffFile {
             path: "test_file.txt".to_string(),
             content: diff_content.to_string(),
         }];
@@ -1636,7 +1645,7 @@ mod tests {
         };
 
         app.handle_app_events(&AppEvent::GitDiffLoadingState(GitDiffLoadingState::Loaded(
-            Arc::new(crate::models::Diff::from_files(files)),
+            Arc::new(Diff::from_files(files)),
         )));
 
         assert_snapshot!(render_app_to_terminal_backend(app))
@@ -1649,11 +1658,11 @@ mod tests {
         let mut app = create_test_app().await;
 
         // Set up a diff with files
-        let files = vec![crate::models::DiffFile {
+        let files = vec![DiffFile {
             path: "src/main.rs".to_string(),
             content: "line1\nline2\nline3".to_string(),
         }];
-        let diff = Arc::new(crate::models::Diff::from_files(files));
+        let diff = Arc::new(Diff::from_files(files));
         view.diff = diff;
         view.navigation_mode = NavigationMode::Files;
         view.selected_file_index = 0;
@@ -1668,7 +1677,7 @@ mod tests {
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
         match &*event {
-            crate::event::Event::App(AppEvent::CommentsOpen {
+            Event::App(AppEvent::CommentsOpen {
                 review_id,
                 file_path,
                 line_number,
@@ -1688,11 +1697,11 @@ mod tests {
         let mut app = create_test_app().await;
 
         // Set up a diff with files
-        let files = vec![crate::models::DiffFile {
+        let files = vec![DiffFile {
             path: "src/lib.rs".to_string(),
             content: "line1\nline2\nline3\nline4\nline5".to_string(),
         }];
-        let diff = Arc::new(crate::models::Diff::from_files(files));
+        let diff = Arc::new(Diff::from_files(files));
         view.diff = diff;
         view.navigation_mode = NavigationMode::Lines; // Switch to Lines mode
         view.selected_file_index = 0;
@@ -1708,7 +1717,7 @@ mod tests {
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
         match &*event {
-            crate::event::Event::App(AppEvent::CommentsOpen {
+            Event::App(AppEvent::CommentsOpen {
                 review_id,
                 file_path,
                 line_number,
@@ -1759,11 +1768,11 @@ mod tests {
         let mut app = create_test_app().await;
 
         // Set up a diff with one file
-        let files = vec![crate::models::DiffFile {
+        let files = vec![DiffFile {
             path: "src/main.rs".to_string(),
             content: "line1\nline2".to_string(),
         }];
-        let diff = Arc::new(crate::models::Diff::from_files(files));
+        let diff = Arc::new(Diff::from_files(files));
         view.diff = diff;
         view.selected_file_index = 5; // Out of bounds index
 
@@ -1781,11 +1790,11 @@ mod tests {
         let mut app = create_test_app().await;
 
         // Set up a diff with files
-        let files = vec![crate::models::DiffFile {
+        let files = vec![DiffFile {
             path: "src/test.rs".to_string(),
             content: "test content".to_string(),
         }];
-        let diff = Arc::new(crate::models::Diff::from_files(files));
+        let diff = Arc::new(Diff::from_files(files));
         view.diff = diff;
         view.selected_file_index = 0;
 
@@ -1804,7 +1813,7 @@ mod tests {
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
         match &*event {
-            crate::event::Event::App(AppEvent::CommentsOpen {
+            Event::App(AppEvent::CommentsOpen {
                 review_id,
                 file_path,
                 line_number,
@@ -1822,7 +1831,7 @@ mod tests {
         let review = Review::test_review(());
         let view = ReviewDetailsView::new(review);
 
-        let diff_file = crate::models::DiffFile {
+        let diff_file = DiffFile {
             path: "src/main.rs".to_string(),
             content: "test content".to_string(),
         };
@@ -1837,7 +1846,7 @@ mod tests {
         let review = Review::test_review(());
         let mut view = ReviewDetailsView::new(review);
 
-        let diff_file = crate::models::DiffFile {
+        let diff_file = DiffFile {
             path: "src/main.rs".to_string(),
             content: "test content".to_string(),
         };
@@ -1856,7 +1865,7 @@ mod tests {
         let review = Review::test_review(());
         let mut view = ReviewDetailsView::new(review);
 
-        let diff_file = crate::models::DiffFile {
+        let diff_file = DiffFile {
             path: "src/main.rs".to_string(),
             content: "test content".to_string(),
         };
@@ -1877,7 +1886,7 @@ mod tests {
         let review = Review::test_review(());
         let mut view = ReviewDetailsView::new(review);
 
-        let diff_file = crate::models::DiffFile {
+        let diff_file = DiffFile {
             path: "src/main.rs".to_string(),
             content: "test content".to_string(),
         };
@@ -1906,7 +1915,7 @@ mod tests {
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
         match &*event {
-            crate::event::Event::App(AppEvent::CommentsLoad(params)) => {
+            Event::App(AppEvent::CommentsLoad(params)) => {
                 assert_eq!(params.review_id.as_ref(), review.id);
                 assert!(params.file_path.as_ref().is_none());
                 assert!(params.line_number.as_ref().is_none());
@@ -1954,7 +1963,7 @@ mod tests {
         let review = Review::test_review(TestReviewParams::new().base_branch("main"));
         let view = ReviewDetailsView::new(review.clone());
 
-        let params = crate::services::CommentsLoadParams {
+        let params = CommentsLoadParams {
             review_id: Arc::from(review.id.clone()),
             file_path: Arc::new(None),
             line_number: Arc::new(None),
@@ -1969,7 +1978,7 @@ mod tests {
         let review = Review::test_review(TestReviewParams::new().base_branch("main"));
         let view = ReviewDetailsView::new(review.clone());
 
-        let params = crate::services::CommentsLoadParams {
+        let params = CommentsLoadParams {
             review_id: Arc::from("different-review-id".to_string()),
             file_path: Arc::new(None),
             line_number: Arc::new(None),
@@ -1983,7 +1992,7 @@ mod tests {
     fn test_relevant_comments_loading_state_without_review() {
         let view = ReviewDetailsView::new_loading();
 
-        let params = crate::services::CommentsLoadParams {
+        let params = CommentsLoadParams {
             review_id: Arc::from("any-review-id".to_string()),
             file_path: Arc::new(None),
             line_number: Arc::new(None),
@@ -2003,21 +2012,21 @@ mod tests {
         let initial_lines_with_comments = view.lines_with_comments.clone();
 
         // Load comments for a different review
-        let params = crate::services::CommentsLoadParams {
+        let params = CommentsLoadParams {
             review_id: Arc::from("different-review-id".to_string()),
             file_path: Arc::new(None),
             line_number: Arc::new(None),
         };
 
         // Create dummy comments
-        let comments = vec![crate::models::Comment::test_comment(
+        let comments = vec![Comment::test_comment(
             "different-review-id",
             "src/main.rs",
             None,
             "File comment",
         )];
 
-        let state = crate::services::CommentsLoadingState::Loaded(Arc::new(comments));
+        let state = CommentsLoadingState::Loaded(Arc::new(comments));
         view.handle_comments_loading_state(&params, &state);
 
         // State should not change since params are not relevant
@@ -2036,7 +2045,7 @@ mod tests {
         let review = Review::test_review(TestReviewParams::new().base_branch("main"));
         let mut view = ReviewDetailsView::new(review.clone());
 
-        let params = crate::services::CommentsLoadParams {
+        let params = CommentsLoadParams {
             review_id: Arc::from(review.id.clone()),
             file_path: Arc::new(None),
             line_number: Arc::new(None),
@@ -2044,16 +2053,11 @@ mod tests {
 
         // Create test comments - file comments only
         let comments = vec![
-            crate::models::Comment::test_comment(&review.id, "src/main.rs", None, "File comment"),
-            crate::models::Comment::test_comment(
-                &review.id,
-                "src/lib.rs",
-                None,
-                "Another file comment",
-            ),
+            Comment::test_comment(&review.id, "src/main.rs", None, "File comment"),
+            Comment::test_comment(&review.id, "src/lib.rs", None, "Another file comment"),
         ];
 
-        let state = crate::services::CommentsLoadingState::Loaded(Arc::new(comments));
+        let state = CommentsLoadingState::Loaded(Arc::new(comments));
         view.handle_comments_loading_state(&params, &state);
 
         // Should update files with file comments
@@ -2087,7 +2091,7 @@ mod tests {
         let review = Review::test_review(TestReviewParams::new().base_branch("main"));
         let mut view = ReviewDetailsView::new(review.clone());
 
-        let params = crate::services::CommentsLoadParams {
+        let params = CommentsLoadParams {
             review_id: Arc::from(review.id.clone()),
             file_path: Arc::new(None),
             line_number: Arc::new(None),
@@ -2095,21 +2099,11 @@ mod tests {
 
         // Create test comments - line comments only
         let comments = vec![
-            crate::models::Comment::test_comment(
-                &review.id,
-                "src/main.rs",
-                Some(10),
-                "Line comment",
-            ),
-            crate::models::Comment::test_comment(
-                &review.id,
-                "src/main.rs",
-                Some(20),
-                "Another line comment",
-            ),
+            Comment::test_comment(&review.id, "src/main.rs", Some(10), "Line comment"),
+            Comment::test_comment(&review.id, "src/main.rs", Some(20), "Another line comment"),
         ];
 
-        let state = crate::services::CommentsLoadingState::Loaded(Arc::new(comments));
+        let state = CommentsLoadingState::Loaded(Arc::new(comments));
         view.handle_comments_loading_state(&params, &state);
 
         // No file comments (only line comments)
@@ -2135,7 +2129,7 @@ mod tests {
         let review = Review::test_review(TestReviewParams::new().base_branch("main"));
         let mut view = ReviewDetailsView::new(review.clone());
 
-        let params = crate::services::CommentsLoadParams {
+        let params = CommentsLoadParams {
             review_id: Arc::from(review.id.clone()),
             file_path: Arc::new(None),
             line_number: Arc::new(None),
@@ -2143,22 +2137,12 @@ mod tests {
 
         // Create test comments - mix of file and line comments
         let comments = vec![
-            crate::models::Comment::test_comment(&review.id, "src/main.rs", None, "File comment"),
-            crate::models::Comment::test_comment(
-                &review.id,
-                "src/main.rs",
-                Some(15),
-                "Line comment",
-            ),
-            crate::models::Comment::test_comment(
-                &review.id,
-                "src/lib.rs",
-                Some(25),
-                "Another line comment",
-            ),
+            Comment::test_comment(&review.id, "src/main.rs", None, "File comment"),
+            Comment::test_comment(&review.id, "src/main.rs", Some(15), "Line comment"),
+            Comment::test_comment(&review.id, "src/lib.rs", Some(25), "Another line comment"),
         ];
 
-        let state = crate::services::CommentsLoadingState::Loaded(Arc::new(comments));
+        let state = CommentsLoadingState::Loaded(Arc::new(comments));
         view.handle_comments_loading_state(&params, &state);
 
         // Should have file comments
@@ -2198,8 +2182,7 @@ mod tests {
         let mut app = create_test_app().await;
 
         // Create a dummy comment
-        let comment =
-            crate::models::Comment::test_comment(&review.id, "src/main.rs", None, "New comment");
+        let comment = Comment::test_comment(&review.id, "src/main.rs", None, "New comment");
 
         // Handle CommentCreated event
         view.handle_app_events(&mut app, &AppEvent::CommentCreated(Arc::new(comment)));
@@ -2208,7 +2191,7 @@ mod tests {
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
         match &*event {
-            crate::event::Event::App(AppEvent::CommentsLoad(params)) => {
+            Event::App(AppEvent::CommentsLoad(params)) => {
                 assert_eq!(params.review_id.as_ref(), review.id);
                 assert!(params.file_path.as_ref().is_none());
                 assert!(params.line_number.as_ref().is_none());

@@ -164,10 +164,14 @@ impl EventProcessor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::Database;
-    use crate::models::review::Review;
-    use crate::views::{MainView, ViewType};
+
     use sqlx::SqlitePool;
+
+    use crate::{
+        database::Database,
+        models::review::Review,
+        views::{MainView, ViewType},
+    };
 
     async fn create_test_app() -> App {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

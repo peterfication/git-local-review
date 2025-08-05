@@ -1,5 +1,4 @@
-use std::sync::Arc;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use color_eyre::eyre::OptionExt;
 use futures::{FutureExt, StreamExt};
@@ -367,6 +366,7 @@ impl EventTask {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use ratatui::crossterm::event::{KeyCode, KeyEventKind, KeyEventState, KeyModifiers};
 
     #[test]

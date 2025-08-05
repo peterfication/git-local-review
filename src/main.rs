@@ -1,5 +1,6 @@
-use crate::app::App;
 use clap::Parser;
+
+use crate::app::App;
 
 #[derive(Parser)]
 #[command(name = "git-local-review")]

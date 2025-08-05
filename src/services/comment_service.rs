@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{future::Future, pin::Pin, sync::Arc};
 
 use crate::{
     database::Database,
@@ -46,8 +46,7 @@ impl ServiceHandler for CommentService {
     fn handle_app_event<'a>(
         event: &'a AppEvent,
         context: ServiceContext<'a>,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = color_eyre::Result<()>> + Send + 'a>>
-    {
+    ) -> Pin<Box<dyn Future<Output = color_eyre::Result<()>> + Send + 'a>> {
         Box::pin(async move {
             match event {
                 AppEvent::CommentsLoad(params) => {
@@ -461,8 +460,14 @@ impl CommentService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{database::Database, event::EventHandler, models::Comment};
+
     use sqlx::SqlitePool;
+
+    use crate::{
+        database::Database,
+        event::{Event, EventHandler},
+        models::{Comment, Review},
+    };
 
     async fn create_test_database() -> Database {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
@@ -820,7 +825,7 @@ mod tests {
         let mut events = EventHandler::new_for_test();
 
         // Create a test review first to satisfy foreign key constraint
-        let review = crate::models::Review::test_review(());
+        let review = Review::test_review(());
         review.save(database.pool()).await.unwrap();
 
         // Create a file comment
@@ -838,7 +843,7 @@ mod tests {
         // Should send CommentCreated event
         let event = events.try_recv().unwrap();
         match &*event {
-            crate::event::Event::App(AppEvent::CommentCreated(comment)) => {
+            Event::App(AppEvent::CommentCreated(comment)) => {
                 assert_eq!(comment.review_id, review.id);
                 assert_eq!(comment.file_path, "src/main.rs");
                 assert_eq!(comment.line_number, None);
@@ -851,7 +856,7 @@ mod tests {
         // Should send CommentsLoad event to reload
         let event = events.try_recv().unwrap();
         match &*event {
-            crate::event::Event::App(AppEvent::CommentsLoad(CommentsLoadParams {
+            Event::App(AppEvent::CommentsLoad(CommentsLoadParams {
                 review_id,
                 file_path,
                 line_number,
@@ -875,7 +880,7 @@ mod tests {
         let mut events = EventHandler::new_for_test();
 
         // Create a test review first to satisfy foreign key constraint
-        let review = crate::models::Review::test_review(());
+        let review = Review::test_review(());
         review.save(database.pool()).await.unwrap();
 
         // Create a line comment
@@ -893,7 +898,7 @@ mod tests {
         // Should send CommentCreated event
         let event = events.try_recv().unwrap();
         match &*event {
-            crate::event::Event::App(AppEvent::CommentCreated(comment)) => {
+            Event::App(AppEvent::CommentCreated(comment)) => {
                 assert_eq!(comment.review_id, review.id);
                 assert_eq!(comment.file_path, "src/main.rs");
                 assert_eq!(comment.line_number, Some(42));
@@ -906,7 +911,7 @@ mod tests {
         // Should send CommentsLoad event to reload
         let event = events.try_recv().unwrap();
         match &*event {
-            crate::event::Event::App(AppEvent::CommentsLoad(CommentsLoadParams {
+            Event::App(AppEvent::CommentsLoad(CommentsLoadParams {
                 review_id,
                 file_path,
                 line_number,
@@ -949,7 +954,7 @@ mod tests {
         // Should send CommentCreateError event
         let event = events.try_recv().unwrap();
         match &*event {
-            crate::event::Event::App(AppEvent::CommentCreateError(error)) => {
+            Event::App(AppEvent::CommentCreateError(error)) => {
                 assert_eq!(error.to_string(), "Comment content cannot be empty");
             }
             _ => panic!("Expected CommentCreateError event"),
@@ -962,7 +967,7 @@ mod tests {
         let mut events = EventHandler::new_for_test();
 
         // Create a test review first to satisfy foreign key constraint
-        let review = crate::models::Review::test_review(());
+        let review = Review::test_review(());
         review.save(database.pool()).await.unwrap();
 
         // Create a test comment first
@@ -986,7 +991,7 @@ mod tests {
         // Should send Loading state first
         let event = events.try_recv().unwrap();
         match &*event {
-            crate::event::Event::App(AppEvent::CommentsLoadingState {
+            Event::App(AppEvent::CommentsLoadingState {
                 params,
                 state: CommentsLoadingState::Loading,
             }) => {
@@ -1000,7 +1005,7 @@ mod tests {
         // Should send Loaded state with comments
         let event = events.try_recv().unwrap();
         match &*event {
-            crate::event::Event::App(AppEvent::CommentsLoadingState {
+            Event::App(AppEvent::CommentsLoadingState {
                 params,
                 state: CommentsLoadingState::Loaded(comments),
             }) => {
@@ -1020,7 +1025,7 @@ mod tests {
         let mut events = EventHandler::new_for_test();
 
         // Create a test review first to satisfy foreign key constraint
-        let review = crate::models::Review::test_review(());
+        let review = Review::test_review(());
         review.save(database.pool()).await.unwrap();
 
         // Create a test line comment
@@ -1044,7 +1049,7 @@ mod tests {
         // Should send Loading state first
         let event = events.try_recv().unwrap();
         match &*event {
-            crate::event::Event::App(AppEvent::CommentsLoadingState {
+            Event::App(AppEvent::CommentsLoadingState {
                 params,
                 state: CommentsLoadingState::Loading,
             }) => {
@@ -1063,7 +1068,7 @@ mod tests {
         // Should send Loaded state with comments
         let event = events.try_recv().unwrap();
         match &*event {
-            crate::event::Event::App(AppEvent::CommentsLoadingState {
+            Event::App(AppEvent::CommentsLoadingState {
                 params,
                 state: CommentsLoadingState::Loaded(comments),
             }) => {
@@ -1088,7 +1093,7 @@ mod tests {
         let database = create_test_database().await;
 
         // Create a test review first to satisfy foreign key constraint
-        let review = crate::models::Review::test_review(());
+        let review = Review::test_review(());
         review.save(database.pool()).await.unwrap();
 
         // Create test comments

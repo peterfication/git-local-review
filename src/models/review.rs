@@ -272,9 +272,10 @@ impl From<()> for TestReviewParams {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::fixed_time;
-    use crate::time_provider::MockTimeProvider;
+
     use sqlx::SqlitePool;
+
+    use crate::{test_utils::fixed_time, time_provider::MockTimeProvider};
 
     async fn create_test_pool() -> SqlitePool {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

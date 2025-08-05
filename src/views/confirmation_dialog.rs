@@ -1,8 +1,11 @@
+#[cfg(test)]
+use std::any::Any;
+
 use std::sync::Arc;
 
 use ratatui::{
     buffer::Buffer,
-    crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
+    crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers},
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     widgets::{Block, BorderType, Clear, Paragraph, Widget},
@@ -84,7 +87,7 @@ impl ViewHandler for ConfirmationDialogView {
     }
 
     #[cfg(test)]
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 
@@ -96,8 +99,8 @@ impl ViewHandler for ConfirmationDialogView {
                 key_event: KeyEvent {
                     code: KeyCode::Char('y'),
                     modifiers: KeyModifiers::empty(),
-                    kind: ratatui::crossterm::event::KeyEventKind::Press,
-                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                    kind: KeyEventKind::Press,
+                    state: KeyEventState::empty(),
                 },
             },
             KeyBinding {
@@ -106,8 +109,8 @@ impl ViewHandler for ConfirmationDialogView {
                 key_event: KeyEvent {
                     code: KeyCode::Char('n'),
                     modifiers: KeyModifiers::empty(),
-                    kind: ratatui::crossterm::event::KeyEventKind::Press,
-                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                    kind: KeyEventKind::Press,
+                    state: KeyEventState::empty(),
                 },
             },
         ])
@@ -122,13 +125,16 @@ impl ViewHandler for ConfirmationDialogView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::Database;
-    use crate::event::{AppEvent, Event};
-    use crate::test_utils::render_app_to_terminal_backend;
+
     use insta::assert_snapshot;
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
     use sqlx::SqlitePool;
 
-    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
+    use crate::{
+        database::Database,
+        event::{AppEvent, Event},
+        test_utils::render_app_to_terminal_backend,
+    };
 
     async fn create_test_app() -> App {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

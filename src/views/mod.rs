@@ -1,9 +1,13 @@
+#[cfg(test)]
+use std::any::Any;
+
+use std::sync::Arc;
+
 use ratatui::{
     buffer::Buffer,
     crossterm::event::KeyEvent,
     layout::{Constraint, Direction, Layout, Rect},
 };
-use std::sync::Arc;
 
 use crate::{app::App, event::AppEvent};
 
@@ -56,11 +60,11 @@ pub trait ViewHandler {
 
     /// Downcast to Any for type-specific operations (only used for testing)
     #[cfg(test)]
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 
     /// Downcast to Any for type-specific operations (only used for testing)
     #[cfg(test)]
-    fn as_any(&self) -> &dyn std::any::Any;
+    fn as_any(&self) -> &dyn Any;
 }
 
 /// Creates a centered rectangle with the given percentage dimensions within the provided area.

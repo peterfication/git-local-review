@@ -1,3 +1,6 @@
+#[cfg(test)]
+use std::any::Any;
+
 use std::sync::Arc;
 
 use ratatui::{
@@ -6,7 +9,9 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Widget},
+    widgets::{
+        Block, Borders, Clear, List, ListItem, ListState, Paragraph, StatefulWidget, Widget,
+    },
 };
 
 use crate::{
@@ -487,12 +492,12 @@ impl ViewHandler for CommentsView {
     }
 
     #[cfg(test)]
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 
     #[cfg(test)]
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self) -> &dyn Any {
         self
     }
 }
@@ -619,7 +624,7 @@ impl CommentsView {
             list_state.select(self.selected_comment_index);
         }
 
-        ratatui::widgets::StatefulWidget::render(comments_list, area, buf, &mut list_state);
+        StatefulWidget::render(comments_list, area, buf, &mut list_state);
     }
 
     fn render_comment_item(&self, _index: usize, comment: &Comment) -> ListItem {
@@ -727,8 +732,10 @@ impl CommentsView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{app::App, database::Database, models::Comment};
+
     use sqlx::SqlitePool;
+
+    use crate::{app::App, database::Database, models::Comment};
 
     async fn create_test_app() -> App {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
@@ -793,26 +800,17 @@ mod tests {
         let mut app = create_test_app().await;
 
         // Test character input
-        let key_event = KeyEvent::new(
-            KeyCode::Char('H'),
-            ratatui::crossterm::event::KeyModifiers::empty(),
-        );
+        let key_event = KeyEvent::new(KeyCode::Char('H'), KeyModifiers::empty());
         view.handle_key_events(&mut app, &key_event).unwrap();
         assert_eq!(view.input_text, "H");
 
         // Test more characters
-        let key_event = KeyEvent::new(
-            KeyCode::Char('i'),
-            ratatui::crossterm::event::KeyModifiers::empty(),
-        );
+        let key_event = KeyEvent::new(KeyCode::Char('i'), KeyModifiers::empty());
         view.handle_key_events(&mut app, &key_event).unwrap();
         assert_eq!(view.input_text, "Hi");
 
         // Test backspace
-        let key_event = KeyEvent::new(
-            KeyCode::Backspace,
-            ratatui::crossterm::event::KeyModifiers::empty(),
-        );
+        let key_event = KeyEvent::new(KeyCode::Backspace, KeyModifiers::empty());
         view.handle_key_events(&mut app, &key_event).unwrap();
         assert_eq!(view.input_text, "H");
     }
@@ -827,10 +825,7 @@ mod tests {
         view.input_text = "This is a test comment".to_string();
 
         // Press Enter
-        let key_event = KeyEvent::new(
-            KeyCode::Enter,
-            ratatui::crossterm::event::KeyModifiers::empty(),
-        );
+        let key_event = KeyEvent::new(KeyCode::Enter, KeyModifiers::empty());
         view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Input should be cleared
@@ -864,10 +859,7 @@ mod tests {
         assert_eq!(view.input_text, "");
 
         // Press Enter
-        let key_event = KeyEvent::new(
-            KeyCode::Enter,
-            ratatui::crossterm::event::KeyModifiers::empty(),
-        );
+        let key_event = KeyEvent::new(KeyCode::Enter, KeyModifiers::empty());
         view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Should not send any events
@@ -880,10 +872,7 @@ mod tests {
             CommentsView::new_for_file("review-123".to_string(), "src/main.rs".to_string());
         let mut app = create_test_app().await;
 
-        let key_event = KeyEvent::new(
-            KeyCode::Esc,
-            ratatui::crossterm::event::KeyModifiers::empty(),
-        );
+        let key_event = KeyEvent::new(KeyCode::Esc, KeyModifiers::empty());
         view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Should send ViewClose event

@@ -1,4 +1,4 @@
-use std::future::Future;
+use std::{future::Future, pin::Pin};
 
 use crate::database::Database;
 use crate::event::{AppEvent, EventHandler};
@@ -33,5 +33,5 @@ pub trait ServiceHandler {
     fn handle_app_event<'a>(
         event: &'a AppEvent,
         context: ServiceContext<'a>,
-    ) -> std::pin::Pin<Box<dyn Future<Output = color_eyre::Result<()>> + Send + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = color_eyre::Result<()>> + Send + 'a>>;
 }
