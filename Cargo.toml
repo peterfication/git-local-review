@@ -30,7 +30,7 @@ ratatui = "0.29.0"
 sqlx = { version = "0.8.2", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid"] }
 tokio = { version = "1.47.1", features = ["full"] }
 tui-logger = "0.17.3"
-uuid = { version = "1.11.0", features = ["v4"] }
+uuid = { version = "1.18.0", features = ["v4"] }
 
 [dev-dependencies]
 # cargo-tarpaulin = "0.32.8"
