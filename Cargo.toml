@@ -35,4 +35,4 @@ uuid = { version = "1.11.0", features = ["v4"] }
 [dev-dependencies]
 # cargo-tarpaulin = "0.32.8"
 insta = "1.43.1"
-tempfile = "3.8.1"
+tempfile = "3.23.0"
