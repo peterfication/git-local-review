@@ -36,18 +36,36 @@ impl Review {
 
     /// Returns a human-readable title for the review in the format "base_branch -> target_branch"
     pub fn title(&self) -> String {
-        let default_sha = "unknown".to_string();
-        let base_sha = self.base_sha.as_ref().unwrap_or(&default_sha);
-        let target_sha = self.target_sha.as_ref().unwrap_or(&default_sha);
-        let base_sha_short = base_sha.chars().take(SHORT_SHA_LENGTH).collect::<String>();
-        let target_sha_short = target_sha
-            .chars()
-            .take(SHORT_SHA_LENGTH)
-            .collect::<String>();
-        format!(
-            "{} ({}) -> {} ({})",
-            self.base_branch, base_sha_short, self.target_branch, target_sha_short
-        )
+        let base_title = Self::format_branch_title(
+            &self.base_branch,
+            self.base_sha.as_ref(),
+            self.base_sha_changed.as_ref(),
+        );
+        let target_title = Self::format_branch_title(
+            &self.target_branch,
+            self.target_sha.as_ref(),
+            self.target_sha_changed.as_ref(),
+        );
+        format!("{base_title} -> {target_title}")
+    }
+
+    fn format_branch_title(
+        branch_name: &str,
+        original_sha: Option<&String>,
+        changed_sha: Option<&String>,
+    ) -> String {
+        let original_short = Self::format_short_sha(original_sha);
+        if let Some(changed_sha) = changed_sha {
+            let changed_short = Self::format_short_sha(Some(changed_sha));
+            format!("{branch_name} ({original_short} -> {changed_short})")
+        } else {
+            format!("{branch_name} ({original_short})")
+        }
+    }
+
+    fn format_short_sha(sha: Option<&String>) -> String {
+        sha.map(|value| value.chars().take(SHORT_SHA_LENGTH).collect())
+            .unwrap_or_else(|| "unknown".to_string())
     }
 
     pub async fn save(&self, pool: &SqlitePool) -> Result<(), sqlx::Error> {
@@ -366,6 +384,19 @@ mod tests {
         assert_eq!(
             custom_review.title(),
             "main (abcd123) -> feature/test (efgh567)"
+        );
+
+        let changed_review = Review::builder()
+            .base_branch("main")
+            .target_branch("feature/test")
+            .base_sha(Some("abcd1234".to_string()))
+            .base_sha_changed(Some("123456789".to_string()))
+            .target_sha(Some("efgh5678".to_string()))
+            .target_sha_changed(Some("ijkl9012".to_string()))
+            .build();
+        assert_eq!(
+            changed_review.title(),
+            "main (abcd123 -> 1234567) -> feature/test (efgh567 -> ijkl901)"
         );
     }
 
