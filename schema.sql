@@ -10,7 +10,7 @@ CREATE TABLE reviews (
     id TEXT PRIMARY KEY,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
-, base_branch TEXT NOT NULL, target_branch TEXT NOT NULL, base_sha TEXT, target_sha TEXT);
+, base_branch TEXT NOT NULL, target_branch TEXT NOT NULL, base_sha TEXT, target_sha TEXT, base_sha_changed TEXT, target_sha_changed TEXT, base_branch_exists BOOLEAN, target_branch_exists BOOLEAN);
 CREATE TABLE file_views (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     review_id TEXT NOT NULL,

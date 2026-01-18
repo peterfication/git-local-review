@@ -1,0 +1,80 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT id as \"id!\", created_at as \"created_at!\", updated_at as \"updated_at!\", base_branch as \"base_branch!\", target_branch as \"target_branch!\", base_sha, target_sha, base_sha_changed, target_sha_changed, base_branch_exists, target_branch_exists\n            FROM reviews\n            ORDER BY created_at DESC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at!",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "base_branch!",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "target_branch!",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "base_sha",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "target_sha",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "base_sha_changed",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "target_sha_changed",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "base_branch_exists",
+        "ordinal": 9,
+        "type_info": "Bool"
+      },
+      {
+        "name": "target_branch_exists",
+        "ordinal": 10,
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "2e921d5dff390e6161d3c875bd499e8d5a2083d10383e76b5b074528ca332079"
+}
