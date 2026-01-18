@@ -933,7 +933,7 @@ impl ReviewDetailsView {
         index: usize,
         diff_file: &DiffFile,
         list_type: &FileListType,
-    ) -> ListItem {
+    ) -> ListItem<'_> {
         let is_selected = index == self.selected_file_index && self.active_file_list == *list_type;
         let is_files_mode = matches!(self.navigation_mode, NavigationMode::Files);
 

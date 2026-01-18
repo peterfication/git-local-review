@@ -383,10 +383,10 @@ impl ReviewCreateView {
         self.branches_state = state.clone();
 
         // Set default selection to main/master if available and we just loaded
-        if let GitBranchesLoadingState::Loaded(ref branches) = self.branches_state {
-            if let Some(main_index) = branches.iter().position(|b| b == "main" || b == "master") {
-                self.base_branch_index = main_index;
-            }
+        if let GitBranchesLoadingState::Loaded(ref branches) = self.branches_state
+            && let Some(main_index) = branches.iter().position(|b| b == "main" || b == "master")
+        {
+            self.base_branch_index = main_index;
         }
     }
 }

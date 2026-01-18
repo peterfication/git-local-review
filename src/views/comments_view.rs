@@ -259,10 +259,10 @@ impl CommentsView {
             return;
         }
 
-        if let Some(current_index) = self.selected_comment_index {
-            if current_index > 0 {
-                self.selected_comment_index = Some(current_index - 1);
-            }
+        if let Some(current_index) = self.selected_comment_index
+            && current_index > 0
+        {
+            self.selected_comment_index = Some(current_index - 1);
         }
     }
 
@@ -627,7 +627,7 @@ impl CommentsView {
         StatefulWidget::render(comments_list, area, buf, &mut list_state);
     }
 
-    fn render_comment_item(&self, _index: usize, comment: &Comment) -> ListItem {
+    fn render_comment_item(&self, _index: usize, comment: &Comment) -> ListItem<'_> {
         // Format the comment with timestamp and content
         let timestamp = comment.created_at.format("%Y-%m-%d %H:%M:%S");
 

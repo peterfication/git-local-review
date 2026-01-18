@@ -220,35 +220,35 @@ impl MainView {
 
     /// Delete the currently selected review
     pub fn delete_selected_review(&self, app: &mut App) {
-        if let Some(index) = self.selected_review_index {
-            if index < self.reviews.len() {
-                let review_id = self.reviews[index].id.clone();
-                app.events
-                    .send(AppEvent::ReviewDeleteConfirm(Arc::from(review_id)));
-            }
+        if let Some(index) = self.selected_review_index
+            && index < self.reviews.len()
+        {
+            let review_id = self.reviews[index].id.clone();
+            app.events
+                .send(AppEvent::ReviewDeleteConfirm(Arc::from(review_id)));
         }
     }
 
     /// Open review details for the currently selected review
     pub fn open_review_details(&self, app: &mut App) {
-        if let Some(index) = self.selected_review_index {
-            if index < self.reviews.len() {
-                let review_id = self.reviews[index].id.clone();
-                app.events
-                    .send(AppEvent::ReviewDetailsOpen(Arc::from(review_id)));
-            }
+        if let Some(index) = self.selected_review_index
+            && index < self.reviews.len()
+        {
+            let review_id = self.reviews[index].id.clone();
+            app.events
+                .send(AppEvent::ReviewDetailsOpen(Arc::from(review_id)));
         }
     }
 
-    fn render_reviews_init(&self) -> Vec<ListItem> {
+    fn render_reviews_init(&self) -> Vec<ListItem<'_>> {
         vec![ListItem::new("Initializing...").style(Style::default().fg(Color::Gray))]
     }
 
-    fn render_reviews_loading(&self) -> Vec<ListItem> {
+    fn render_reviews_loading(&self) -> Vec<ListItem<'_>> {
         vec![ListItem::new("Loading reviews...").style(Style::default().fg(Color::Yellow))]
     }
 
-    fn render_reviews_loaded(&self) -> Vec<ListItem> {
+    fn render_reviews_loaded(&self) -> Vec<ListItem<'_>> {
         if self.reviews.is_empty() {
             vec![
                 ListItem::new("No reviews found - Press 'n' to create a new review")
@@ -266,7 +266,7 @@ impl MainView {
         }
     }
 
-    fn render_review_list_item(&self, review: &Review, is_selected: bool) -> ListItem {
+    fn render_review_list_item(&self, review: &Review, is_selected: bool) -> ListItem<'_> {
         let style = if is_selected {
             Style::default().bg(Color::Blue).fg(Color::Black)
         } else {
@@ -286,7 +286,7 @@ impl MainView {
         ListItem::new(content).style(style)
     }
 
-    fn render_reviews_error(&self, error: &str) -> Vec<ListItem> {
+    fn render_reviews_error(&self, error: &str) -> Vec<ListItem<'_>> {
         vec![
             ListItem::new(format!("Error loading reviews: {error}"))
                 .style(Style::default().fg(Color::Red)),

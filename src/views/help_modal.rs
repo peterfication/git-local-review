@@ -71,10 +71,10 @@ impl HelpModalView {
     }
 
     fn get_selected_key_event(&self) -> Option<KeyEvent> {
-        if let Some(selected) = self.list_state.selected() {
-            if selected < self.keybindings.len() {
-                return Some(self.keybindings[selected].key_event);
-            }
+        if let Some(selected) = self.list_state.selected()
+            && selected < self.keybindings.len()
+        {
+            return Some(self.keybindings[selected].key_event);
         }
         None
     }

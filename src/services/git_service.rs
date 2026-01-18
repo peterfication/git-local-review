@@ -175,10 +175,10 @@ impl GitService {
                     return true;
                 };
 
-                if let Some(content) = files_content_hunk.borrow_mut().get_mut(&file_path) {
-                    if let Ok(header) = std::str::from_utf8(_hunk.header()) {
-                        content.push_str(header);
-                    }
+                if let Some(content) = files_content_hunk.borrow_mut().get_mut(&file_path)
+                    && let Ok(header) = std::str::from_utf8(_hunk.header())
+                {
+                    content.push_str(header);
                 }
                 true
             }),
