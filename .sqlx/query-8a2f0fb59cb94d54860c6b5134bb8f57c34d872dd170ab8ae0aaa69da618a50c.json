@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE reviews \n            SET base_sha_changed = ?2, target_sha_changed = ?3, base_branch_exists = ?4, target_branch_exists = ?5, updated_at = ?6\n            WHERE id = ?1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "8a2f0fb59cb94d54860c6b5134bb8f57c34d872dd170ab8ae0aaa69da618a50c"
+}

@@ -6,8 +6,8 @@ use crate::{
     app::App,
     event::{AppEvent, Event},
     services::{
-        CommentService, CommentsLoadParams, FileViewService, GitService, ReviewService,
-        ServiceContext, ServiceHandler,
+        BranchStatusService, CommentService, CommentsLoadParams, FileViewService, GitService,
+        ReviewService, ServiceContext, ServiceHandler,
     },
     views::{
         CommentsView, ConfirmationDialogView, HelpModalView, KeyBinding, ReviewCreateView,
@@ -70,11 +70,14 @@ impl EventProcessor {
         // Initialize any global state or services if needed
         log::info!("App initialized");
         app.events.send(AppEvent::ReviewsLoad);
+        // Check branch status on startup
+        app.events.send(AppEvent::ReviewsBranchStatusCheck);
     }
 
     /// Handle app events through services
     async fn handle_services(app: &mut App, event: &AppEvent) -> color_eyre::Result<()> {
         let services = vec![
+            BranchStatusService::handle_app_event,
             CommentService::handle_app_event,
             ReviewService::handle_app_event,
             GitService::handle_app_event,

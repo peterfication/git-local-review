@@ -17,6 +17,10 @@ pub struct Review {
     pub target_branch: String,
     pub base_sha: Option<String>,
     pub target_sha: Option<String>,
+    pub base_sha_changed: Option<String>,
+    pub target_sha_changed: Option<String>,
+    pub base_branch_exists: Option<bool>,
+    pub target_branch_exists: Option<bool>,
 }
 
 impl PartialEq for Review {
@@ -51,8 +55,8 @@ impl Review {
         let updated_at = self.updated_at.to_rfc3339();
         sqlx::query!(
             r#"
-            INSERT INTO reviews (id, created_at, updated_at, base_branch, target_branch, base_sha, target_sha)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            INSERT INTO reviews (id, created_at, updated_at, base_branch, target_branch, base_sha, target_sha, base_sha_changed, target_sha_changed, base_branch_exists, target_branch_exists)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
             "#,
             self.id,
             created_at,
@@ -60,7 +64,11 @@ impl Review {
             self.base_branch,
             self.target_branch,
             self.base_sha,
-            self.target_sha
+            self.target_sha,
+            self.base_sha_changed,
+            self.target_sha_changed,
+            self.base_branch_exists,
+            self.target_branch_exists
         )
         .execute(pool)
         .await?;
@@ -70,7 +78,7 @@ impl Review {
     pub async fn list_all(pool: &SqlitePool) -> Result<Vec<Review>, sqlx::Error> {
         let rows = sqlx::query!(
             r#"
-            SELECT id as "id!", created_at as "created_at!", updated_at as "updated_at!", base_branch as "base_branch!", target_branch as "target_branch!", base_sha, target_sha
+            SELECT id as "id!", created_at as "created_at!", updated_at as "updated_at!", base_branch as "base_branch!", target_branch as "target_branch!", base_sha, target_sha, base_sha_changed, target_sha_changed, base_branch_exists, target_branch_exists
             FROM reviews
             ORDER BY created_at DESC
             "#
@@ -94,6 +102,10 @@ impl Review {
                 target_branch: row.target_branch,
                 base_sha: row.base_sha,
                 target_sha: row.target_sha,
+                base_sha_changed: row.base_sha_changed,
+                target_sha_changed: row.target_sha_changed,
+                base_branch_exists: row.base_branch_exists,
+                target_branch_exists: row.target_branch_exists,
             });
         }
         Ok(reviews)
@@ -102,7 +114,7 @@ impl Review {
     pub async fn find_by_id(pool: &SqlitePool, id: &str) -> Result<Option<Review>, sqlx::Error> {
         let row = sqlx::query!(
             r#"
-            SELECT id as "id!", created_at as "created_at!", updated_at as "updated_at!", base_branch as "base_branch!", target_branch as "target_branch!", base_sha, target_sha
+            SELECT id as "id!", created_at as "created_at!", updated_at as "updated_at!", base_branch as "base_branch!", target_branch as "target_branch!", base_sha, target_sha, base_sha_changed, target_sha_changed, base_branch_exists, target_branch_exists
             FROM reviews
             WHERE id = ?1
             "#,
@@ -127,10 +139,41 @@ impl Review {
                     target_branch: row.target_branch,
                     base_sha: row.base_sha,
                     target_sha: row.target_sha,
+                    base_sha_changed: row.base_sha_changed,
+                    target_sha_changed: row.target_sha_changed,
+                    base_branch_exists: row.base_branch_exists,
+                    target_branch_exists: row.target_branch_exists,
                 }))
             }
             None => Ok(None),
         }
+    }
+
+    pub async fn update_branch_status(
+        &self,
+        pool: &SqlitePool,
+        base_sha_changed: Option<String>,
+        target_sha_changed: Option<String>,
+        base_branch_exists: Option<bool>,
+        target_branch_exists: Option<bool>,
+    ) -> Result<(), sqlx::Error> {
+        let updated_at = self.updated_at.to_rfc3339();
+        sqlx::query!(
+            r#"
+            UPDATE reviews 
+            SET base_sha_changed = ?2, target_sha_changed = ?3, base_branch_exists = ?4, target_branch_exists = ?5, updated_at = ?6
+            WHERE id = ?1
+            "#,
+            self.id,
+            base_sha_changed,
+            target_sha_changed,
+            base_branch_exists,
+            target_branch_exists,
+            updated_at
+        )
+        .execute(pool)
+        .await?;
+        Ok(())
     }
 
     pub async fn delete(&self, pool: &SqlitePool) -> Result<(), sqlx::Error> {
@@ -152,6 +195,10 @@ pub struct ReviewBuilder {
     target_branch: Option<String>,
     base_sha: Option<String>,
     target_sha: Option<String>,
+    base_sha_changed: Option<String>,
+    target_sha_changed: Option<String>,
+    base_branch_exists: Option<bool>,
+    target_branch_exists: Option<bool>,
 }
 
 impl ReviewBuilder {
@@ -161,6 +208,10 @@ impl ReviewBuilder {
             target_branch: None,
             base_sha: None,
             target_sha: None,
+            base_sha_changed: None,
+            target_sha_changed: None,
+            base_branch_exists: None,
+            target_branch_exists: None,
         }
     }
 
@@ -194,6 +245,26 @@ impl ReviewBuilder {
         self
     }
 
+    pub fn base_sha_changed(mut self, base_sha_changed: Option<String>) -> Self {
+        self.base_sha_changed = base_sha_changed;
+        self
+    }
+
+    pub fn target_sha_changed(mut self, target_sha_changed: Option<String>) -> Self {
+        self.target_sha_changed = target_sha_changed;
+        self
+    }
+
+    pub fn base_branch_exists(mut self, base_branch_exists: Option<bool>) -> Self {
+        self.base_branch_exists = base_branch_exists;
+        self
+    }
+
+    pub fn target_branch_exists(mut self, target_branch_exists: Option<bool>) -> Self {
+        self.target_branch_exists = target_branch_exists;
+        self
+    }
+
     pub fn build(self) -> Review {
         self.build_with_time_provider(&SystemTimeProvider)
     }
@@ -211,6 +282,10 @@ impl ReviewBuilder {
             target_branch,
             base_sha: self.base_sha,
             target_sha: self.target_sha,
+            base_sha_changed: self.base_sha_changed,
+            target_sha_changed: self.target_sha_changed,
+            base_branch_exists: self.base_branch_exists,
+            target_branch_exists: self.target_branch_exists,
         }
     }
 }
@@ -531,13 +606,17 @@ mod tests {
             .target_branch("default")
             .build_with_time_provider(&time_provider1);
         let review2 = Review {
-            id: review1.id.clone(),                        // Same ID
-            created_at: time2,                             // Different created_at
-            updated_at: time2,                             // Different updated_at
-            base_branch: "different-base".to_string(),     // Different base_branch
-            target_branch: "different-target".to_string(), // Different target_branch
-            base_sha: Some("abc123".to_string()),          // Different base_sha
-            target_sha: Some("def456".to_string()),        // Different target_sha
+            id: review1.id.clone(),                         // Same ID
+            created_at: time2,                              // Different created_at
+            updated_at: time2,                              // Different updated_at
+            base_branch: "different-base".to_string(),      // Different base_branch
+            target_branch: "different-target".to_string(),  // Different target_branch
+            base_sha: Some("abc123".to_string()),           // Different base_sha
+            target_sha: Some("def456".to_string()),         // Different target_sha
+            base_sha_changed: Some("xyz789".to_string()),   // Different base_sha_changed
+            target_sha_changed: Some("uvw321".to_string()), // Different target_sha_changed
+            base_branch_exists: Some(false),                // Different base_branch_exists
+            target_branch_exists: Some(true),               // Different target_branch_exists
         };
 
         // Should be equal because only ID matters for equality
@@ -573,6 +652,42 @@ mod tests {
         assert_eq!(found_review.target_sha, target_sha);
         assert_eq!(found_review.base_branch, "main");
         assert_eq!(found_review.target_branch, "feature/test");
+    }
+
+    #[tokio::test]
+    async fn test_update_branch_status() {
+        let pool = create_test_pool().await;
+        let mut review = Review::builder()
+            .base_branch("main")
+            .target_branch("feature/test")
+            .base_sha_str("abcd1234")
+            .target_sha_str("efgh5678")
+            .build();
+        review.save(&pool).await.unwrap();
+
+        let new_time = review.updated_at + chrono::Duration::minutes(5);
+        review.updated_at = new_time;
+
+        review
+            .update_branch_status(
+                &pool,
+                Some("abcd9876".to_string()),
+                None,
+                Some(true),
+                Some(false),
+            )
+            .await
+            .unwrap();
+
+        let updated = Review::find_by_id(&pool, &review.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(updated.base_sha_changed.as_deref(), Some("abcd9876"));
+        assert_eq!(updated.target_sha_changed, None);
+        assert_eq!(updated.base_branch_exists, Some(true));
+        assert_eq!(updated.target_branch_exists, Some(false));
+        assert_eq!(updated.updated_at, new_time);
     }
 
     #[test]

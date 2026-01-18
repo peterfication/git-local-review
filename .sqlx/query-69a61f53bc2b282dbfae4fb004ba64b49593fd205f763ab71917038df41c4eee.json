@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n            SELECT id as \"id!\", created_at as \"created_at!\", updated_at as \"updated_at!\", base_branch as \"base_branch!\", target_branch as \"target_branch!\", base_sha, target_sha\n            FROM reviews\n            WHERE id = ?1\n            ",
+  "query": "\n            SELECT id as \"id!\", created_at as \"created_at!\", updated_at as \"updated_at!\", base_branch as \"base_branch!\", target_branch as \"target_branch!\", base_sha, target_sha, base_sha_changed, target_sha_changed, base_branch_exists, target_branch_exists\n            FROM reviews\n            WHERE id = ?1\n            ",
   "describe": {
     "columns": [
       {
@@ -37,6 +37,26 @@
         "name": "target_sha",
         "ordinal": 6,
         "type_info": "Text"
+      },
+      {
+        "name": "base_sha_changed",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "target_sha_changed",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "base_branch_exists",
+        "ordinal": 9,
+        "type_info": "Bool"
+      },
+      {
+        "name": "target_branch_exists",
+        "ordinal": 10,
+        "type_info": "Bool"
       }
     ],
     "parameters": {
@@ -49,8 +69,12 @@
       false,
       false,
       true,
+      true,
+      true,
+      true,
+      true,
       true
     ]
   },
-  "hash": "d00aba40ffebee0ced97490dff05ef15b790924d9be438f52584b4c6a519f912"
+  "hash": "69a61f53bc2b282dbfae4fb004ba64b49593fd205f763ab71917038df41c4eee"
 }

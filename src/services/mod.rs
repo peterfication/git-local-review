@@ -3,11 +3,13 @@ use std::{future::Future, pin::Pin};
 use crate::database::Database;
 use crate::event::{AppEvent, EventHandler};
 
+pub mod branch_status_service;
 pub mod comment_service;
 pub mod file_view_service;
 pub mod git_service;
 pub mod review_service;
 
+pub use branch_status_service::BranchStatusService;
 pub use comment_service::CommentService;
 pub use comment_service::CommentsLoadParams;
 pub use comment_service::CommentsLoadingState;

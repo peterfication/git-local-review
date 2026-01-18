@@ -46,6 +46,8 @@ pub enum Event {
 pub enum AppEvent {
     /// Initialization event.
     Init,
+    /// Check all reviews against current Git repository state.
+    ReviewsBranchStatusCheck,
     /// Quit the application.
     Quit,
     /// Close the current view.
