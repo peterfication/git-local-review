@@ -349,10 +349,10 @@ mod tests {
         let reviews = vec![review];
 
         // Verify MainView initially has no selection
-        if let Some(main_view) = app.view_stack.get_mut(0) {
-            if let Some(main_view) = main_view.as_any_mut().downcast_mut::<MainView>() {
-                assert_eq!(main_view.selected_review_index(), None);
-            }
+        if let Some(main_view) = app.view_stack.get_mut(0)
+            && let Some(main_view) = main_view.as_any_mut().downcast_mut::<MainView>()
+        {
+            assert_eq!(main_view.selected_review_index(), None);
         }
 
         // Call handle_app_events with ReviewsLoadingState event
@@ -361,10 +361,10 @@ mod tests {
         )));
 
         // Verify MainView now has the first review selected
-        if let Some(main_view) = app.view_stack.get_mut(0) {
-            if let Some(main_view) = main_view.as_any_mut().downcast_mut::<MainView>() {
-                assert_eq!(main_view.selected_review_index(), Some(0));
-            }
+        if let Some(main_view) = app.view_stack.get_mut(0)
+            && let Some(main_view) = main_view.as_any_mut().downcast_mut::<MainView>()
+        {
+            assert_eq!(main_view.selected_review_index(), Some(0));
         }
     }
 
@@ -382,10 +382,10 @@ mod tests {
         assert_eq!(app.view_stack.len(), 2);
 
         // Verify MainView initially has no selection
-        if let Some(main_view) = app.view_stack.get_mut(0) {
-            if let Some(main_view) = main_view.as_any_mut().downcast_mut::<MainView>() {
-                assert_eq!(main_view.selected_review_index(), None);
-            }
+        if let Some(main_view) = app.view_stack.get_mut(0)
+            && let Some(main_view) = main_view.as_any_mut().downcast_mut::<MainView>()
+        {
+            assert_eq!(main_view.selected_review_index(), None);
         }
 
         // Call handle_app_events with ReviewsLoadingState::Loaded event
@@ -394,10 +394,10 @@ mod tests {
         )));
 
         // Verify MainView now has the first review selected (all views should have received the event)
-        if let Some(main_view) = app.view_stack.get_mut(0) {
-            if let Some(main_view) = main_view.as_any_mut().downcast_mut::<MainView>() {
-                assert_eq!(main_view.selected_review_index(), Some(0));
-            }
+        if let Some(main_view) = app.view_stack.get_mut(0)
+            && let Some(main_view) = main_view.as_any_mut().downcast_mut::<MainView>()
+        {
+            assert_eq!(main_view.selected_review_index(), Some(0));
         }
 
         // View stack should remain unchanged
