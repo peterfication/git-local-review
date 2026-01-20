@@ -139,7 +139,7 @@ impl ViewHandler for HelpModalView {
             .highlight_style(Style::default().bg(Color::Blue).fg(Color::White))
             .highlight_symbol("► ");
 
-        let mut list_state = self.list_state.clone();
+        let mut list_state = self.list_state;
         ratatui::widgets::StatefulWidget::render(list, chunks[0], buf, &mut list_state);
 
         let help_text = ratatui::widgets::Paragraph::new(
