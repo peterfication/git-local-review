@@ -11,7 +11,7 @@ use crate::{
     },
     views::{
         CommentsView, ConfirmationDialogView, HelpModalView, KeyBinding, ReviewCreateView,
-        ReviewDetailsView,
+        ReviewDetailsView, ReviewRefreshDialogView,
     },
 };
 
@@ -56,6 +56,9 @@ impl EventProcessor {
                     }
                     AppEvent::ReviewDetailsOpen(ref review_id) => {
                         Self::review_details_open(app, review_id)
+                    }
+                    AppEvent::ReviewRefreshOpen(ref review_id) => {
+                        Self::review_refresh_open(app, review_id)
                     }
                     _ => {
                         // Other events are handled by services or views
@@ -162,6 +165,12 @@ impl EventProcessor {
         app.push_view(Box::new(ReviewDetailsView::new_loading()));
         app.events.send(AppEvent::ReviewLoad(Arc::from(review_id)));
     }
+
+    /// Open refresh review chooser dialog
+    fn review_refresh_open(app: &mut App, review_id: &str) {
+        let refresh_dialog = ReviewRefreshDialogView::new(Arc::from(review_id));
+        app.push_view(Box::new(refresh_dialog));
+    }
 }
 
 #[cfg(test)]
@@ -216,6 +225,25 @@ mod tests {
         assert_eq!(
             app.view_stack.last().unwrap().view_type(),
             ViewType::ReviewCreate
+        );
+    }
+
+    #[tokio::test]
+    async fn test_process_review_refresh_open_event() {
+        let mut app = create_test_app().await;
+        assert_eq!(app.view_stack.len(), 1);
+
+        EventProcessor::process_event(
+            &mut app,
+            Event::App(AppEvent::ReviewRefreshOpen(Arc::from("review-1"))).into(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(app.view_stack.len(), 2);
+        assert_eq!(
+            app.view_stack.last().unwrap().view_type(),
+            ViewType::ReviewRefreshDialog
         );
     }
 

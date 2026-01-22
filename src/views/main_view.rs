@@ -48,6 +48,7 @@ impl ViewHandler for MainView {
             KeyCode::Char('j') | KeyCode::Down => self.select_next_review(),
             KeyCode::Char('k') | KeyCode::Up => self.select_previous_review(),
             KeyCode::Char('d') => self.delete_selected_review(app),
+            KeyCode::Char('r') => self.open_review_refresh(app),
             KeyCode::Char('o') | KeyCode::Char(' ') | KeyCode::Enter => {
                 self.open_review_details(app)
             }
@@ -154,6 +155,16 @@ impl ViewHandler for MainView {
                     state: KeyEventState::empty(),
                 },
             },
+            KeyBinding {
+                key: "r".to_string(),
+                description: "Refresh review SHAs".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Char('r'),
+                    modifiers: KeyModifiers::empty(),
+                    kind: KeyEventKind::Press,
+                    state: KeyEventState::empty(),
+                },
+            },
         ])
     }
 
@@ -237,6 +248,17 @@ impl MainView {
             let review_id = self.reviews[index].id.clone();
             app.events
                 .send(AppEvent::ReviewDetailsOpen(Arc::from(review_id)));
+        }
+    }
+
+    /// Open refresh chooser for the currently selected review
+    pub fn open_review_refresh(&self, app: &mut App) {
+        if let Some(index) = self.selected_review_index
+            && index < self.reviews.len()
+        {
+            let review_id = self.reviews[index].id.clone();
+            app.events
+                .send(AppEvent::ReviewRefreshOpen(Arc::from(review_id)));
         }
     }
 
@@ -836,6 +858,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_main_view_handle_review_refresh_key_with_selection() {
+        let mut app = create_test_app_with_reviews().await;
+        let mut view = MainView::new();
+
+        let reviews = Review::list_all(app.database.pool()).await.unwrap();
+        view.reviews = reviews.into();
+
+        view.selected_review_index = Some(0);
+        assert!(!app.events.has_pending_events());
+
+        let key_event = KeyEvent {
+            code: KeyCode::Char('r'),
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: KeyEventState::empty(),
+        };
+
+        view.handle_key_events(&mut app, &key_event).unwrap();
+
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        match &*event {
+            Event::App(AppEvent::ReviewRefreshOpen(review_id)) => {
+                assert_eq!(review_id.as_ref(), view.reviews[0].id);
+            }
+            _ => panic!("Expected ReviewRefreshOpen event, got: {event:?}"),
+        }
+    }
+
+    #[tokio::test]
     async fn test_main_view_handle_open_review_details_key_no_selection() {
         let mut app = create_test_app_with_reviews().await;
         let mut view = MainView::new();
@@ -854,6 +906,25 @@ mod tests {
         view.handle_key_events(&mut app, &key_event).unwrap();
 
         // Should not have sent any events since no selection
+        assert!(!app.events.has_pending_events());
+    }
+
+    #[tokio::test]
+    async fn test_main_view_handle_review_refresh_key_no_selection() {
+        let mut app = create_test_app_with_reviews().await;
+        let mut view = MainView::new();
+
+        assert!(!app.events.has_pending_events());
+
+        let key_event = KeyEvent {
+            code: KeyCode::Char('r'),
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: KeyEventState::empty(),
+        };
+
+        view.handle_key_events(&mut app, &key_event).unwrap();
+
         assert!(!app.events.has_pending_events());
     }
 
@@ -881,6 +952,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_main_view_handle_review_refresh_key_empty_reviews() {
+        let mut app = create_test_app_with_reviews().await;
+        let mut view = MainView::new();
+
+        view.reviews = Arc::new([]);
+        view.selected_review_index = Some(0);
+        assert!(!app.events.has_pending_events());
+
+        let key_event = KeyEvent {
+            code: KeyCode::Char('r'),
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: KeyEventState::empty(),
+        };
+
+        view.handle_key_events(&mut app, &key_event).unwrap();
+
+        assert!(!app.events.has_pending_events());
+    }
+
+    #[tokio::test]
     async fn test_main_view_open_review_details_method_with_selection() {
         let mut app = create_test_app_with_reviews().await;
         let mut view = MainView::new();
@@ -904,6 +996,29 @@ mod tests {
                 assert_eq!(review_id.as_ref(), view.reviews[0].id);
             }
             _ => panic!("Expected ReviewDetailsOpen event, got: {event:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_main_view_open_review_refresh_method_with_selection() {
+        let mut app = create_test_app_with_reviews().await;
+        let mut view = MainView::new();
+
+        let reviews = Review::list_all(app.database.pool()).await.unwrap();
+        view.reviews = reviews.into();
+
+        view.selected_review_index = Some(0);
+        assert!(!app.events.has_pending_events());
+
+        view.open_review_refresh(&mut app);
+
+        assert!(app.events.has_pending_events());
+        let event = app.events.try_recv().unwrap();
+        match &*event {
+            Event::App(AppEvent::ReviewRefreshOpen(review_id)) => {
+                assert_eq!(review_id.as_ref(), view.reviews[0].id);
+            }
+            _ => panic!("Expected ReviewRefreshOpen event, got: {event:?}"),
         }
     }
 }

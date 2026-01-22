@@ -95,6 +95,14 @@ pub enum AppEvent {
 
     /// Open review details view.
     ReviewDetailsOpen(Arc<ReviewId>),
+    /// Open refresh review chooser.
+    ReviewRefreshOpen(Arc<ReviewId>),
+    /// Refresh review base SHA.
+    ReviewRefreshBase { review_id: Arc<ReviewId> },
+    /// Refresh review target SHA.
+    ReviewRefreshTarget { review_id: Arc<ReviewId> },
+    /// Refresh review base and target SHAs.
+    ReviewRefreshBoth { review_id: Arc<ReviewId> },
 
     /// Trigger loading of Git branches.
     GitBranchesLoad,
