@@ -8,8 +8,7 @@ use ratatui::{
     crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers},
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
-    text::Line,
-    widgets::{Block, BorderType, Clear, Paragraph, Widget},
+    widgets::{Block, BorderType, Clear, List, ListItem, ListState, Paragraph, Widget},
 };
 
 use crate::{
@@ -18,13 +17,112 @@ use crate::{
     views::{KeyBinding, ViewHandler, ViewType, centered_rectangle},
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RefreshAction {
+    Base,
+    Target,
+    Both,
+}
+
+impl RefreshAction {
+    fn label(self) -> &'static str {
+        match self {
+            RefreshAction::Base => "Refresh base SHA",
+            RefreshAction::Target => "Refresh target SHA",
+            RefreshAction::Both => "Refresh both SHAs",
+        }
+    }
+
+    fn key(self) -> char {
+        match self {
+            RefreshAction::Base => 'b',
+            RefreshAction::Target => 't',
+            RefreshAction::Both => 'a',
+        }
+    }
+}
+
 pub struct ReviewRefreshDialogView {
     review_id: Arc<str>,
+    actions: Arc<[RefreshAction]>,
+    list_state: ListState,
 }
 
 impl ReviewRefreshDialogView {
     pub fn new(review_id: Arc<str>) -> Self {
-        Self { review_id }
+        let actions = Arc::new([
+            RefreshAction::Base,
+            RefreshAction::Target,
+            RefreshAction::Both,
+        ]);
+        let mut list_state = ListState::default();
+        if !actions.is_empty() {
+            list_state.select(Some(0));
+        }
+
+        Self {
+            review_id,
+            actions,
+            list_state,
+        }
+    }
+
+    fn select_next(&mut self) {
+        if self.actions.is_empty() {
+            return;
+        }
+
+        let selected = self.list_state.selected().unwrap_or(0);
+        let next = if selected >= self.actions.len() - 1 {
+            0
+        } else {
+            selected + 1
+        };
+        self.list_state.select(Some(next));
+    }
+
+    fn select_previous(&mut self) {
+        if self.actions.is_empty() {
+            return;
+        }
+
+        let selected = self.list_state.selected().unwrap_or(0);
+        let previous = if selected == 0 {
+            self.actions.len() - 1
+        } else {
+            selected - 1
+        };
+        self.list_state.select(Some(previous));
+    }
+
+    fn selected_action(&self) -> Option<RefreshAction> {
+        if let Some(selected) = self.list_state.selected()
+            && selected < self.actions.len()
+        {
+            return Some(self.actions[selected]);
+        }
+        None
+    }
+
+    fn trigger_action(&self, app: &mut App, action: RefreshAction) {
+        match action {
+            RefreshAction::Base => {
+                app.events.send(AppEvent::ReviewRefreshBase {
+                    review_id: Arc::clone(&self.review_id),
+                });
+            }
+            RefreshAction::Target => {
+                app.events.send(AppEvent::ReviewRefreshTarget {
+                    review_id: Arc::clone(&self.review_id),
+                });
+            }
+            RefreshAction::Both => {
+                app.events.send(AppEvent::ReviewRefreshBoth {
+                    review_id: Arc::clone(&self.review_id),
+                });
+            }
+        }
+        app.events.send(AppEvent::ViewClose);
     }
 }
 
@@ -36,22 +134,24 @@ impl ViewHandler for ReviewRefreshDialogView {
     fn handle_key_events(&mut self, app: &mut App, key_event: &KeyEvent) -> color_eyre::Result<()> {
         match key_event.code {
             KeyCode::Char('b') => {
-                app.events.send(AppEvent::ReviewRefreshBase {
-                    review_id: Arc::clone(&self.review_id),
-                });
-                app.events.send(AppEvent::ViewClose);
+                self.trigger_action(app, RefreshAction::Base);
             }
             KeyCode::Char('t') => {
-                app.events.send(AppEvent::ReviewRefreshTarget {
-                    review_id: Arc::clone(&self.review_id),
-                });
-                app.events.send(AppEvent::ViewClose);
+                self.trigger_action(app, RefreshAction::Target);
             }
             KeyCode::Char('a') => {
-                app.events.send(AppEvent::ReviewRefreshBoth {
-                    review_id: Arc::clone(&self.review_id),
-                });
-                app.events.send(AppEvent::ViewClose);
+                self.trigger_action(app, RefreshAction::Both);
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.select_previous();
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.select_next();
+            }
+            KeyCode::Enter => {
+                if let Some(action) = self.selected_action() {
+                    self.trigger_action(app, action);
+                }
             }
             KeyCode::Esc => {
                 app.events.send(AppEvent::ViewClose);
@@ -63,7 +163,7 @@ impl ViewHandler for ReviewRefreshDialogView {
     }
 
     fn render(&self, _app: &App, area: Rect, buf: &mut Buffer) {
-        let popup_area = centered_rectangle(60, 35, area);
+        let popup_area = centered_rectangle(70, 40, area);
         Clear.render(popup_area, buf);
 
         let block = Block::bordered()
@@ -76,31 +176,63 @@ impl ViewHandler for ReviewRefreshDialogView {
 
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(1),
-                Constraint::Length(1),
-                Constraint::Length(1),
-                Constraint::Length(1),
-                Constraint::Min(0),
-            ])
+            .constraints([Constraint::Min(1), Constraint::Length(2)])
             .split(inner);
 
-        let lines = [
-            Line::from("b: Refresh base SHA"),
-            Line::from("t: Refresh target SHA"),
-            Line::from("a: Refresh both SHAs"),
-            Line::from("Esc: Cancel"),
-        ];
+        let items: Vec<ListItem> = self
+            .actions
+            .iter()
+            .map(|action| {
+                ListItem::new(format!("{:<6} {}", action.key(), action.label()))
+                    .style(Style::default().fg(Color::White))
+            })
+            .collect();
 
-        for (chunk, line) in chunks.iter().take(lines.len()).zip(lines.iter()) {
-            Paragraph::new(line.clone())
-                .style(Style::default().fg(Color::White))
-                .render(*chunk, buf);
-        }
+        let list = List::new(items)
+            .highlight_style(Style::default().bg(Color::Blue).fg(Color::White))
+            .highlight_symbol("► ");
+
+        let mut list_state = self.list_state;
+        ratatui::widgets::StatefulWidget::render(list, chunks[0], buf, &mut list_state);
+
+        let help_text =
+            Paragraph::new("Use ↑/↓ or j/k to navigate, Enter to select, Esc to cancel")
+                .style(Style::default().fg(Color::Gray));
+        help_text.render(chunks[1], buf);
     }
 
     fn get_keybindings(&self) -> Arc<[KeyBinding]> {
         Arc::new([
+            KeyBinding {
+                key: "↑/k".to_string(),
+                description: "Move selection up".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Up,
+                    modifiers: KeyModifiers::empty(),
+                    kind: KeyEventKind::Press,
+                    state: KeyEventState::empty(),
+                },
+            },
+            KeyBinding {
+                key: "↓/j".to_string(),
+                description: "Move selection down".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Down,
+                    modifiers: KeyModifiers::empty(),
+                    kind: KeyEventKind::Press,
+                    state: KeyEventState::empty(),
+                },
+            },
+            KeyBinding {
+                key: "Enter".to_string(),
+                description: "Select action".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Enter,
+                    modifiers: KeyModifiers::empty(),
+                    kind: KeyEventKind::Press,
+                    state: KeyEventState::empty(),
+                },
+            },
             KeyBinding {
                 key: "b".to_string(),
                 description: "Refresh base SHA".to_string(),
@@ -146,7 +278,11 @@ impl ViewHandler for ReviewRefreshDialogView {
 
     #[cfg(test)]
     fn debug_state(&self) -> String {
-        format!("ReviewRefreshDialogView(review_id: \"{}\")", self.review_id)
+        format!(
+            "ReviewRefreshDialogView(review_id: \"{}\", selected: {:?})",
+            self.review_id,
+            self.list_state.selected()
+        )
     }
 
     #[cfg(test)]
@@ -193,6 +329,7 @@ mod tests {
     fn test_review_refresh_dialog_view_new() {
         let view = ReviewRefreshDialogView::new(Arc::from("review-1"));
         assert_eq!(view.review_id.as_ref(), "review-1");
+        assert_eq!(view.list_state.selected(), Some(0));
     }
 
     #[tokio::test]
@@ -215,6 +352,8 @@ mod tests {
             *event,
             Event::App(AppEvent::ReviewRefreshBase { .. })
         ));
+        let event = app.events.try_recv().unwrap();
+        assert!(matches!(*event, Event::App(AppEvent::ViewClose)));
     }
 
     #[tokio::test]
@@ -234,6 +373,58 @@ mod tests {
 
         let event = app.events.try_recv().unwrap();
         assert!(matches!(*event, Event::App(AppEvent::ViewClose)));
+    }
+
+    #[tokio::test]
+    async fn test_review_refresh_dialog_view_handle_enter_key() {
+        let mut app = create_test_app().await;
+        let mut view = ReviewRefreshDialogView::new(Arc::from("review-1"));
+        assert!(!app.events.has_pending_events());
+
+        let key_event = KeyEvent {
+            code: KeyCode::Enter,
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: KeyEventState::empty(),
+        };
+
+        view.handle_key_events(&mut app, &key_event).unwrap();
+
+        let event = app.events.try_recv().unwrap();
+        assert!(matches!(
+            *event,
+            Event::App(AppEvent::ReviewRefreshBase { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_review_refresh_dialog_view_navigation_and_select() {
+        let mut app = create_test_app().await;
+        let mut view = ReviewRefreshDialogView::new(Arc::from("review-1"));
+        assert!(!app.events.has_pending_events());
+
+        let down_event = KeyEvent {
+            code: KeyCode::Down,
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: KeyEventState::empty(),
+        };
+        view.handle_key_events(&mut app, &down_event).unwrap();
+        assert_eq!(view.list_state.selected(), Some(1));
+
+        let enter_event = KeyEvent {
+            code: KeyCode::Enter,
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: KeyEventState::empty(),
+        };
+        view.handle_key_events(&mut app, &enter_event).unwrap();
+
+        let event = app.events.try_recv().unwrap();
+        assert!(matches!(
+            *event,
+            Event::App(AppEvent::ReviewRefreshTarget { .. })
+        ));
     }
 
     #[tokio::test]

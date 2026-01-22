@@ -22,6 +22,8 @@
 | **Refresh review**     | `b`                                       | Refresh base SHA                                       |
 | **Refresh review**     | `t`                                       | Refresh target SHA                                     |
 | **Refresh review**     | `a`                                       | Refresh both SHAs                                      |
+| **Refresh review**     | `Up` / `Down` / `k` / `j`                 | Move selection                                         |
+| **Refresh review**     | `Enter`                                   | Select action                                          |
 | **Refresh review**     | `Esc`                                     | Cancel                                                 |
 | **Comments**           | `Enter`                                   | Submit comment                                         |
 | **Comments**           | `Tab`                                     | Switch focus between input and comments list           |
