@@ -5,6 +5,7 @@ use crate::{
     event::{AppEvent, EventHandler},
     models::{Review, ReviewId},
     services::git_service::GitService,
+    time_provider::TimeProvider,
 };
 
 use super::{ServiceContext, ServiceHandler};
@@ -224,6 +225,90 @@ impl ReviewService {
             }
         }
     }
+
+    async fn handle_review_refresh(
+        review_id: &str,
+        refresh_base: bool,
+        refresh_target: bool,
+        context: ServiceContext<'_>,
+    ) {
+        let review = match Review::find_by_id(context.database.pool(), review_id).await {
+            Ok(Some(review)) => review,
+            Ok(None) => {
+                log::warn!("No review found with ID: {review_id}");
+                return;
+            }
+            Err(error) => {
+                log::error!("Error loading review by ID: {error}");
+                return;
+            }
+        };
+
+        let mut updated_review = review.clone();
+        let mut did_update = false;
+
+        if refresh_base {
+            match GitService::get_branch_sha(context.repo_path, &review.base_branch) {
+                Ok(Some(base_sha)) => {
+                    updated_review.base_sha = Some(base_sha);
+                    updated_review.base_sha_changed = None;
+                    did_update = true;
+                }
+                Ok(None) => {
+                    log::warn!("No base branch SHA found for review {}", review.id);
+                }
+                Err(error) => {
+                    log::warn!(
+                        "Failed to refresh base SHA for review {}: {error}",
+                        review.id
+                    );
+                }
+            }
+        }
+
+        if refresh_target {
+            match GitService::get_branch_sha(context.repo_path, &review.target_branch) {
+                Ok(Some(target_sha)) => {
+                    updated_review.target_sha = Some(target_sha);
+                    updated_review.target_sha_changed = None;
+                    did_update = true;
+                }
+                Ok(None) => {
+                    log::warn!("No target branch SHA found for review {}", review.id);
+                }
+                Err(error) => {
+                    log::warn!(
+                        "Failed to refresh target SHA for review {}: {error}",
+                        review.id
+                    );
+                }
+            }
+        }
+
+        if !did_update {
+            return;
+        }
+
+        updated_review.updated_at = crate::time_provider::SystemTimeProvider.now();
+        if let Err(error) = updated_review
+            .update_shas(
+                context.database.pool(),
+                updated_review.base_sha.clone(),
+                updated_review.target_sha.clone(),
+                updated_review.base_sha_changed.clone(),
+                updated_review.target_sha_changed.clone(),
+            )
+            .await
+        {
+            log::error!("Failed to refresh review SHAs for {}: {error}", review.id);
+            return;
+        }
+
+        context.events.send(AppEvent::ReviewsLoad);
+        context
+            .events
+            .send(AppEvent::ReviewLoad(Arc::from(review.id)));
+    }
 }
 
 impl ServiceHandler for ReviewService {
@@ -246,6 +331,15 @@ impl ServiceHandler for ReviewService {
                 AppEvent::ReviewLoad(review_id) => {
                     Self::handle_review_load(review_id, context.database, context.events).await
                 }
+                AppEvent::ReviewRefreshBase { review_id } => {
+                    Self::handle_review_refresh(review_id, true, false, context).await
+                }
+                AppEvent::ReviewRefreshTarget { review_id } => {
+                    Self::handle_review_refresh(review_id, false, true, context).await
+                }
+                AppEvent::ReviewRefreshBoth { review_id } => {
+                    Self::handle_review_refresh(review_id, true, true, context).await
+                }
                 _ => {
                     // Other events are not handled by ReviewService
                 }
@@ -263,7 +357,7 @@ mod tests {
 
     use crate::{
         app::App,
-        event::{Event, EventHandler, ReviewId},
+        event::{AppEvent, Event, EventHandler, ReviewId},
     };
 
     async fn create_test_database() -> Database {
@@ -519,6 +613,93 @@ mod tests {
         assert!(events.has_pending_events());
         let event = events.try_recv().unwrap();
         assert!(matches!(*event, Event::App(AppEvent::ReviewsLoading)));
+    }
+
+    #[tokio::test]
+    async fn test_handle_review_refresh_base_updates_sha() {
+        let database = create_test_database().await;
+        let mut events = EventHandler::new_for_test();
+        let branches = GitService::get_branches(".").unwrap();
+        assert!(!branches.is_empty());
+        let branch = branches[0].clone();
+        let current_sha = GitService::get_branch_sha(".", &branch).unwrap();
+
+        let review = Review::builder()
+            .base_branch(branch.clone())
+            .target_branch(branch.clone())
+            .base_sha(Some("old-base".to_string()))
+            .target_sha(Some("old-target".to_string()))
+            .base_sha_changed(Some("changed-base".to_string()))
+            .target_sha_changed(Some("changed-target".to_string()))
+            .build();
+        review.save(database.pool()).await.unwrap();
+
+        ReviewService::handle_app_event(
+            &AppEvent::ReviewRefreshBase {
+                review_id: Arc::from(review.id.clone()),
+            },
+            ServiceContext {
+                database: &database,
+                repo_path: ".",
+                events: &mut events,
+            },
+        )
+        .await
+        .unwrap();
+
+        let updated = Review::find_by_id(database.pool(), &review.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(updated.base_sha, current_sha);
+        assert!(updated.base_sha_changed.is_none());
+        assert_eq!(updated.target_sha, Some("old-target".to_string()));
+        assert_eq!(
+            updated.target_sha_changed,
+            Some("changed-target".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_handle_review_refresh_both_updates_shas() {
+        let database = create_test_database().await;
+        let mut events = EventHandler::new_for_test();
+        let branches = GitService::get_branches(".").unwrap();
+        assert!(!branches.is_empty());
+        let branch = branches[0].clone();
+        let current_sha = GitService::get_branch_sha(".", &branch).unwrap();
+
+        let review = Review::builder()
+            .base_branch(branch.clone())
+            .target_branch(branch.clone())
+            .base_sha(Some("old-base".to_string()))
+            .target_sha(Some("old-target".to_string()))
+            .base_sha_changed(Some("changed-base".to_string()))
+            .target_sha_changed(Some("changed-target".to_string()))
+            .build();
+        review.save(database.pool()).await.unwrap();
+
+        ReviewService::handle_app_event(
+            &AppEvent::ReviewRefreshBoth {
+                review_id: Arc::from(review.id.clone()),
+            },
+            ServiceContext {
+                database: &database,
+                repo_path: ".",
+                events: &mut events,
+            },
+        )
+        .await
+        .unwrap();
+
+        let updated = Review::find_by_id(database.pool(), &review.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(updated.base_sha, current_sha);
+        assert_eq!(updated.target_sha, current_sha);
+        assert!(updated.base_sha_changed.is_none());
+        assert!(updated.target_sha_changed.is_none());
     }
 
     #[tokio::test]

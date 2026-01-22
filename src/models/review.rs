@@ -194,6 +194,33 @@ impl Review {
         Ok(())
     }
 
+    pub async fn update_shas(
+        &self,
+        pool: &SqlitePool,
+        base_sha: Option<String>,
+        target_sha: Option<String>,
+        base_sha_changed: Option<String>,
+        target_sha_changed: Option<String>,
+    ) -> Result<(), sqlx::Error> {
+        let updated_at = self.updated_at.to_rfc3339();
+        sqlx::query!(
+            r#"
+            UPDATE reviews
+            SET base_sha = ?2, target_sha = ?3, base_sha_changed = ?4, target_sha_changed = ?5, updated_at = ?6
+            WHERE id = ?1
+            "#,
+            self.id,
+            base_sha,
+            target_sha,
+            base_sha_changed,
+            target_sha_changed,
+            updated_at
+        )
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
     pub async fn delete(&self, pool: &SqlitePool) -> Result<(), sqlx::Error> {
         sqlx::query!(
             r#"
