@@ -57,9 +57,10 @@ impl EventProcessor {
                     AppEvent::ReviewDetailsOpen(ref review_id) => {
                         Self::review_details_open(app, review_id)
                     }
-                    AppEvent::ReviewRefreshOpen(ref review_id) => {
-                        Self::review_refresh_open(app, review_id)
-                    }
+                    AppEvent::ReviewRefreshOpen {
+                        ref review_id,
+                        ref options,
+                    } => Self::review_refresh_open(app, review_id, options),
                     _ => {
                         // Other events are handled by services or views
                     }
@@ -167,8 +168,12 @@ impl EventProcessor {
     }
 
     /// Open refresh review chooser dialog
-    fn review_refresh_open(app: &mut App, review_id: &str) {
-        let refresh_dialog = ReviewRefreshDialogView::new(Arc::from(review_id));
+    fn review_refresh_open(
+        app: &mut App,
+        review_id: &str,
+        options: &crate::views::ReviewRefreshOptions,
+    ) {
+        let refresh_dialog = ReviewRefreshDialogView::new(Arc::from(review_id), *options);
         app.push_view(Box::new(refresh_dialog));
     }
 }
@@ -235,7 +240,14 @@ mod tests {
 
         EventProcessor::process_event(
             &mut app,
-            Event::App(AppEvent::ReviewRefreshOpen(Arc::from("review-1"))).into(),
+            Event::App(AppEvent::ReviewRefreshOpen {
+                review_id: Arc::from("review-1"),
+                options: crate::views::ReviewRefreshOptions {
+                    can_refresh_base: true,
+                    can_refresh_target: false,
+                },
+            })
+            .into(),
         )
         .await
         .unwrap();

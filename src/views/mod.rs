@@ -27,7 +27,7 @@ pub use help_modal::HelpModalView;
 pub use main_view::MainView;
 pub use review_create_view::ReviewCreateView;
 pub use review_details_view::ReviewDetailsView;
-pub use review_refresh_dialog::ReviewRefreshDialogView;
+pub use review_refresh_dialog::{ReviewRefreshDialogView, ReviewRefreshOptions};
 
 const SELECTION_INDICATOR: &str = ">";
 

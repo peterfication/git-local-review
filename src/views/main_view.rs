@@ -256,9 +256,14 @@ impl MainView {
         if let Some(index) = self.selected_review_index
             && index < self.reviews.len()
         {
-            let review_id = self.reviews[index].id.clone();
-            app.events
-                .send(AppEvent::ReviewRefreshOpen(Arc::from(review_id)));
+            let review = &self.reviews[index];
+            app.events.send(AppEvent::ReviewRefreshOpen {
+                review_id: Arc::from(review.id.clone()),
+                options: crate::views::ReviewRefreshOptions {
+                    can_refresh_base: review.base_sha_changed.is_some(),
+                    can_refresh_target: review.target_sha_changed.is_some(),
+                },
+            });
         }
     }
 
@@ -880,8 +885,10 @@ mod tests {
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
         match &*event {
-            Event::App(AppEvent::ReviewRefreshOpen(review_id)) => {
+            Event::App(AppEvent::ReviewRefreshOpen { review_id, options }) => {
                 assert_eq!(review_id.as_ref(), view.reviews[0].id);
+                assert!(!options.can_refresh_base);
+                assert!(!options.can_refresh_target);
             }
             _ => panic!("Expected ReviewRefreshOpen event, got: {event:?}"),
         }
@@ -1015,8 +1022,10 @@ mod tests {
         assert!(app.events.has_pending_events());
         let event = app.events.try_recv().unwrap();
         match &*event {
-            Event::App(AppEvent::ReviewRefreshOpen(review_id)) => {
+            Event::App(AppEvent::ReviewRefreshOpen { review_id, options }) => {
                 assert_eq!(review_id.as_ref(), view.reviews[0].id);
+                assert!(!options.can_refresh_base);
+                assert!(!options.can_refresh_target);
             }
             _ => panic!("Expected ReviewRefreshOpen event, got: {event:?}"),
         }

@@ -367,8 +367,13 @@ impl ReviewDetailsView {
             return;
         };
 
-        app.events
-            .send(AppEvent::ReviewRefreshOpen(Arc::from(review.id.as_str())));
+        app.events.send(AppEvent::ReviewRefreshOpen {
+            review_id: Arc::from(review.id.as_str()),
+            options: crate::views::ReviewRefreshOptions {
+                can_refresh_base: review.base_sha_changed.is_some(),
+                can_refresh_target: review.target_sha_changed.is_some(),
+            },
+        });
     }
 
     /// Navigate to the previous line in the respective navigation mode
@@ -1383,7 +1388,7 @@ mod tests {
 
         let event = app.events.try_recv().unwrap();
         match &*event {
-            Event::App(AppEvent::ReviewRefreshOpen(_)) => {}
+            Event::App(AppEvent::ReviewRefreshOpen { .. }) => {}
             _ => panic!("Expected ReviewRefreshOpen event"),
         }
     }
