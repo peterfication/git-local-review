@@ -36,3 +36,5 @@
 | **Help Modal**         | `Up` / `Down` / `k` / `j`                 | Navigate keybindings                                   |
 | **Help Modal**         | `Enter`                                   | Execute selected action                                |
 | **Help Modal**         | `Esc`                                     | Close help modal                                       |
+
+> NOTE: The refresh review dialog disables unavailable actions (shown as `N/A`); if no SHAs can be refreshed, only `Esc` is available.

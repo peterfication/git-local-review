@@ -1,9 +1,9 @@
-use std::{future::Future, pin::Pin, sync::Arc};
+use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc};
 
 use crate::{
     database::Database,
     event::{AppEvent, EventHandler},
-    models::{Review, ReviewId},
+    models::{FileView, Review, ReviewId},
     services::git_service::GitService,
     time_provider::TimeProvider,
 };
@@ -226,6 +226,10 @@ impl ReviewService {
         }
     }
 
+    /// Handle refreshing review SHAs.
+    ///
+    /// Refreshes the base and/or target SHAs from Git, updates the review in the database,
+    /// and resets viewed files if the diff has changed.
     async fn handle_review_refresh(
         review_id: &str,
         refresh_base: bool,
@@ -289,6 +293,22 @@ impl ReviewService {
             return;
         }
 
+        let old_diff = match (review.base_sha.as_deref(), review.target_sha.as_deref()) {
+            (Some(base_sha), Some(target_sha)) => {
+                GitService::get_diff_between_shas(context.repo_path, base_sha, target_sha).ok()
+            }
+            _ => None,
+        };
+        let new_diff = match (
+            updated_review.base_sha.as_deref(),
+            updated_review.target_sha.as_deref(),
+        ) {
+            (Some(base_sha), Some(target_sha)) => {
+                GitService::get_diff_between_shas(context.repo_path, base_sha, target_sha).ok()
+            }
+            _ => None,
+        };
+
         updated_review.updated_at = crate::time_provider::SystemTimeProvider.now();
         if let Err(error) = updated_review
             .update_shas(
@@ -302,6 +322,39 @@ impl ReviewService {
         {
             log::error!("Failed to refresh review SHAs for {}: {error}", review.id);
             return;
+        }
+
+        if let (Some(old_diff), Some(new_diff)) = (old_diff, new_diff)
+            && let Ok(viewed_files) =
+                FileView::get_viewed_files(context.database.pool(), &review.id).await
+            && !viewed_files.is_empty()
+        {
+            let old_map: HashMap<String, String> = old_diff
+                .files
+                .iter()
+                .map(|file| (file.path.clone(), file.content.clone()))
+                .collect();
+            let new_map: HashMap<String, String> = new_diff
+                .files
+                .iter()
+                .map(|file| (file.path.clone(), file.content.clone()))
+                .collect();
+
+            for file_path in viewed_files {
+                let old_content = old_map.get(&file_path);
+                let new_content = new_map.get(&file_path);
+                if old_content != new_content
+                    && let Err(error) =
+                        FileView::mark_as_unviewed(context.database.pool(), &review.id, &file_path)
+                            .await
+                {
+                    log::warn!(
+                        "Failed to reset viewed file {} for review {}: {error}",
+                        file_path,
+                        review.id
+                    );
+                }
+            }
         }
 
         context.events.send(AppEvent::ReviewsLoad);
@@ -352,7 +405,10 @@ impl ServiceHandler for ReviewService {
 mod tests {
     use super::*;
 
+    use std::{fs, path::Path};
+
     use sqlx::SqlitePool;
+    use tempfile::TempDir;
 
     use crate::{
         app::App,
@@ -363,6 +419,85 @@ mod tests {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         sqlx::migrate!().run(&pool).await.unwrap();
         Database::from_pool(pool)
+    }
+
+    fn create_refresh_test_repo() -> (TempDir, String, String, String) {
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = temp_dir.path();
+        let repo = git2::Repository::init(repo_path).unwrap();
+        let signature = git2::Signature::now("Test User", "test@example.com").unwrap();
+
+        let initial_sha = {
+            let mut index = repo.index().unwrap();
+            let file_path = repo_path.join("file.txt");
+            fs::write(&file_path, b"initial").unwrap();
+            index.add_path(Path::new("file.txt")).unwrap();
+            index.write().unwrap();
+            let tree_id = index.write_tree().unwrap();
+            let tree = repo.find_tree(tree_id).unwrap();
+            let commit_id = repo
+                .commit(Some("HEAD"), &signature, &signature, "Initial", &tree, &[])
+                .unwrap();
+            commit_id.to_string()
+        };
+
+        let base_commit = repo
+            .find_commit(git2::Oid::from_str(&initial_sha).unwrap())
+            .unwrap();
+        repo.branch("base", &base_commit, true).unwrap();
+        repo.branch("target", &base_commit, true).unwrap();
+        repo.set_head("refs/heads/target").unwrap();
+        repo.checkout_head(None).unwrap();
+
+        let target_sha = {
+            let mut index = repo.index().unwrap();
+            let file_path = repo_path.join("file.txt");
+            fs::write(&file_path, b"second").unwrap();
+            index.add_path(Path::new("file.txt")).unwrap();
+            index.write().unwrap();
+            let tree_id = index.write_tree().unwrap();
+            let tree = repo.find_tree(tree_id).unwrap();
+            let parent_commit = repo
+                .find_commit(git2::Oid::from_str(&initial_sha).unwrap())
+                .unwrap();
+            let commit_id = repo
+                .commit(
+                    Some("HEAD"),
+                    &signature,
+                    &signature,
+                    "Second",
+                    &tree,
+                    &[&parent_commit],
+                )
+                .unwrap();
+            commit_id.to_string()
+        };
+
+        let new_target_sha = {
+            let mut index = repo.index().unwrap();
+            let file_path = repo_path.join("file.txt");
+            fs::write(&file_path, b"third").unwrap();
+            index.add_path(Path::new("file.txt")).unwrap();
+            index.write().unwrap();
+            let tree_id = index.write_tree().unwrap();
+            let tree = repo.find_tree(tree_id).unwrap();
+            let parent_commit = repo
+                .find_commit(git2::Oid::from_str(&target_sha).unwrap())
+                .unwrap();
+            let commit_id = repo
+                .commit(
+                    Some("HEAD"),
+                    &signature,
+                    &signature,
+                    "Third",
+                    &tree,
+                    &[&parent_commit],
+                )
+                .unwrap();
+            commit_id.to_string()
+        };
+
+        (temp_dir, initial_sha, target_sha, new_target_sha)
     }
 
     #[tokio::test]
@@ -703,6 +838,47 @@ mod tests {
         assert_eq!(updated.target_sha, current_sha);
         assert!(updated.base_sha_changed.is_none());
         assert!(updated.target_sha_changed.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_handle_review_refresh_resets_viewed_files_on_diff_change() {
+        let database = create_test_database().await;
+        let mut events = EventHandler::new_for_test();
+        let (temp_dir, base_sha, target_sha, new_target_sha) = create_refresh_test_repo();
+        let repo_path = temp_dir.path().to_string_lossy().to_string();
+
+        let review = Review::builder()
+            .base_branch("base")
+            .target_branch("target")
+            .base_sha(Some(base_sha))
+            .target_sha(Some(target_sha))
+            .target_sha_changed(Some(new_target_sha))
+            .build();
+        review.save(database.pool()).await.unwrap();
+
+        FileView::mark_as_viewed(database.pool(), &review.id, "file.txt")
+            .await
+            .unwrap();
+
+        ReviewService::handle_app_event(
+            &AppEvent::ReviewRefresh {
+                review_id: Arc::from(review.id.clone()),
+                refresh_base: false,
+                refresh_target: true,
+            },
+            ServiceContext {
+                database: &database,
+                repo_path: repo_path.as_str(),
+                events: &mut events,
+            },
+        )
+        .await
+        .unwrap();
+
+        let is_viewed = FileView::is_file_viewed(database.pool(), &review.id, "file.txt")
+            .await
+            .unwrap();
+        assert!(!is_viewed);
     }
 
     #[tokio::test]
