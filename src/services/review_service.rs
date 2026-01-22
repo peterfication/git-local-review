@@ -331,14 +331,13 @@ impl ServiceHandler for ReviewService {
                 AppEvent::ReviewLoad(review_id) => {
                     Self::handle_review_load(review_id, context.database, context.events).await
                 }
-                AppEvent::ReviewRefreshBase { review_id } => {
-                    Self::handle_review_refresh(review_id, true, false, context).await
-                }
-                AppEvent::ReviewRefreshTarget { review_id } => {
-                    Self::handle_review_refresh(review_id, false, true, context).await
-                }
-                AppEvent::ReviewRefreshBoth { review_id } => {
-                    Self::handle_review_refresh(review_id, true, true, context).await
+                AppEvent::ReviewRefresh {
+                    review_id,
+                    refresh_base,
+                    refresh_target,
+                } => {
+                    Self::handle_review_refresh(review_id, *refresh_base, *refresh_target, context)
+                        .await
                 }
                 _ => {
                     // Other events are not handled by ReviewService
@@ -635,8 +634,10 @@ mod tests {
         review.save(database.pool()).await.unwrap();
 
         ReviewService::handle_app_event(
-            &AppEvent::ReviewRefreshBase {
+            &AppEvent::ReviewRefresh {
                 review_id: Arc::from(review.id.clone()),
+                refresh_base: true,
+                refresh_target: false,
             },
             ServiceContext {
                 database: &database,
@@ -680,8 +681,10 @@ mod tests {
         review.save(database.pool()).await.unwrap();
 
         ReviewService::handle_app_event(
-            &AppEvent::ReviewRefreshBoth {
+            &AppEvent::ReviewRefresh {
                 review_id: Arc::from(review.id.clone()),
+                refresh_base: true,
+                refresh_target: true,
             },
             ServiceContext {
                 database: &database,

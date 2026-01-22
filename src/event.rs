@@ -100,12 +100,12 @@ pub enum AppEvent {
         review_id: Arc<ReviewId>,
         options: ReviewRefreshOptions,
     },
-    /// Refresh review base SHA.
-    ReviewRefreshBase { review_id: Arc<ReviewId> },
-    /// Refresh review target SHA.
-    ReviewRefreshTarget { review_id: Arc<ReviewId> },
-    /// Refresh review base and target SHAs.
-    ReviewRefreshBoth { review_id: Arc<ReviewId> },
+    /// Refresh review SHAs.
+    ReviewRefresh {
+        review_id: Arc<ReviewId>,
+        refresh_base: bool,
+        refresh_target: bool,
+    },
 
     /// Trigger loading of Git branches.
     GitBranchesLoad,

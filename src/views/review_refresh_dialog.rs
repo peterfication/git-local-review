@@ -140,23 +140,16 @@ impl ReviewRefreshDialogView {
     }
 
     fn trigger_action(&self, app: &mut App, action: RefreshAction) {
-        match action {
-            RefreshAction::Base => {
-                app.events.send(AppEvent::ReviewRefreshBase {
-                    review_id: Arc::clone(&self.review_id),
-                });
-            }
-            RefreshAction::Target => {
-                app.events.send(AppEvent::ReviewRefreshTarget {
-                    review_id: Arc::clone(&self.review_id),
-                });
-            }
-            RefreshAction::Both => {
-                app.events.send(AppEvent::ReviewRefreshBoth {
-                    review_id: Arc::clone(&self.review_id),
-                });
-            }
-        }
+        let (refresh_base, refresh_target) = match action {
+            RefreshAction::Base => (true, false),
+            RefreshAction::Target => (false, true),
+            RefreshAction::Both => (true, true),
+        };
+        app.events.send(AppEvent::ReviewRefresh {
+            review_id: Arc::clone(&self.review_id),
+            refresh_base,
+            refresh_target,
+        });
         app.events.send(AppEvent::ViewClose);
     }
 }
@@ -442,7 +435,11 @@ mod tests {
         let event = app.events.try_recv().unwrap();
         assert!(matches!(
             *event,
-            Event::App(AppEvent::ReviewRefreshBase { .. })
+            Event::App(AppEvent::ReviewRefresh {
+                refresh_base: true,
+                refresh_target: false,
+                ..
+            })
         ));
         let event = app.events.try_recv().unwrap();
         assert!(matches!(*event, Event::App(AppEvent::ViewClose)));
@@ -497,7 +494,11 @@ mod tests {
         let event = app.events.try_recv().unwrap();
         assert!(matches!(
             *event,
-            Event::App(AppEvent::ReviewRefreshBase { .. })
+            Event::App(AppEvent::ReviewRefresh {
+                refresh_base: true,
+                refresh_target: false,
+                ..
+            })
         ));
     }
 
@@ -558,7 +559,11 @@ mod tests {
         let event = app.events.try_recv().unwrap();
         assert!(matches!(
             *event,
-            Event::App(AppEvent::ReviewRefreshTarget { .. })
+            Event::App(AppEvent::ReviewRefresh {
+                refresh_base: false,
+                refresh_target: true,
+                ..
+            })
         ));
     }
 
