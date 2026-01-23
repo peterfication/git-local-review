@@ -753,14 +753,13 @@ mod tests {
     async fn test_handle_review_refresh_base_updates_sha() {
         let database = create_test_database().await;
         let mut events = EventHandler::new_for_test();
-        let branches = GitService::get_branches(".").unwrap();
-        assert!(!branches.is_empty());
-        let branch = branches[0].clone();
-        let current_sha = GitService::get_branch_sha(".", &branch).unwrap();
+        let (temp_dir, _base_sha, _target_sha, _new_target_sha) = create_refresh_test_repo();
+        let repo_path = temp_dir.path().to_string_lossy().to_string();
+        let base_sha = GitService::get_branch_sha(repo_path.as_str(), "base").unwrap();
 
         let review = Review::builder()
-            .base_branch(branch.clone())
-            .target_branch(branch.clone())
+            .base_branch("base")
+            .target_branch("target")
             .base_sha(Some("old-base".to_string()))
             .target_sha(Some("old-target".to_string()))
             .base_sha_changed(Some("changed-base".to_string()))
@@ -776,7 +775,7 @@ mod tests {
             },
             ServiceContext {
                 database: &database,
-                repo_path: ".",
+                repo_path: repo_path.as_str(),
                 events: &mut events,
             },
         )
@@ -787,7 +786,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(updated.base_sha, current_sha);
+        assert_eq!(updated.base_sha, base_sha);
         assert!(updated.base_sha_changed.is_none());
         assert_eq!(updated.target_sha, Some("old-target".to_string()));
         assert_eq!(
@@ -800,14 +799,14 @@ mod tests {
     async fn test_handle_review_refresh_both_updates_shas() {
         let database = create_test_database().await;
         let mut events = EventHandler::new_for_test();
-        let branches = GitService::get_branches(".").unwrap();
-        assert!(!branches.is_empty());
-        let branch = branches[0].clone();
-        let current_sha = GitService::get_branch_sha(".", &branch).unwrap();
+        let (temp_dir, _base_sha, _target_sha, _new_target_sha) = create_refresh_test_repo();
+        let repo_path = temp_dir.path().to_string_lossy().to_string();
+        let base_sha = GitService::get_branch_sha(repo_path.as_str(), "base").unwrap();
+        let target_sha = GitService::get_branch_sha(repo_path.as_str(), "target").unwrap();
 
         let review = Review::builder()
-            .base_branch(branch.clone())
-            .target_branch(branch.clone())
+            .base_branch("base")
+            .target_branch("target")
             .base_sha(Some("old-base".to_string()))
             .target_sha(Some("old-target".to_string()))
             .base_sha_changed(Some("changed-base".to_string()))
@@ -823,7 +822,7 @@ mod tests {
             },
             ServiceContext {
                 database: &database,
-                repo_path: ".",
+                repo_path: repo_path.as_str(),
                 events: &mut events,
             },
         )
@@ -834,8 +833,8 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(updated.base_sha, current_sha);
-        assert_eq!(updated.target_sha, current_sha);
+        assert_eq!(updated.base_sha, base_sha);
+        assert_eq!(updated.target_sha, target_sha);
         assert!(updated.base_sha_changed.is_none());
         assert!(updated.target_sha_changed.is_none());
     }
