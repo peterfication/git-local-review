@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-01-24
+
 - Refresh review by duplicating from current heads
 - Refresh review action
 - Show changed SHA in reviews list
