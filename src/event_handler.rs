@@ -245,6 +245,7 @@ mod tests {
                 options: crate::views::ReviewRefreshOptions {
                     can_refresh_base: true,
                     can_refresh_target: false,
+                    can_duplicate: true,
                 },
             })
             .into(),

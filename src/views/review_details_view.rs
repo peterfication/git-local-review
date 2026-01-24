@@ -372,6 +372,8 @@ impl ReviewDetailsView {
             options: crate::views::ReviewRefreshOptions {
                 can_refresh_base: review.base_sha_changed.is_some(),
                 can_refresh_target: review.target_sha_changed.is_some(),
+                can_duplicate: review.base_sha_changed.is_some()
+                    || review.target_sha_changed.is_some(),
             },
         });
     }

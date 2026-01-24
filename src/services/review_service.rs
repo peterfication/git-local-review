@@ -3,10 +3,11 @@ use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc};
 use crate::{
     database::Database,
     event::{AppEvent, EventHandler},
-    models::{FileView, Review, ReviewId},
+    models::{Comment, FileView, Review, ReviewId},
     services::git_service::GitService,
     time_provider::TimeProvider,
 };
+use uuid::Uuid;
 
 use super::{ServiceContext, ServiceHandler};
 
@@ -362,6 +363,156 @@ impl ReviewService {
             .events
             .send(AppEvent::ReviewLoad(Arc::from(review.id)));
     }
+
+    /// Handle creating a new review from current branch heads.
+    async fn handle_review_duplicate(review_id: &str, context: ServiceContext<'_>) {
+        let review = match Review::find_by_id(context.database.pool(), review_id).await {
+            Ok(Some(review)) => review,
+            Ok(None) => {
+                log::warn!("No review found with ID: {review_id}");
+                return;
+            }
+            Err(error) => {
+                log::error!("Error loading review by ID: {error}");
+                return;
+            }
+        };
+
+        let base_sha = match GitService::get_branch_sha(context.repo_path, &review.base_branch) {
+            Ok(Some(base_sha)) => base_sha,
+            Ok(None) => {
+                log::warn!("No base branch SHA found for review {}", review.id);
+                return;
+            }
+            Err(error) => {
+                log::warn!(
+                    "Failed to load base branch SHA for review {}: {error}",
+                    review.id
+                );
+                return;
+            }
+        };
+
+        let target_sha = match GitService::get_branch_sha(context.repo_path, &review.target_branch)
+        {
+            Ok(Some(target_sha)) => target_sha,
+            Ok(None) => {
+                log::warn!("No target branch SHA found for review {}", review.id);
+                return;
+            }
+            Err(error) => {
+                log::warn!(
+                    "Failed to load target branch SHA for review {}: {error}",
+                    review.id
+                );
+                return;
+            }
+        };
+
+        let old_diff = match (review.base_sha.as_deref(), review.target_sha.as_deref()) {
+            (Some(base_sha), Some(target_sha)) => {
+                GitService::get_diff_between_shas(context.repo_path, base_sha, target_sha).ok()
+            }
+            _ => None,
+        };
+        let new_diff =
+            GitService::get_diff_between_shas(context.repo_path, &base_sha, &target_sha).ok();
+
+        let new_review = Review::builder()
+            .base_branch(review.base_branch.clone())
+            .target_branch(review.target_branch.clone())
+            .base_sha(Some(base_sha))
+            .target_sha(Some(target_sha))
+            .base_branch_exists(Some(true))
+            .target_branch_exists(Some(true))
+            .build();
+
+        if let Err(error) = new_review.save(context.database.pool()).await {
+            log::error!(
+                "Failed to create review from current heads for {}: {error}",
+                review.id
+            );
+            return;
+        }
+
+        match Comment::find_for_review(context.database.pool(), &review.id).await {
+            Ok(comments) => {
+                for comment in comments {
+                    let new_comment = Comment {
+                        id: Uuid::new_v4().to_string(),
+                        review_id: new_review.id.clone(),
+                        file_path: comment.file_path,
+                        line_number: comment.line_number,
+                        content: comment.content,
+                        resolved: comment.resolved,
+                        created_at: comment.created_at,
+                    };
+                    if let Err(error) = new_comment.create(context.database.pool()).await {
+                        log::warn!(
+                            "Failed to copy comment to review {}: {error}",
+                            new_review.id
+                        );
+                    }
+                }
+            }
+            Err(error) => {
+                log::warn!("Failed to load comments for review {}: {error}", review.id);
+            }
+        }
+
+        let viewed_files =
+            match FileView::get_viewed_files(context.database.pool(), &review.id).await {
+                Ok(files) => files,
+                Err(error) => {
+                    log::warn!(
+                        "Failed to load viewed files for review {}: {error}",
+                        review.id
+                    );
+                    Vec::new()
+                }
+            };
+
+        if !viewed_files.is_empty() {
+            if let (Some(old_diff), Some(new_diff)) = (old_diff, new_diff) {
+                let old_map: HashMap<String, String> = old_diff
+                    .files
+                    .iter()
+                    .map(|file| (file.path.clone(), file.content.clone()))
+                    .collect();
+                let new_map: HashMap<String, String> = new_diff
+                    .files
+                    .iter()
+                    .map(|file| (file.path.clone(), file.content.clone()))
+                    .collect();
+
+                for file_path in viewed_files {
+                    if let (Some(old_content), Some(new_content)) =
+                        (old_map.get(&file_path), new_map.get(&file_path))
+                        && old_content == new_content
+                        && let Err(error) = FileView::mark_as_viewed(
+                            context.database.pool(),
+                            &new_review.id,
+                            &file_path,
+                        )
+                        .await
+                    {
+                        log::warn!(
+                            "Failed to copy viewed file {} to review {}: {error}",
+                            file_path,
+                            new_review.id
+                        );
+                    }
+                }
+            } else {
+                log::info!(
+                    "Skipping viewed file copy for review {} because diffs are unavailable",
+                    new_review.id
+                );
+            }
+        }
+
+        context.events.send(AppEvent::ReviewsLoad);
+    }
 }
 
 impl ServiceHandler for ReviewService {
@@ -391,6 +542,9 @@ impl ServiceHandler for ReviewService {
                 } => {
                     Self::handle_review_refresh(review_id, *refresh_base, *refresh_target, context)
                         .await
+                }
+                AppEvent::ReviewDuplicate { review_id } => {
+                    Self::handle_review_duplicate(review_id, context).await
                 }
                 _ => {
                     // Other events are not handled by ReviewService
@@ -875,6 +1029,116 @@ mod tests {
         .unwrap();
 
         let is_viewed = FileView::is_file_viewed(database.pool(), &review.id, "file.txt")
+            .await
+            .unwrap();
+        assert!(!is_viewed);
+    }
+
+    #[tokio::test]
+    async fn test_handle_review_duplicate_copies_comments_and_views() {
+        let database = create_test_database().await;
+        let mut events = EventHandler::new_for_test();
+        let (temp_dir, base_sha, target_sha, new_target_sha) = create_refresh_test_repo();
+        let repo_path = temp_dir.path().to_string_lossy().to_string();
+
+        let review = Review::builder()
+            .base_branch("base")
+            .target_branch("target")
+            .base_sha(Some(base_sha.clone()))
+            .target_sha(Some(target_sha))
+            .build();
+        review.save(database.pool()).await.unwrap();
+
+        let mut comment = Comment::new(&review.id, "file.txt", Some(1), "Keep me");
+        comment.resolved = true;
+        comment.create(database.pool()).await.unwrap();
+
+        FileView::mark_as_viewed(database.pool(), &review.id, "file.txt")
+            .await
+            .unwrap();
+
+        ReviewService::handle_app_event(
+            &AppEvent::ReviewDuplicate {
+                review_id: Arc::from(review.id.clone()),
+            },
+            ServiceContext {
+                database: &database,
+                repo_path: repo_path.as_str(),
+                events: &mut events,
+            },
+        )
+        .await
+        .unwrap();
+
+        let reviews = Review::list_all(database.pool()).await.unwrap();
+        assert_eq!(reviews.len(), 2);
+        let new_review = reviews
+            .iter()
+            .find(|candidate| candidate.id != review.id)
+            .unwrap();
+        assert_eq!(new_review.base_branch, "base");
+        assert_eq!(new_review.target_branch, "target");
+        assert_eq!(new_review.base_sha.as_deref(), Some(base_sha.as_str()));
+        assert_eq!(
+            new_review.target_sha.as_deref(),
+            Some(new_target_sha.as_str())
+        );
+
+        let new_comments = Comment::find_for_review(database.pool(), &new_review.id)
+            .await
+            .unwrap();
+        assert_eq!(new_comments.len(), 1);
+        assert_eq!(new_comments[0].file_path, "file.txt");
+        assert_eq!(new_comments[0].line_number, Some(1));
+        assert_eq!(new_comments[0].content, "Keep me");
+        assert!(new_comments[0].resolved);
+
+        let is_viewed = FileView::is_file_viewed(database.pool(), &new_review.id, "file.txt")
+            .await
+            .unwrap();
+        assert!(!is_viewed);
+    }
+
+    #[tokio::test]
+    async fn test_handle_review_duplicate_skips_view_copy_without_diffs() {
+        let database = create_test_database().await;
+        let mut events = EventHandler::new_for_test();
+        let (temp_dir, _base_sha, _target_sha, _new_target_sha) = create_refresh_test_repo();
+        let repo_path = temp_dir.path().to_string_lossy().to_string();
+
+        let review = Review::builder()
+            .base_branch("base")
+            .target_branch("target")
+            .base_sha(None)
+            .target_sha(None)
+            .build();
+        review.save(database.pool()).await.unwrap();
+
+        FileView::mark_as_viewed(database.pool(), &review.id, "file.txt")
+            .await
+            .unwrap();
+
+        ReviewService::handle_app_event(
+            &AppEvent::ReviewDuplicate {
+                review_id: Arc::from(review.id.clone()),
+            },
+            ServiceContext {
+                database: &database,
+                repo_path: repo_path.as_str(),
+                events: &mut events,
+            },
+        )
+        .await
+        .unwrap();
+
+        let reviews = Review::list_all(database.pool()).await.unwrap();
+        assert_eq!(reviews.len(), 2);
+        let new_review = reviews
+            .iter()
+            .find(|candidate| candidate.id != review.id)
+            .unwrap();
+
+        let is_viewed = FileView::is_file_viewed(database.pool(), &new_review.id, "file.txt")
             .await
             .unwrap();
         assert!(!is_viewed);

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Refresh review by duplicating from current heads
+
 ## [0.1.1] - 2025-08-05
 
 - Use `sqlx::query!` instead of `sqlx::query` everywhere

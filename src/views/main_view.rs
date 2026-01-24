@@ -262,6 +262,8 @@ impl MainView {
                 options: crate::views::ReviewRefreshOptions {
                     can_refresh_base: review.base_sha_changed.is_some(),
                     can_refresh_target: review.target_sha_changed.is_some(),
+                    can_duplicate: review.base_sha_changed.is_some()
+                        || review.target_sha_changed.is_some(),
                 },
             });
         }
@@ -889,6 +891,7 @@ mod tests {
                 assert_eq!(review_id.as_ref(), view.reviews[0].id);
                 assert!(!options.can_refresh_base);
                 assert!(!options.can_refresh_target);
+                assert!(!options.can_duplicate);
             }
             _ => panic!("Expected ReviewRefreshOpen event, got: {event:?}"),
         }
@@ -1026,6 +1029,7 @@ mod tests {
                 assert_eq!(review_id.as_ref(), view.reviews[0].id);
                 assert!(!options.can_refresh_base);
                 assert!(!options.can_refresh_target);
+                assert!(!options.can_duplicate);
             }
             _ => panic!("Expected ReviewRefreshOpen event, got: {event:?}"),
         }
