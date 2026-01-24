@@ -1,5 +1,6 @@
 ---
 source: src/views/review_refresh_dialog.rs
+assertion_line: 626
 expression: backend
 ---
 "                                                                                "
@@ -12,7 +13,7 @@ expression: backend
 "            │► b      Refresh base SHA                             │            "
 "            │  t      Refresh target SHA                           │            "
 "            │  a      Refresh both SHAs                            │            "
-"            │                                                      │            "
+"            │  d      Duplicate review from current heads          │            "
 "            │Use ↑/↓ or j/k to navigate, Enter to select, Esc to ca│            "
 "            │                                                      │            "
 "            ╰──────────────────────────────────────────────────────╯            "

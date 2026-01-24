@@ -2,10 +2,6 @@
 
 ## Review base/target SHA change
 
-### Create new review from current heads
-
-Preserve the old diff/comments by creating a new review using the current base/target branch heads, leaving the original review untouched for historical context but copying all existing comments over. Keybinding should be "r->n". The viewed files should be adjusted dynamically. If the new heads changed a viewed file, it should go back to unviewed.
-
 ### Show delta since review
 
 Provide a secondary diff that compares the original target SHA to the current target SHA so users can see what changed without replacing the original review diff.

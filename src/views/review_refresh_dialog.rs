@@ -21,6 +21,7 @@ use crate::{
 pub struct ReviewRefreshOptions {
     pub can_refresh_base: bool,
     pub can_refresh_target: bool,
+    pub can_duplicate: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,6 +29,7 @@ enum RefreshAction {
     Base,
     Target,
     Both,
+    Duplicate,
 }
 
 impl RefreshAction {
@@ -36,6 +38,7 @@ impl RefreshAction {
             RefreshAction::Base => "Refresh base SHA",
             RefreshAction::Target => "Refresh target SHA",
             RefreshAction::Both => "Refresh both SHAs",
+            RefreshAction::Duplicate => "Duplicate review from current heads",
         }
     }
 
@@ -44,6 +47,7 @@ impl RefreshAction {
             RefreshAction::Base => 'b',
             RefreshAction::Target => 't',
             RefreshAction::Both => 'a',
+            RefreshAction::Duplicate => 'd',
         }
     }
 }
@@ -61,12 +65,14 @@ impl ReviewRefreshDialogView {
             RefreshAction::Base,
             RefreshAction::Target,
             RefreshAction::Both,
+            RefreshAction::Duplicate,
         ]);
         let mut list_state = ListState::default();
         if let Some(selected) = actions.iter().position(|action| match action {
             RefreshAction::Base => options.can_refresh_base,
             RefreshAction::Target => options.can_refresh_target,
             RefreshAction::Both => options.can_refresh_base && options.can_refresh_target,
+            RefreshAction::Duplicate => options.can_duplicate,
         }) {
             list_state.select(Some(selected));
         }
@@ -136,20 +142,33 @@ impl ReviewRefreshDialogView {
             RefreshAction::Base => self.options.can_refresh_base,
             RefreshAction::Target => self.options.can_refresh_target,
             RefreshAction::Both => self.options.can_refresh_base && self.options.can_refresh_target,
+            RefreshAction::Duplicate => self.options.can_duplicate,
         }
     }
 
     fn trigger_action(&self, app: &mut App, action: RefreshAction) {
-        let (refresh_base, refresh_target) = match action {
-            RefreshAction::Base => (true, false),
-            RefreshAction::Target => (false, true),
-            RefreshAction::Both => (true, true),
-        };
-        app.events.send(AppEvent::ReviewRefresh {
-            review_id: Arc::clone(&self.review_id),
-            refresh_base,
-            refresh_target,
-        });
+        match action {
+            RefreshAction::Base => app.events.send(AppEvent::ReviewRefresh {
+                review_id: Arc::clone(&self.review_id),
+                refresh_base: true,
+                refresh_target: false,
+            }),
+            RefreshAction::Target => app.events.send(AppEvent::ReviewRefresh {
+                review_id: Arc::clone(&self.review_id),
+                refresh_base: false,
+                refresh_target: true,
+            }),
+            RefreshAction::Both => app.events.send(AppEvent::ReviewRefresh {
+                review_id: Arc::clone(&self.review_id),
+                refresh_base: true,
+                refresh_target: true,
+            }),
+            RefreshAction::Duplicate => {
+                app.events.send(AppEvent::ReviewDuplicate {
+                    review_id: Arc::clone(&self.review_id),
+                });
+            }
+        }
         app.events.send(AppEvent::ViewClose);
     }
 }
@@ -174,6 +193,11 @@ impl ViewHandler for ReviewRefreshDialogView {
             KeyCode::Char('a') => {
                 if self.is_action_enabled(RefreshAction::Both) {
                     self.trigger_action(app, RefreshAction::Both);
+                }
+            }
+            KeyCode::Char('d') => {
+                if self.is_action_enabled(RefreshAction::Duplicate) {
+                    self.trigger_action(app, RefreshAction::Duplicate);
                 }
             }
             KeyCode::Up | KeyCode::Char('k') => {
@@ -208,7 +232,10 @@ impl ViewHandler for ReviewRefreshDialogView {
         let inner = block.inner(popup_area);
         block.render(popup_area, buf);
 
-        if self.options.can_refresh_base || self.options.can_refresh_target {
+        if self.options.can_refresh_base
+            || self.options.can_refresh_target
+            || self.options.can_duplicate
+        {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Min(1), Constraint::Length(2)])
@@ -226,7 +253,9 @@ impl ViewHandler for ReviewRefreshDialogView {
                             RefreshAction::Base | RefreshAction::Target => {
                                 format!("{} (N/A because of up-to-date SHA)", action.label())
                             }
-                            RefreshAction::Both => action.label().to_string(),
+                            RefreshAction::Both | RefreshAction::Duplicate => {
+                                action.label().to_string()
+                            }
                         }
                     };
                     let key_label = if enabled {
@@ -335,6 +364,16 @@ impl ViewHandler for ReviewRefreshDialogView {
                 },
             },
             KeyBinding {
+                key: "d".to_string(),
+                description: "Duplicate review from current heads".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Char('d'),
+                    modifiers: KeyModifiers::empty(),
+                    kind: KeyEventKind::Press,
+                    state: KeyEventState::empty(),
+                },
+            },
+            KeyBinding {
                 key: "Esc".to_string(),
                 description: "Cancel".to_string(),
                 key_event: KeyEvent {
@@ -350,11 +389,12 @@ impl ViewHandler for ReviewRefreshDialogView {
     #[cfg(test)]
     fn debug_state(&self) -> String {
         format!(
-            "ReviewRefreshDialogView(review_id: \"{}\", selected: {:?}, can_refresh_base: {}, can_refresh_target: {})",
+            "ReviewRefreshDialogView(review_id: \"{}\", selected: {:?}, can_refresh_base: {}, can_refresh_target: {}, can_duplicate: {})",
             self.review_id,
             self.list_state.selected(),
             self.options.can_refresh_base,
-            self.options.can_refresh_target
+            self.options.can_refresh_target,
+            self.options.can_duplicate
         )
     }
 
@@ -405,6 +445,7 @@ mod tests {
             ReviewRefreshOptions {
                 can_refresh_base: true,
                 can_refresh_target: true,
+                can_duplicate: true,
             },
         );
         assert_eq!(view.review_id.as_ref(), "review-1");
@@ -419,6 +460,7 @@ mod tests {
             ReviewRefreshOptions {
                 can_refresh_base: true,
                 can_refresh_target: false,
+                can_duplicate: true,
             },
         );
         assert!(!app.events.has_pending_events());
@@ -453,6 +495,7 @@ mod tests {
             ReviewRefreshOptions {
                 can_refresh_base: true,
                 can_refresh_target: false,
+                can_duplicate: true,
             },
         );
         assert!(!app.events.has_pending_events());
@@ -478,6 +521,7 @@ mod tests {
             ReviewRefreshOptions {
                 can_refresh_base: true,
                 can_refresh_target: false,
+                can_duplicate: true,
             },
         );
         assert!(!app.events.has_pending_events());
@@ -510,6 +554,7 @@ mod tests {
             ReviewRefreshOptions {
                 can_refresh_base: false,
                 can_refresh_target: false,
+                can_duplicate: false,
             },
         );
         assert!(!app.events.has_pending_events());
@@ -535,6 +580,7 @@ mod tests {
             ReviewRefreshOptions {
                 can_refresh_base: false,
                 can_refresh_target: true,
+                can_duplicate: true,
             },
         );
         assert!(!app.events.has_pending_events());
@@ -546,7 +592,7 @@ mod tests {
             state: KeyEventState::empty(),
         };
         view.handle_key_events(&mut app, &down_event).unwrap();
-        assert_eq!(view.list_state.selected(), Some(1));
+        assert_eq!(view.list_state.selected(), Some(3));
 
         let enter_event = KeyEvent {
             code: KeyCode::Enter,
@@ -559,11 +605,7 @@ mod tests {
         let event = app.events.try_recv().unwrap();
         assert!(matches!(
             *event,
-            Event::App(AppEvent::ReviewRefresh {
-                refresh_base: false,
-                refresh_target: true,
-                ..
-            })
+            Event::App(AppEvent::ReviewDuplicate { .. })
         ));
     }
 
@@ -575,6 +617,7 @@ mod tests {
             ReviewRefreshOptions {
                 can_refresh_base: true,
                 can_refresh_target: true,
+                can_duplicate: true,
             },
         );
         let backend = render_view_to_terminal_backend(&app, |app, area, buf| {

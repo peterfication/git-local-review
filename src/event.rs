@@ -106,6 +106,8 @@ pub enum AppEvent {
         refresh_base: bool,
         refresh_target: bool,
     },
+    /// Duplicate a review using current branch heads, copying comments.
+    ReviewDuplicate { review_id: Arc<ReviewId> },
 
     /// Trigger loading of Git branches.
     GitBranchesLoad,
