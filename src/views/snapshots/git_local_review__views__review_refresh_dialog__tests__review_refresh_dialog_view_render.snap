@@ -1,0 +1,24 @@
+---
+source: src/views/review_refresh_dialog.rs
+expression: backend
+---
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"            ╭Refresh Review────────────────────────────────────────╮            "
+"            │► b      Refresh base SHA                             │            "
+"            │  t      Refresh target SHA                           │            "
+"            │  a      Refresh both SHAs                            │            "
+"            │                                                      │            "
+"            │Use ↑/↓ or j/k to navigate, Enter to select, Esc to ca│            "
+"            │                                                      │            "
+"            ╰──────────────────────────────────────────────────────╯            "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "

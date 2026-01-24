@@ -19,6 +19,7 @@ pub mod help_modal;
 pub mod main_view;
 pub mod review_create_view;
 pub mod review_details_view;
+pub mod review_refresh_dialog;
 
 pub use comments_view::CommentsView;
 pub use confirmation_dialog::ConfirmationDialogView;
@@ -26,6 +27,7 @@ pub use help_modal::HelpModalView;
 pub use main_view::MainView;
 pub use review_create_view::ReviewCreateView;
 pub use review_details_view::ReviewDetailsView;
+pub use review_refresh_dialog::{ReviewRefreshDialogView, ReviewRefreshOptions};
 
 const SELECTION_INDICATOR: &str = ">";
 
@@ -36,6 +38,7 @@ pub enum ViewType {
     ConfirmationDialog,
     HelpModal,
     ReviewDetails,
+    ReviewRefreshDialog,
     Comments,
 }
 

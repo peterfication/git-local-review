@@ -55,13 +55,12 @@ impl BranchStatusService {
                         || review.base_branch_exists != Some(base_branch_exists)
                         || review.target_branch_exists != Some(target_branch_exists)
                     {
-                        // Update the review's updated_at timestamp
-                        review.updated_at = SystemTimeProvider.now();
-
                         // Capture values before moving them
                         let base_changed = base_sha_changed.is_some();
                         let target_changed = target_sha_changed.is_some();
 
+                        // Update the review's updated_at timestamp
+                        review.updated_at = SystemTimeProvider.now();
                         if let Err(e) = review
                             .update_branch_status(
                                 context.database.pool(),

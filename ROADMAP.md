@@ -2,10 +2,6 @@
 
 ## Review base/target SHA change
 
-### Keep review pinned, add refresh actions
-
-Keep the review anchored to the original base/target SHAs and expose explicit actions for `Refresh target SHA`, `Refresh base SHA`, and `Refresh both`. On success, clear the `*_sha_changed` markers so the list reflects the refreshed state. Keybindings: `r` opens a chooser, then `b` = refresh base, `t` = refresh target, `a` = refresh both, `Esc` cancels. The viewed files should be adjusted dynamically. If the new heads changed a viewed file, it should go back to unviewed.
-
 ### Create new review from current heads
 
 Preserve the old diff/comments by creating a new review using the current base/target branch heads, leaving the original review untouched for historical context but copying all existing comments over. Keybinding should be "r->n". The viewed files should be adjusted dynamically. If the new heads changed a viewed file, it should go back to unviewed.

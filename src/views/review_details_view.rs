@@ -180,6 +180,7 @@ impl ViewHandler for ReviewDetailsView {
             KeyCode::Enter => self.toggle_navigation_mode(),
             KeyCode::Char(' ') => self.toggle_file_view_status(app),
             KeyCode::Char('c') => self.open_comments(app),
+            KeyCode::Char('r') => self.open_refresh_chooser(app),
             KeyCode::Esc => self.handle_esc(app),
             KeyCode::Char('?') => self.help(app),
             _ => {}
@@ -304,6 +305,16 @@ impl ViewHandler for ReviewDetailsView {
                 },
             },
             KeyBinding {
+                key: "r".to_string(),
+                description: "Refresh review SHAs".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Char('r'),
+                    modifiers: ratatui::crossterm::event::KeyModifiers::empty(),
+                    kind: ratatui::crossterm::event::KeyEventKind::Press,
+                    state: ratatui::crossterm::event::KeyEventState::empty(),
+                },
+            },
+            KeyBinding {
                 key: "?".to_string(),
                 description: "Help".to_string(),
                 key_event: KeyEvent {
@@ -349,6 +360,20 @@ impl ReviewDetailsView {
     /// Open help dialog with the keybindings of this view
     fn help(&self, app: &mut App) {
         app.events.send(AppEvent::HelpOpen(self.get_keybindings()));
+    }
+
+    fn open_refresh_chooser(&self, app: &mut App) {
+        let Some(review) = &self.review else {
+            return;
+        };
+
+        app.events.send(AppEvent::ReviewRefreshOpen {
+            review_id: Arc::from(review.id.as_str()),
+            options: crate::views::ReviewRefreshOptions {
+                can_refresh_base: review.base_sha_changed.is_some(),
+                can_refresh_target: review.target_sha_changed.is_some(),
+            },
+        });
     }
 
     /// Navigate to the previous line in the respective navigation mode
@@ -1216,7 +1241,7 @@ mod tests {
         let view = ReviewDetailsView::new(review);
 
         let keybindings = view.get_keybindings();
-        assert_eq!(keybindings.len(), 9);
+        assert_eq!(keybindings.len(), 10);
         assert_eq!(keybindings[0].key, "↑/k");
         assert_eq!(keybindings[0].description, "Scroll up");
         assert_eq!(keybindings[1].key, "↓/j");
@@ -1233,8 +1258,10 @@ mod tests {
         assert_eq!(keybindings[6].description, "Go back / Switch to Files mode");
         assert_eq!(keybindings[7].key, "c");
         assert_eq!(keybindings[7].description, "Open comments");
-        assert_eq!(keybindings[8].key, "?");
-        assert_eq!(keybindings[8].description, "Help");
+        assert_eq!(keybindings[8].key, "r");
+        assert_eq!(keybindings[8].description, "Refresh review SHAs");
+        assert_eq!(keybindings[9].key, "?");
+        assert_eq!(keybindings[9].description, "Help");
     }
 
     #[tokio::test]
@@ -1344,6 +1371,25 @@ mod tests {
         match &*event {
             Event::App(AppEvent::HelpOpen(_)) => {}
             _ => panic!("Expected HelpOpen event"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_review_details_view_handles_refresh_key() {
+        let review = Review::builder().build();
+        let mut view = ReviewDetailsView::new(review);
+        let mut app = create_test_app().await;
+
+        let key_event = KeyEvent::new(
+            KeyCode::Char('r'),
+            ratatui::crossterm::event::KeyModifiers::NONE,
+        );
+        view.handle_key_events(&mut app, &key_event).unwrap();
+
+        let event = app.events.try_recv().unwrap();
+        match &*event {
+            Event::App(AppEvent::ReviewRefreshOpen { .. }) => {}
+            _ => panic!("Expected ReviewRefreshOpen event"),
         }
     }
 

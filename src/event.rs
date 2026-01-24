@@ -11,7 +11,7 @@ use crate::{
         CommentsLoadParams, CommentsLoadingState, GitBranchesLoadingState, GitDiffLoadingState,
         ReviewCreateData, ReviewLoadingState, ReviewsLoadingState,
     },
-    views::KeyBinding,
+    views::{KeyBinding, ReviewRefreshOptions},
 };
 
 /// Type alias for review identifiers to make event signatures more descriptive.
@@ -95,6 +95,17 @@ pub enum AppEvent {
 
     /// Open review details view.
     ReviewDetailsOpen(Arc<ReviewId>),
+    /// Open refresh review chooser.
+    ReviewRefreshOpen {
+        review_id: Arc<ReviewId>,
+        options: ReviewRefreshOptions,
+    },
+    /// Refresh review SHAs.
+    ReviewRefresh {
+        review_id: Arc<ReviewId>,
+        refresh_base: bool,
+        refresh_target: bool,
+    },
 
     /// Trigger loading of Git branches.
     GitBranchesLoad,

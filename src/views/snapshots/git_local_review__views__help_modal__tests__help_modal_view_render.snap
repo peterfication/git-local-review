@@ -12,7 +12,7 @@ expression: render_app_to_terminal_backend(app)
 "                        │  Up / Down / k / j    Navigate review selection                                                              │                        "
 "                        │  d                    Delete selected review                                                                 │                        "
 "                        │  o / Space / Enter    Open review details                                                                    │                        "
-"                        │                                                                                                              │                        "
+"                        │  r                    Refresh review SHAs                                                                    │                        "
 "                        │                                                                                                              │                        "
 "                        │                                                                                                              │                        "
 "                        │                                                                                                              │                        "

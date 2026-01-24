@@ -227,7 +227,7 @@ mod tests {
         let main_view = MainView::new();
         let keybindings = main_view.get_keybindings();
         let view = HelpModalView::new(Arc::clone(&keybindings));
-        assert_eq!(view.keybindings.len(), 5);
+        assert_eq!(view.keybindings.len(), 6);
         assert_eq!(view.list_state.selected(), Some(0));
     }
 
