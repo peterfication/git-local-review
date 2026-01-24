@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 - Refresh review by duplicating from current heads
+- Refresh review action
+- Show changed SHA in reviews list
 
 ## [0.1.1] - 2025-08-05
 
