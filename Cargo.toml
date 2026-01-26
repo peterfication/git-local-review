@@ -29,7 +29,7 @@ log = "0.4.27"
 ratatui = "0.30.0"
 sqlx = { version = "0.8.2", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid"] }
 tokio = { version = "1.47.1", features = ["full"] }
-tui-logger = "0.18.0"
+tui-logger = "0.18.1"
 uuid = { version = "1.11.0", features = ["v4"] }
 
 [dev-dependencies]
