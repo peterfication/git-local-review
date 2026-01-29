@@ -28,8 +28,8 @@ pub struct ReviewCreateView {
 
 #[derive(Default, PartialEq, Debug)]
 pub enum InputField {
-    #[default]
     BaseBranch,
+    #[default]
     TargetBranch,
 }
 
@@ -293,7 +293,7 @@ impl ReviewCreateView {
     fn close_view(&mut self, app: &mut App) {
         self.base_branch_index = 0;
         self.target_branch_index = 0;
-        self.current_field = InputField::BaseBranch;
+        self.current_field = InputField::TargetBranch;
         app.events.send(AppEvent::ViewClose);
     }
 
@@ -426,7 +426,7 @@ mod tests {
         assert!(matches!(view.branches_state, GitBranchesLoadingState::Init));
         assert_eq!(view.base_branch_index, 0);
         assert_eq!(view.target_branch_index, 0);
-        assert_eq!(view.current_field, InputField::BaseBranch);
+        assert_eq!(view.current_field, InputField::TargetBranch);
     }
 
     #[tokio::test]
@@ -443,7 +443,7 @@ mod tests {
             ),
             base_branch_index: 1,
             target_branch_index: 1,
-            current_field: InputField::BaseBranch,
+            current_field: InputField::TargetBranch,
         };
 
         let key_event_up = KeyEvent {
@@ -454,7 +454,7 @@ mod tests {
         };
 
         view.handle_key_events(&mut app, &key_event_up).unwrap();
-        assert_eq!(view.base_branch_index, 0);
+        assert_eq!(view.target_branch_index, 0);
 
         let key_event_down = KeyEvent {
             code: KeyCode::Down,
@@ -464,7 +464,7 @@ mod tests {
         };
 
         view.handle_key_events(&mut app, &key_event_down).unwrap();
-        assert_eq!(view.base_branch_index, 1);
+        assert_eq!(view.target_branch_index, 1);
     }
 
     #[tokio::test]
@@ -476,7 +476,7 @@ mod tests {
             ),
             base_branch_index: 0,
             target_branch_index: 0,
-            current_field: InputField::BaseBranch,
+            current_field: InputField::TargetBranch,
         };
 
         let key_event = KeyEvent {
@@ -487,10 +487,10 @@ mod tests {
         };
 
         view.handle_key_events(&mut app, &key_event).unwrap();
-        assert_eq!(view.current_field, InputField::TargetBranch);
+        assert_eq!(view.current_field, InputField::BaseBranch);
 
         view.handle_key_events(&mut app, &key_event).unwrap();
-        assert_eq!(view.current_field, InputField::BaseBranch);
+        assert_eq!(view.current_field, InputField::TargetBranch);
     }
 
     #[tokio::test]
@@ -502,7 +502,7 @@ mod tests {
             ),
             base_branch_index: 0,
             target_branch_index: 0,
-            current_field: InputField::BaseBranch,
+            current_field: InputField::TargetBranch,
         };
 
         let key_event = KeyEvent {
@@ -514,7 +514,7 @@ mod tests {
 
         view.handle_key_events(&mut app, &key_event).unwrap();
         // Should stay at 0 (top of list)
-        assert_eq!(view.base_branch_index, 0);
+        assert_eq!(view.target_branch_index, 0);
     }
 
     #[tokio::test]
@@ -526,7 +526,7 @@ mod tests {
             ),
             base_branch_index: 1,
             target_branch_index: 1,
-            current_field: InputField::BaseBranch,
+            current_field: InputField::TargetBranch,
         };
 
         let key_event = KeyEvent {
@@ -538,7 +538,7 @@ mod tests {
 
         view.handle_key_events(&mut app, &key_event).unwrap();
         // Should stay at 1 (bottom of list)
-        assert_eq!(view.base_branch_index, 1);
+        assert_eq!(view.target_branch_index, 1);
     }
 
     #[tokio::test]
@@ -566,7 +566,7 @@ mod tests {
         // Indices should be reset
         assert_eq!(view.base_branch_index, 0);
         assert_eq!(view.target_branch_index, 0);
-        assert_eq!(view.current_field, InputField::BaseBranch);
+        assert_eq!(view.current_field, InputField::TargetBranch);
         // State is reset to default
 
         // Verify that a ViewClose event was sent
@@ -589,7 +589,7 @@ mod tests {
             ),
             base_branch_index: 0,
             target_branch_index: 2,
-            current_field: InputField::BaseBranch,
+            current_field: InputField::TargetBranch,
         };
         assert!(!app.events.has_pending_events());
 
@@ -640,7 +640,7 @@ mod tests {
             ),
             base_branch_index: 1,
             target_branch_index: 0,
-            current_field: InputField::BaseBranch,
+            current_field: InputField::TargetBranch,
         };
         let initial_index = view.base_branch_index;
 
@@ -681,7 +681,7 @@ mod tests {
             ),
             base_branch_index: 0,
             target_branch_index: 2,
-            current_field: InputField::BaseBranch,
+            current_field: InputField::TargetBranch,
         };
         let app = App {
             view_stack: vec![Box::new(view)],

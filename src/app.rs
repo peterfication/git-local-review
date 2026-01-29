@@ -279,8 +279,8 @@ mod tests {
                 .into(),
             ),
             base_branch_index: 0,
-            target_branch_index: 2,
-            current_field: crate::views::review_create_view::InputField::BaseBranch,
+            target_branch_index: 0,
+            current_field: crate::views::review_create_view::InputField::TargetBranch,
         };
 
         // Add it to the stack
@@ -295,7 +295,7 @@ mod tests {
         // Verify initial state
         assert_eq!(
             app.view_stack.last().unwrap().debug_state(),
-            "ReviewCreateView(branches: [\"main\", \"develop\", \"feature/test\"], base_branch: \"main\", target_branch: \"feature/test\", current_field: BaseBranch)"
+            "ReviewCreateView(branches: [\"main\", \"develop\", \"feature/test\"], base_branch: \"main\", target_branch: \"main\", current_field: TargetBranch)"
         );
 
         // Send a Down key that would change branch selection in ReviewCreateView
@@ -310,14 +310,14 @@ mod tests {
         app.handle_key_events(&key_event).unwrap();
 
         // Only the ReviewCreateView (top of stack) should have received the key event
-        // It should have processed Down as navigation, changing the base_branch_index from 0 to 1
+        // It should have processed Down as navigation, changing the target_branch_index from 0 to 1
         assert_eq!(app.view_stack.len(), 2);
         assert!(!app.events.has_pending_events()); // No events sent for navigation
 
-        // Verify that the ReviewCreateView's base_branch_index has been updated from 0 to 1 (develop)
+        // Verify that the ReviewCreateView's target_branch_index has been updated from 0 to 1 (develop)
         assert_eq!(
             app.view_stack.last().unwrap().debug_state(),
-            "ReviewCreateView(branches: [\"main\", \"develop\", \"feature/test\"], base_branch: \"develop\", target_branch: \"feature/test\", current_field: BaseBranch)"
+            "ReviewCreateView(branches: [\"main\", \"develop\", \"feature/test\"], base_branch: \"main\", target_branch: \"develop\", current_field: TargetBranch)"
         );
     }
 
