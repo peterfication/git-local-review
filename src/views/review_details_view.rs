@@ -2251,4 +2251,20 @@ mod tests {
             _ => panic!("Expected CommentsLoad event, got: {event:?}"),
         }
     }
+
+    #[tokio::test]
+    async fn test_handle_comments_metadata_invalidated_ignores_other_review() {
+        let review = Review::builder().base_branch("main").build();
+        let mut view = ReviewDetailsView::new(review.clone());
+        let mut app = create_test_app().await;
+
+        view.handle_app_events(
+            &mut app,
+            &AppEvent::CommentsMetadataInvalidated {
+                review_id: Arc::from("other-review"),
+            },
+        );
+
+        assert!(!app.events.has_pending_events());
+    }
 }
