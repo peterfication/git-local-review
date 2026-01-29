@@ -926,4 +926,44 @@ mod tests {
         assert_eq!(view.comments.len(), 1);
         assert_eq!(view.comments[0].content, "Test comment");
     }
+
+    #[tokio::test]
+    async fn test_comments_view_metadata_invalidated_triggers_reload() {
+        let mut view =
+            CommentsView::new_for_file("review-123".to_string(), "src/main.rs".to_string());
+        let mut app = create_test_app().await;
+
+        view.handle_app_events(
+            &mut app,
+            &AppEvent::CommentsMetadataInvalidated {
+                review_id: Arc::from("review-123"),
+            },
+        );
+
+        let event = app.events.try_recv().unwrap();
+        match &*event {
+            crate::event::Event::App(AppEvent::CommentsLoad(params)) => {
+                assert_eq!(params.review_id.as_ref(), "review-123");
+                assert_eq!(params.file_path.as_deref(), Some("src/main.rs"));
+                assert!(params.line_number.is_none());
+            }
+            _ => panic!("Expected CommentsLoad event"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_comments_view_metadata_invalidated_ignores_other_review() {
+        let mut view =
+            CommentsView::new_for_file("review-123".to_string(), "src/main.rs".to_string());
+        let mut app = create_test_app().await;
+
+        view.handle_app_events(
+            &mut app,
+            &AppEvent::CommentsMetadataInvalidated {
+                review_id: Arc::from("other-review"),
+            },
+        );
+
+        assert!(!app.events.has_pending_events());
+    }
 }
