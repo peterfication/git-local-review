@@ -24,3 +24,8 @@
 - **`src/models`**: Entities.
 - **`src/services`**: Business logic for the application.
 - **`src/services/mod.rs`**: ServiceHandler for services to handle events.
+
+## Comments & Indicators
+
+- Comment state changes (create/resolve/toggle) emit `AppEvent::CommentsMetadataInvalidated { review_id }` from `src/services/comment_service.rs`.
+- Views that render comment indicators (e.g. review details, comments list) listen for this event and reload comment metadata for the matching review.

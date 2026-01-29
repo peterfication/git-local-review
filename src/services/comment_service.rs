@@ -209,12 +209,10 @@ impl CommentService {
                 // Send success event
                 events.send(AppEvent::CommentCreated(Arc::from(comment.clone())));
 
-                // Trigger reload of comments for the same target
-                events.send(AppEvent::CommentsLoad(CommentsLoadParams {
+                // Notify views to refresh comment metadata
+                events.send(AppEvent::CommentsMetadataInvalidated {
                     review_id: Arc::from(review_id),
-                    file_path: Arc::new(Some(file_path.to_string())),
-                    line_number: Arc::from(*line_number),
-                }));
+                });
             }
             Err(error) => {
                 events.send(AppEvent::CommentCreateError(Arc::from(format!(
@@ -264,6 +262,9 @@ impl CommentService {
                 events.send(AppEvent::CommentMarkedResolved {
                     comment_id: comment_id.into(),
                 });
+                events.send(AppEvent::CommentsMetadataInvalidated {
+                    review_id: Arc::from(comment.review_id.clone()),
+                });
             }
             Err(error) => {
                 events.send(AppEvent::CommentMarkResolvedError {
@@ -305,6 +306,9 @@ impl CommentService {
                     file_path: file_path.into(),
                     line_number,
                 });
+                events.send(AppEvent::CommentsMetadataInvalidated {
+                    review_id: review_id.into(),
+                });
             }
             Err(error) => {
                 events.send(AppEvent::CommentsMarkAllResolvedError {
@@ -339,6 +343,9 @@ impl CommentService {
                 events.send(AppEvent::CommentToggledResolved {
                     comment_id: comment_id.into(),
                     resolved: new_resolved_state,
+                });
+                events.send(AppEvent::CommentsMetadataInvalidated {
+                    review_id: Arc::from(comment.review_id.clone()),
                 });
             }
             Err(error) => {
@@ -439,6 +446,9 @@ impl CommentService {
                     line_number,
                     resolved_count: final_resolved_count,
                     unresolved_count: final_unresolved_count,
+                });
+                events.send(AppEvent::CommentsMetadataInvalidated {
+                    review_id: review_id.into(),
                 });
             }
             Err(error) => {
@@ -853,24 +863,13 @@ mod tests {
             _ => panic!("Expected CommentCreated event"),
         }
 
-        // Should send CommentsLoad event to reload
+        // Should send CommentsMetadataInvalidated event
         let event = events.try_recv().unwrap();
         match &*event {
-            Event::App(AppEvent::CommentsLoad(CommentsLoadParams {
-                review_id,
-                file_path,
-                line_number,
-            })) => {
+            Event::App(AppEvent::CommentsMetadataInvalidated { review_id }) => {
                 assert_eq!(review_id.to_string(), review.id);
-                match file_path.as_ref() {
-                    Some(file_path_conent) => {
-                        assert_eq!(file_path_conent, "src/main.rs");
-                    }
-                    None => panic!("Expected file path to be Some"),
-                }
-                assert_eq!(*line_number.as_ref(), None);
             }
-            _ => panic!("Expected CommentsLoad event"),
+            _ => panic!("Expected CommentsMetadataInvalidated event"),
         }
     }
 
@@ -908,29 +907,13 @@ mod tests {
             _ => panic!("Expected CommentCreated event"),
         }
 
-        // Should send CommentsLoad event to reload
+        // Should send CommentsMetadataInvalidated event
         let event = events.try_recv().unwrap();
         match &*event {
-            Event::App(AppEvent::CommentsLoad(CommentsLoadParams {
-                review_id,
-                file_path,
-                line_number,
-            })) => {
+            Event::App(AppEvent::CommentsMetadataInvalidated { review_id }) => {
                 assert_eq!(review_id.to_string(), review.id);
-                match file_path.as_ref() {
-                    Some(file_path_content) => {
-                        assert_eq!(file_path_content, "src/main.rs");
-                    }
-                    None => panic!("Expected file path to be Some"),
-                }
-                match line_number.as_ref() {
-                    Some(line_number_value) => {
-                        assert_eq!(*line_number_value, 42);
-                    }
-                    None => panic!("Expected line number to be Some"),
-                }
             }
-            _ => panic!("Expected CommentsLoad event"),
+            _ => panic!("Expected CommentsMetadataInvalidated event"),
         }
     }
 

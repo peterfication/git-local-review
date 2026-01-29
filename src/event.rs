@@ -176,6 +176,8 @@ pub enum AppEvent {
         params: CommentsLoadParams,
         state: CommentsLoadingState,
     },
+    /// Comment metadata (resolved state, counts, indicators) is stale and should be reloaded.
+    CommentsMetadataInvalidated { review_id: Arc<ReviewId> },
     /// Create a new comment.
     CommentCreate {
         review_id: Arc<ReviewId>,

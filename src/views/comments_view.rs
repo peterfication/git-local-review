@@ -352,45 +352,10 @@ impl ViewHandler for CommentsView {
             AppEvent::CommentsLoadingState { params, state } => {
                 self.handle_comments_loading_state(params, state);
             }
-            AppEvent::CommentCreated(_comment) => {
-                // Reload comments when a new comment is created
-                self.request_comments_reload(app);
-            }
-            AppEvent::CommentCreateError(_error) => {
-                // Could show error message in UI, for now just reload
-                self.request_comments_reload(app);
-            }
-            AppEvent::CommentMarkedResolved { .. } => {
-                // Reload comments when a comment is marked as resolved
-                self.request_comments_reload(app);
-            }
-            AppEvent::CommentsMarkedAllResolved { .. } => {
-                // Reload comments when all comments are marked as resolved
-                self.request_comments_reload(app);
-            }
-            AppEvent::CommentMarkResolvedError { .. } => {
-                // Could show error message in UI, for now just reload
-                self.request_comments_reload(app);
-            }
-            AppEvent::CommentsMarkAllResolvedError { .. } => {
-                // Could show error message in UI, for now just reload
-                self.request_comments_reload(app);
-            }
-            AppEvent::CommentToggledResolved { .. } => {
-                // Reload comments when a comment's resolved state is toggled
-                self.request_comments_reload(app);
-            }
-            AppEvent::CommentsToggledAllResolved { .. } => {
-                // Reload comments when all comments' resolved state is toggled
-                self.request_comments_reload(app);
-            }
-            AppEvent::CommentToggleResolvedError { .. } => {
-                // Could show error message in UI, for now just reload
-                self.request_comments_reload(app);
-            }
-            AppEvent::CommentsToggleAllResolvedError { .. } => {
-                // Could show error message in UI, for now just reload
-                self.request_comments_reload(app);
+            AppEvent::CommentsMetadataInvalidated { review_id } => {
+                if self.target.review_id() == review_id.as_ref() {
+                    self.request_comments_reload(app);
+                }
             }
             _ => {
                 // Other events are not handled by this view
