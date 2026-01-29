@@ -212,9 +212,14 @@ impl ViewHandler for ReviewDetailsView {
             AppEvent::CommentsLoadingState { params, state } => {
                 self.handle_comments_loading_state(params, state);
             }
-            AppEvent::CommentCreated(_) => {
-                // Reload comment metadata when a comment is created
-                self.reload_comments(app);
+            AppEvent::CommentsMetadataInvalidated { review_id } => {
+                if self
+                    .review
+                    .as_ref()
+                    .is_some_and(|review| review.id.as_str() == review_id.as_ref())
+                {
+                    self.reload_comments(app);
+                }
             }
             _ => {
                 // Other events are not handled by this view
@@ -2221,16 +2226,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_handle_comment_created_event_triggers_reload() {
+    async fn test_handle_comments_metadata_invalidated_triggers_reload() {
         let review = Review::builder().base_branch("main").build();
         let mut view = ReviewDetailsView::new(review.clone());
         let mut app = create_test_app().await;
 
-        // Create a dummy comment
-        let comment = Comment::test_comment(&review.id, "src/main.rs", None, "New comment");
-
-        // Handle CommentCreated event
-        view.handle_app_events(&mut app, &AppEvent::CommentCreated(Arc::new(comment)));
+        // Handle CommentsMetadataInvalidated event
+        view.handle_app_events(
+            &mut app,
+            &AppEvent::CommentsMetadataInvalidated {
+                review_id: Arc::from(review.id.as_str()),
+            },
+        );
 
         // Should trigger reload of comments
         assert!(app.events.has_pending_events());
