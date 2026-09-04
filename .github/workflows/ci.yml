@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Install Rust from rust-toolchain.toml
         uses: actions-rust-lang/setup-rust-toolchain@v1
       - name: check formatting
@@ -36,7 +36,7 @@ jobs:
   fmt-dprint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dprint/check@v2.3
 
   database-schema:
@@ -44,7 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Install Rust from rust-toolchain.toml
         uses: actions-rust-lang/setup-rust-toolchain@v1
       - name: Run application to create database
@@ -59,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Install Rust from rust-toolchain.toml
         uses: actions-rust-lang/setup-rust-toolchain@v1
       - name: Dump CLI help output
@@ -75,7 +75,7 @@ jobs:
       checks: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Install Rust from rust-toolchain.toml
         uses: actions-rust-lang/setup-rust-toolchain@v1
       - name: Run clippy action
@@ -88,7 +88,7 @@ jobs:
     name: doc
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Install Rust nightly
         uses: dtolnay/rust-toolchain@nightly
       - name: Run cargo doc
@@ -117,7 +117,7 @@ jobs:
       #   if: runner.os == 'Windows'
       # - run: vcpkg install openssl:x64-windows-static-md
       #   if: runner.os == 'Windows'
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Install MSRV from Cargo.toml
         if: matrix.toolchain == 'msrv'
         uses: actions-rust-lang/setup-rust-toolchain@v1
