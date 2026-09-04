@@ -6,57 +6,123 @@
       {
         "name": "id!",
         "ordinal": 0,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "reviews",
+            "name": "id"
+          }
+        }
       },
       {
         "name": "created_at!",
         "ordinal": 1,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "reviews",
+            "name": "created_at"
+          }
+        }
       },
       {
         "name": "updated_at!",
         "ordinal": 2,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "reviews",
+            "name": "updated_at"
+          }
+        }
       },
       {
         "name": "base_branch!",
         "ordinal": 3,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "reviews",
+            "name": "base_branch"
+          }
+        }
       },
       {
         "name": "target_branch!",
         "ordinal": 4,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "reviews",
+            "name": "target_branch"
+          }
+        }
       },
       {
         "name": "base_sha",
         "ordinal": 5,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "reviews",
+            "name": "base_sha"
+          }
+        }
       },
       {
         "name": "target_sha",
         "ordinal": 6,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "reviews",
+            "name": "target_sha"
+          }
+        }
       },
       {
         "name": "base_sha_changed",
         "ordinal": 7,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "reviews",
+            "name": "base_sha_changed"
+          }
+        }
       },
       {
         "name": "target_sha_changed",
         "ordinal": 8,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "reviews",
+            "name": "target_sha_changed"
+          }
+        }
       },
       {
         "name": "base_branch_exists",
         "ordinal": 9,
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "reviews",
+            "name": "base_branch_exists"
+          }
+        }
       },
       {
         "name": "target_branch_exists",
         "ordinal": 10,
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "reviews",
+            "name": "target_branch_exists"
+          }
+        }
       }
     ],
     "parameters": {

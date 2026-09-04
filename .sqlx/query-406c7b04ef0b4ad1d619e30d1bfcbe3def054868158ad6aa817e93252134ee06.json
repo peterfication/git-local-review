@@ -6,7 +6,13 @@
       {
         "name": "file_path",
         "ordinal": 0,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "file_views",
+            "name": "file_path"
+          }
+        }
       }
     ],
     "parameters": {
