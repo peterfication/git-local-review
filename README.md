@@ -75,6 +75,10 @@ just ci       # Run full CI pipeline (format, lint, test, build, doc)
 
 The start of this project was made possible through the usage of coding LLMs. However, the coding LLMs were tightly managed and directed. All generated code was reviewed thoroughly and adapted where needed.
 
+## Release process
+
+See RELEASE_PROCESS.md for the release steps and CHANGELOG.md for released versions.
+
 ## License
 
 This project is licensed under the MIT license ([LICENSE](LICENSE) or [opensource.org/licenses/MIT](https://opensource.org/licenses/MIT))
