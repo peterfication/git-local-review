@@ -7,7 +7,7 @@ homepage = "https://github.com/peterfication/git-local-review"
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/peterfication/git-local-review"
-rust-version = "1.92.0"
+rust-version = "1.88"
 description = "A Terminal User Interface (TUI) for reviewing Git changes with local SQLite state storage."
 
 exclude = [

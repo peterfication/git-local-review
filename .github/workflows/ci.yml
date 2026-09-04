@@ -18,6 +18,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  read_msrv:
+    name: Read MSRV
+    uses: actions-rust-lang/msrv/.github/workflows/msrv.yml@main
+
   fmt:
     name: fmt
     runs-on: ubuntu-latest
@@ -93,11 +97,15 @@ jobs:
           RUSTDOCFLAGS: --cfg docsrs
 
   test:
+    needs: read_msrv
     runs-on: ${{ matrix.os }}
-    name: test ${{ matrix.os }}
+    name: test ${{ matrix.toolchain }} / ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        toolchain:
+          - msrv
+          - pinned
         os:
           - ubuntu-latest
           # - macos-latest
@@ -110,7 +118,13 @@ jobs:
       # - run: vcpkg install openssl:x64-windows-static-md
       #   if: runner.os == 'Windows'
       - uses: actions/checkout@v6
-      - name: Install Rust from rust-toolchain.toml
+      - name: Install MSRV from Cargo.toml
+        if: matrix.toolchain == 'msrv'
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ needs.read_msrv.outputs.msrv }}
+      - name: Install pinned Rust from rust-toolchain.toml
+        if: matrix.toolchain == 'pinned'
         uses: actions-rust-lang/setup-rust-toolchain@v1
       # enable this ci template to run regardless of whether the lockfile is checked in or not
       - name: cargo generate-lockfile
