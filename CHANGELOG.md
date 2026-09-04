@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-04
+
 - Set MSRV to 1.94.0 (because of sqlx 0.9.0)
 
 ## [0.2.0] - 2026-01-24
