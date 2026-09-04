@@ -549,7 +549,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_git_branches_load_event() {
-        let database = Database::new().await.unwrap();
+        let database = Database::new_for_test().await.unwrap();
         let mut events = EventHandler::new_for_test();
 
         // Initially no events
@@ -595,7 +595,7 @@ mod tests {
     #[tokio::test]
     async fn test_handle_git_branches_loading_event_success() {
         let temp_dir = create_test_git_repo().unwrap();
-        let database = Database::new().await.unwrap();
+        let database = Database::new_for_test().await.unwrap();
         let mut events = EventHandler::new_for_test();
 
         // Initially no events
@@ -647,7 +647,7 @@ mod tests {
     async fn test_handle_git_branches_loading_event_error() {
         let temp_dir = tempfile::TempDir::new().unwrap();
 
-        let database = Database::new().await.unwrap();
+        let database = Database::new_for_test().await.unwrap();
         let mut events = EventHandler::new_for_test();
 
         // Initially no events

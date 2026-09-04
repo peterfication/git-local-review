@@ -1,5 +1,8 @@
 use sqlx::{SqlitePool, migrate, sqlite::SqliteConnectOptions};
 
+#[cfg(test)]
+use sqlx::sqlite::SqlitePoolOptions;
+
 pub struct Database {
     pool: SqlitePool,
 }
@@ -24,6 +27,19 @@ impl Database {
     #[cfg(test)]
     pub fn from_pool(pool: SqlitePool) -> Self {
         Self { pool }
+    }
+
+    #[cfg(test)]
+    pub async fn new_for_test() -> color_eyre::Result<Self> {
+        let options = SqliteConnectOptions::new().in_memory(true);
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await?;
+
+        migrate!().run(&pool).await?;
+
+        Ok(Self { pool })
     }
 
     pub fn pool(&self) -> &SqlitePool {
