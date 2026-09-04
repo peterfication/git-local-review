@@ -34,7 +34,7 @@ For keybindings see [KEYBINDINGS.md](KEYBINDINGS.md).
 
 ### Prerequisites
 
-- Rust version >= `1.88.0`
+- Rust version `1.92.0` (selected automatically via `rust-toolchain.toml`)
 - [just](https://github.com/casey/just) task runner
 
 ### Quick Start

@@ -16,8 +16,8 @@ jobs:
     name: Coverage
     steps:
       - uses: actions/checkout@v6
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust from rust-toolchain.toml
+        uses: actions-rust-lang/setup-rust-toolchain@v1
       - name: cargo generate-lockfile
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
@@ -25,5 +25,3 @@ jobs:
         run: cargo install cargo-tarpaulin
       - name: Run tests with code coverage
         run: cargo tarpaulin
-      - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@v2
