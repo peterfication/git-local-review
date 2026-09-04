@@ -2,7 +2,11 @@ default:
   just --list
 
 # Run all steps of CI
-ci: db-prepare run-version cli-help-dump db-schema-dump format lint test build doc
+ci: db-prepare run-version cli-help-dump db-schema-dump format lint test build doc security-scan
+
+# Run the security scan using Trivy
+security-scan:
+  trivy fs --config .trivy.yaml Cargo.lock
 
 # Run the application
 run:
