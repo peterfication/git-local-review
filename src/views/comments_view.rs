@@ -352,10 +352,10 @@ impl ViewHandler for CommentsView {
             AppEvent::CommentsLoadingState { params, state } => {
                 self.handle_comments_loading_state(params, state);
             }
-            AppEvent::CommentsMetadataInvalidated { review_id } => {
-                if self.target.review_id() == review_id.as_ref() {
-                    self.request_comments_reload(app);
-                }
+            AppEvent::CommentsMetadataInvalidated { review_id }
+                if self.target.review_id() == review_id.as_ref() =>
+            {
+                self.request_comments_reload(app);
             }
             _ => {
                 // Other events are not handled by this view
