@@ -9,7 +9,8 @@
 | **Main**               | `d`                                       | Delete selected review                                 |
 | **Main**               | `r`                                       | Open refresh review chooser                            |
 | **Main**               | `q` / `Ctrl+C`                            | Quit application                                       |
-| **Review create**      | `Up` / `Down` / `k` / `j`                 | Change branch selection                                |
+| **Review create**      | Type text / `Backspace`                   | Fuzzy filter the active branch list                    |
+| **Review create**      | `Up` / `Down` / `Ctrl+j` / `Ctrl+k`       | Change selection within filtered branches              |
 | **Review create**      | `Tab`                                     | Switch between target and base branch selection        |
 | **Review create**      | `Enter`                                   | Submit review                                          |
 | **Review create**      | `Esc`                                     | Cancel and close popup                                 |

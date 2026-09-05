@@ -24,6 +24,8 @@ pub struct ReviewCreateView {
     pub base_branch_index: usize,
     pub target_branch_index: usize,
     pub current_field: InputField,
+    pub base_branch_filter: String,
+    pub target_branch_filter: String,
 }
 
 #[derive(Default, PartialEq, Debug)]
@@ -42,10 +44,24 @@ impl ViewHandler for ReviewCreateView {
         match key_event.code {
             KeyCode::Esc => self.close_view(app),
             KeyCode::Tab => self.review_selection_switch(),
-            KeyCode::Up | KeyCode::Char('k') => self.review_selection_up(),
-            KeyCode::Down | KeyCode::Char('j') => self.review_selection_down(),
+            KeyCode::Up => self.review_selection_up(),
+            KeyCode::Down => self.review_selection_down(),
+            KeyCode::Char('k') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.review_selection_up()
+            }
+            KeyCode::Char('j') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.review_selection_down()
+            }
             KeyCode::Enter => self.submit_review(app),
-            KeyCode::Char('?') => app.events.send(AppEvent::HelpOpen(self.get_keybindings())),
+            KeyCode::Backspace => self.remove_filter_character(),
+            KeyCode::Char('?') if key_event.modifiers.is_empty() => {
+                app.events.send(AppEvent::HelpOpen(self.get_keybindings()))
+            }
+            KeyCode::Char(c)
+                if key_event.modifiers.is_empty() || key_event.modifiers == KeyModifiers::SHIFT =>
+            {
+                self.add_filter_character(c)
+            }
             _ => {}
         }
         Ok(())
@@ -117,10 +133,12 @@ impl ViewHandler for ReviewCreateView {
         };
 
         // Base branch list
-        let base_branch_items: Vec<ListItem> = branches
+        let base_branches = Self::filtered_branches(branches, &self.base_branch_filter);
+        let target_branches = Self::filtered_branches(branches, &self.target_branch_filter);
+        let base_branch_items: Vec<ListItem> = base_branches
             .iter()
             .enumerate()
-            .map(|(i, branch)| {
+            .map(|(i, (_, branch))| {
                 let style = if i == self.base_branch_index {
                     Style::default().bg(Color::Blue).fg(Color::Black)
                 } else {
@@ -141,18 +159,23 @@ impl ViewHandler for ReviewCreateView {
             Style::default().fg(Color::White)
         };
 
+        let base_branch_title = if self.base_branch_filter.is_empty() {
+            "Base Branch".to_string()
+        } else {
+            format!("Base Branch [{}]", self.base_branch_filter)
+        };
         let base_branch_list = List::new(base_branch_items).block(
             Block::bordered()
-                .title("Base Branch")
+                .title(base_branch_title)
                 .border_style(base_branch_style),
         );
         base_branch_list.render(chunks[0], buf);
 
         // Target branch list
-        let target_branch_items: Vec<ListItem> = branches
+        let target_branch_items: Vec<ListItem> = target_branches
             .iter()
             .enumerate()
-            .map(|(i, branch)| {
+            .map(|(i, (_, branch))| {
                 let style = if i == self.target_branch_index {
                     Style::default().bg(Color::Blue).fg(Color::Black)
                 } else {
@@ -173,9 +196,14 @@ impl ViewHandler for ReviewCreateView {
             Style::default().fg(Color::White)
         };
 
+        let target_branch_title = if self.target_branch_filter.is_empty() {
+            "Target Branch".to_string()
+        } else {
+            format!("Target Branch [{}]", self.target_branch_filter)
+        };
         let target_branch_list = List::new(target_branch_items).block(
             Block::bordered()
-                .title("Target Branch")
+                .title(target_branch_title)
                 .border_style(target_branch_style),
         );
         target_branch_list.render(chunks[1], buf);
@@ -187,8 +215,10 @@ impl ViewHandler for ReviewCreateView {
             width: popup_area.width - 2,
             height: 1,
         };
-        let help = Paragraph::new("↑↓: Navigate, Tab: Switch lists, Enter: Create, Esc: Cancel")
-            .style(Style::default().fg(Color::Gray));
+        let help = Paragraph::new(
+            "Type: Filter, Backspace: Edit, ↑↓/Ctrl+j/k: Navigate, Tab: Switch, Enter: Create",
+        )
+        .style(Style::default().fg(Color::Gray));
         help.render(help_area, buf);
     }
 
@@ -214,20 +244,20 @@ impl ViewHandler for ReviewCreateView {
                 )
             }
             GitBranchesLoadingState::Loaded(branches) => {
-                let base_branch = branches
+                let base_branch = Self::filtered_branches(branches, &self.base_branch_filter)
                     .get(self.base_branch_index)
-                    .map(|s| s.as_str())
-                    .unwrap_or("none");
-                let target_branch = branches
+                    .map_or("none", |(_, branch)| branch.as_str());
+                let target_branch = Self::filtered_branches(branches, &self.target_branch_filter)
                     .get(self.target_branch_index)
-                    .map(|s| s.as_str())
-                    .unwrap_or("none");
+                    .map_or("none", |(_, branch)| branch.as_str());
                 format!(
-                    "ReviewCreateView(branches: {:?}, base_branch: \"{}\", target_branch: \"{}\", current_field: {:?})",
+                    "ReviewCreateView(branches: {:?}, base_branch: \"{}\", target_branch: \"{}\", current_field: {:?}, base_filter: {:?}, target_filter: {:?})",
                     branches.as_ref(),
                     base_branch,
                     target_branch,
-                    self.current_field
+                    self.current_field,
+                    self.base_branch_filter,
+                    self.target_branch_filter
                 )
             }
         }
@@ -241,10 +271,20 @@ impl ViewHandler for ReviewCreateView {
     fn get_keybindings(&self) -> Arc<[KeyBinding]> {
         Arc::new([
             KeyBinding {
-                key: "↑↓ / jk".to_string(),
+                key: "↑↓ / Ctrl+j/k".to_string(),
                 description: "Navigate branch list".to_string(),
                 key_event: KeyEvent {
                     code: KeyCode::Up,
+                    modifiers: KeyModifiers::empty(),
+                    kind: KeyEventKind::Press,
+                    state: KeyEventState::empty(),
+                },
+            },
+            KeyBinding {
+                key: "Type / Backspace".to_string(),
+                description: "Filter active branch list".to_string(),
+                key_event: KeyEvent {
+                    code: KeyCode::Backspace,
                     modifiers: KeyModifiers::empty(),
                     kind: KeyEventKind::Press,
                     state: KeyEventState::empty(),
@@ -294,6 +334,8 @@ impl ReviewCreateView {
         self.base_branch_index = 0;
         self.target_branch_index = 0;
         self.current_field = InputField::TargetBranch;
+        self.base_branch_filter.clear();
+        self.target_branch_filter.clear();
         app.events.send(AppEvent::ViewClose);
     }
 
@@ -303,8 +345,10 @@ impl ReviewCreateView {
                 log::warn!("No branches available to create a review");
                 return;
             }
-            let base_branch = match branches.get(self.base_branch_index) {
-                Some(branch) => branch.clone(),
+            let base_branches = Self::filtered_branches(branches, &self.base_branch_filter);
+            let target_branches = Self::filtered_branches(branches, &self.target_branch_filter);
+            let base_branch = match base_branches.get(self.base_branch_index) {
+                Some((_, branch)) => (*branch).clone(),
                 None => {
                     // This should never happen, but handle gracefully
                     log::error!(
@@ -315,8 +359,8 @@ impl ReviewCreateView {
                     return;
                 }
             };
-            let target_branch = match branches.get(self.target_branch_index) {
-                Some(branch) => branch.clone(),
+            let target_branch = match target_branches.get(self.target_branch_index) {
+                Some((_, branch)) => (*branch).clone(),
                 None => {
                     // This should never happen, but handle gracefully
                     log::error!(
@@ -366,17 +410,106 @@ impl ReviewCreateView {
         if let GitBranchesLoadingState::Loaded(ref branches) = self.branches_state {
             match self.current_field {
                 InputField::BaseBranch => {
-                    if self.base_branch_index < branches.len().saturating_sub(1) {
+                    if self.base_branch_index
+                        < Self::filtered_branches(branches, &self.base_branch_filter)
+                            .len()
+                            .saturating_sub(1)
+                    {
                         self.base_branch_index += 1;
                     }
                 }
                 InputField::TargetBranch => {
-                    if self.target_branch_index < branches.len().saturating_sub(1) {
+                    if self.target_branch_index
+                        < Self::filtered_branches(branches, &self.target_branch_filter)
+                            .len()
+                            .saturating_sub(1)
+                    {
                         self.target_branch_index += 1;
                     }
                 }
             }
         }
+    }
+
+    fn add_filter_character(&mut self, character: char) {
+        if character.is_control() {
+            return;
+        }
+        match self.current_field {
+            InputField::BaseBranch => {
+                self.base_branch_filter.push(character);
+                self.base_branch_index = 0;
+            }
+            InputField::TargetBranch => {
+                self.target_branch_filter.push(character);
+                self.target_branch_index = 0;
+            }
+        }
+    }
+
+    fn remove_filter_character(&mut self) {
+        match self.current_field {
+            InputField::BaseBranch => {
+                self.base_branch_filter.pop();
+                self.base_branch_index = 0;
+            }
+            InputField::TargetBranch => {
+                self.target_branch_filter.pop();
+                self.target_branch_index = 0;
+            }
+        }
+    }
+
+    fn filtered_branches<'a>(branches: &'a [String], query: &str) -> Vec<(usize, &'a String)> {
+        let mut matches: Vec<_> = branches
+            .iter()
+            .enumerate()
+            .filter_map(|(index, branch)| {
+                Self::fuzzy_score(branch, query).map(|score| (score, index, branch))
+            })
+            .collect();
+        matches.sort_by_key(|(score, index, _)| (*score, *index));
+        matches
+            .into_iter()
+            .map(|(_, index, branch)| (index, branch))
+            .collect()
+    }
+
+    /// Scores a case-insensitive fuzzy match between a branch name and a query.
+    ///
+    /// Returns `None` when the query characters do not occur in order. Lower tuple values rank
+    /// higher: the fields represent match type, match position or span, and candidate length.
+    fn fuzzy_score(candidate: &str, query: &str) -> Option<(u8, usize, usize)> {
+        if query.is_empty() {
+            return Some((0, 0, candidate.len()));
+        }
+        let candidate = candidate.to_lowercase();
+        let query = query.to_lowercase();
+        if candidate == query {
+            return Some((0, 0, candidate.len()));
+        }
+        if candidate.starts_with(&query) {
+            return Some((1, 0, candidate.len()));
+        }
+        if let Some(position) = candidate.find(&query) {
+            return Some((2, position, candidate.len()));
+        }
+
+        let mut query_chars = query.chars();
+        let mut wanted = query_chars.next()?;
+        let mut first = None;
+        for (position, character) in candidate.chars().enumerate() {
+            if character == wanted {
+                first.get_or_insert(position);
+                match query_chars.next() {
+                    Some(next) => wanted = next,
+                    None => {
+                        return Some((3, position - first.unwrap_or(position), candidate.len()));
+                    }
+                }
+            }
+        }
+        None
     }
 
     fn handle_git_branches_loading_state(&mut self, state: &GitBranchesLoadingState) {
@@ -444,6 +577,8 @@ mod tests {
             base_branch_index: 1,
             target_branch_index: 1,
             current_field: InputField::TargetBranch,
+            base_branch_filter: String::new(),
+            target_branch_filter: String::new(),
         };
 
         let key_event_up = KeyEvent {
@@ -468,6 +603,82 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_review_create_view_handle_ctrl_j_k() {
+        let mut app = create_test_app().await;
+        let mut view = ReviewCreateView {
+            branches_state: GitBranchesLoadingState::Loaded(
+                vec!["main".to_string(), "develop".to_string()].into(),
+            ),
+            target_branch_index: 0,
+            ..Default::default()
+        };
+
+        view.handle_key_events(
+            &mut app,
+            &KeyEvent::new(KeyCode::Char('j'), KeyModifiers::CONTROL),
+        )
+        .unwrap();
+        assert_eq!(view.target_branch_index, 1);
+
+        view.handle_key_events(
+            &mut app,
+            &KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL),
+        )
+        .unwrap();
+        assert_eq!(view.target_branch_index, 0);
+        assert!(view.target_branch_filter.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_review_create_view_handle_help() {
+        let mut app = create_test_app().await;
+        let mut view = ReviewCreateView::default();
+
+        view.handle_key_events(
+            &mut app,
+            &KeyEvent::new(KeyCode::Char('?'), KeyModifiers::empty()),
+        )
+        .unwrap();
+
+        assert!(view.target_branch_filter.is_empty());
+        let event = app.events.try_recv().unwrap();
+        assert!(matches!(*event, Event::App(AppEvent::HelpOpen(_))));
+    }
+
+    #[tokio::test]
+    async fn test_review_create_view_ignores_modified_filter_characters() {
+        let mut app = create_test_app().await;
+        let mut view = ReviewCreateView::default();
+
+        view.handle_key_events(
+            &mut app,
+            &KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL),
+        )
+        .unwrap();
+        view.handle_key_events(
+            &mut app,
+            &KeyEvent::new(KeyCode::Char('f'), KeyModifiers::ALT),
+        )
+        .unwrap();
+
+        assert!(view.target_branch_filter.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_review_create_view_accepts_shifted_filter_characters() {
+        let mut app = create_test_app().await;
+        let mut view = ReviewCreateView::default();
+
+        view.handle_key_events(
+            &mut app,
+            &KeyEvent::new(KeyCode::Char('F'), KeyModifiers::SHIFT),
+        )
+        .unwrap();
+
+        assert_eq!(view.target_branch_filter, "F");
+    }
+
+    #[tokio::test]
     async fn test_review_create_view_handle_tab_navigation() {
         let mut app = create_test_app().await;
         let mut view = ReviewCreateView {
@@ -477,6 +688,8 @@ mod tests {
             base_branch_index: 0,
             target_branch_index: 0,
             current_field: InputField::TargetBranch,
+            base_branch_filter: String::new(),
+            target_branch_filter: String::new(),
         };
 
         let key_event = KeyEvent {
@@ -503,6 +716,8 @@ mod tests {
             base_branch_index: 0,
             target_branch_index: 0,
             current_field: InputField::TargetBranch,
+            base_branch_filter: String::new(),
+            target_branch_filter: String::new(),
         };
 
         let key_event = KeyEvent {
@@ -527,6 +742,8 @@ mod tests {
             base_branch_index: 1,
             target_branch_index: 1,
             current_field: InputField::TargetBranch,
+            base_branch_filter: String::new(),
+            target_branch_filter: String::new(),
         };
 
         let key_event = KeyEvent {
@@ -551,6 +768,8 @@ mod tests {
             base_branch_index: 1,
             target_branch_index: 1,
             current_field: InputField::TargetBranch,
+            base_branch_filter: String::new(),
+            target_branch_filter: String::new(),
         };
         assert!(!app.events.has_pending_events());
 
@@ -590,6 +809,8 @@ mod tests {
             base_branch_index: 0,
             target_branch_index: 2,
             current_field: InputField::TargetBranch,
+            base_branch_filter: String::new(),
+            target_branch_filter: String::new(),
         };
         assert!(!app.events.has_pending_events());
 
@@ -641,6 +862,8 @@ mod tests {
             base_branch_index: 1,
             target_branch_index: 0,
             current_field: InputField::TargetBranch,
+            base_branch_filter: String::new(),
+            target_branch_filter: String::new(),
         };
         let initial_index = view.base_branch_index;
 
@@ -655,6 +878,90 @@ mod tests {
 
         // Unknown keys should not change indices
         assert_eq!(view.base_branch_index, initial_index);
+    }
+
+    #[test]
+    fn test_fuzzy_filtering_and_ranking() {
+        let branches: Arc<[String]> = vec![
+            "bugfix/feature-toggle".to_string(),
+            "ft".to_string(),
+            "feature/test".to_string(),
+            "release/FT".to_string(),
+        ]
+        .into();
+
+        let matches = ReviewCreateView::filtered_branches(&branches, "ft");
+        let names: Vec<_> = matches.iter().map(|(_, branch)| branch.as_str()).collect();
+        assert_eq!(
+            names,
+            vec!["ft", "release/FT", "feature/test", "bugfix/feature-toggle"]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_review_create_view_filters_active_list_and_submits_match() {
+        let mut app = create_test_app().await;
+        let mut view = ReviewCreateView {
+            branches_state: GitBranchesLoadingState::Loaded(
+                vec![
+                    "main".to_string(),
+                    "develop".to_string(),
+                    "feature/test".to_string(),
+                ]
+                .into(),
+            ),
+            current_field: InputField::TargetBranch,
+            ..Default::default()
+        };
+
+        for character in ['f', 't'] {
+            view.handle_key_events(
+                &mut app,
+                &KeyEvent::new(KeyCode::Char(character), KeyModifiers::empty()),
+            )
+            .unwrap();
+        }
+        assert_eq!(view.target_branch_filter, "ft");
+        assert!(view.base_branch_filter.is_empty());
+        assert_eq!(view.target_branch_index, 0);
+
+        view.handle_key_events(
+            &mut app,
+            &KeyEvent::new(KeyCode::Enter, KeyModifiers::empty()),
+        )
+        .unwrap();
+        let event = app.events.try_recv().unwrap();
+        let Event::App(AppEvent::ReviewCreateSubmit(data)) = &*event else {
+            panic!("Expected ReviewCreateSubmit event");
+        };
+        assert_eq!(data.base_branch, "main");
+        assert_eq!(data.target_branch, "feature/test");
+    }
+
+    #[tokio::test]
+    async fn test_review_create_view_backspace_and_empty_match() {
+        let mut app = create_test_app().await;
+        let mut view = ReviewCreateView {
+            branches_state: GitBranchesLoadingState::Loaded(vec!["main".to_string()].into()),
+            target_branch_filter: "missing".to_string(),
+            target_branch_index: 4,
+            ..Default::default()
+        };
+
+        view.handle_key_events(
+            &mut app,
+            &KeyEvent::new(KeyCode::Backspace, KeyModifiers::empty()),
+        )
+        .unwrap();
+        assert_eq!(view.target_branch_filter, "missin");
+        assert_eq!(view.target_branch_index, 0);
+
+        view.handle_key_events(
+            &mut app,
+            &KeyEvent::new(KeyCode::Enter, KeyModifiers::empty()),
+        )
+        .unwrap();
+        assert!(!app.events.has_pending_events());
     }
 
     #[tokio::test]
@@ -682,6 +989,8 @@ mod tests {
             base_branch_index: 0,
             target_branch_index: 2,
             current_field: InputField::TargetBranch,
+            base_branch_filter: String::new(),
+            target_branch_filter: String::new(),
         };
         let app = App {
             view_stack: vec![Box::new(view)],

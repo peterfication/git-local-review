@@ -281,6 +281,8 @@ mod tests {
             base_branch_index: 0,
             target_branch_index: 0,
             current_field: crate::views::review_create_view::InputField::TargetBranch,
+            base_branch_filter: String::new(),
+            target_branch_filter: String::new(),
         };
 
         // Add it to the stack
@@ -295,7 +297,7 @@ mod tests {
         // Verify initial state
         assert_eq!(
             app.view_stack.last().unwrap().debug_state(),
-            "ReviewCreateView(branches: [\"main\", \"develop\", \"feature/test\"], base_branch: \"main\", target_branch: \"main\", current_field: TargetBranch)"
+            "ReviewCreateView(branches: [\"main\", \"develop\", \"feature/test\"], base_branch: \"main\", target_branch: \"main\", current_field: TargetBranch, base_filter: \"\", target_filter: \"\")"
         );
 
         // Send a Down key that would change branch selection in ReviewCreateView
@@ -317,7 +319,7 @@ mod tests {
         // Verify that the ReviewCreateView's target_branch_index has been updated from 0 to 1 (develop)
         assert_eq!(
             app.view_stack.last().unwrap().debug_state(),
-            "ReviewCreateView(branches: [\"main\", \"develop\", \"feature/test\"], base_branch: \"main\", target_branch: \"develop\", current_field: TargetBranch)"
+            "ReviewCreateView(branches: [\"main\", \"develop\", \"feature/test\"], base_branch: \"main\", target_branch: \"develop\", current_field: TargetBranch, base_filter: \"\", target_filter: \"\")"
         );
     }
 
