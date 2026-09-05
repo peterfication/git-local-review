@@ -3,7 +3,7 @@ ci: db-prepare run-version cli-help-dump db-schema-dump format lint test build d
 
 # Format all files
 [group('ci')]
-format: format-rust format-rest
+format: format-rust format-rest format-sql
 
 # Format the code with rustfmt
 [group('ci')]
@@ -14,6 +14,16 @@ format-rust:
 [group('ci')]
 format-rest:
   dprint fmt
+
+# Format SQL migration files with SQLFluff
+[group('ci')]
+format-sql:
+  uvx sqlfluff fix migrations
+
+# Check SQL migration formatting with SQLFluff
+[group('ci')]
+format-sql-check:
+  uvx sqlfluff lint migrations
 
 # Run clippy linter
 [group('ci')]

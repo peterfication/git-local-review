@@ -1,2 +1,3 @@
 just 1.58.0
 trivy 0.74.0
+uv 0.12.10 # For sqlfluff
