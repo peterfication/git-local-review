@@ -65,10 +65,11 @@ Some examples:
 just run      # Run the application
 just test     # Run all tests
 just lint     # Run clippy linting
-just format   # Format code with rustfmt
+just format   # Format Rust, SQL migrations, and other supported files
 just build    # Build the project
 just doc      # Generate documentation
 just ci       # Run full CI pipeline (format, lint, test, build, doc)
+just format-sql-check # Check SQL migration formatting without modifying files
 ```
 
 ### Disclaimer regarding AI / Coding LLMs

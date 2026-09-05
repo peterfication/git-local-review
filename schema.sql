@@ -16,12 +16,12 @@ CREATE TABLE file_views (
     review_id TEXT NOT NULL,
     file_path TEXT NOT NULL,
     created_at TEXT NOT NULL,
-    FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE,
-    UNIQUE(review_id, file_path)
+    FOREIGN KEY (review_id) REFERENCES reviews (id) ON DELETE CASCADE,
+    UNIQUE (review_id, file_path)
 );
 CREATE TABLE sqlite_sequence(name,seq);
-CREATE INDEX idx_file_views_review_id ON file_views(review_id);
-CREATE INDEX idx_file_views_review_file ON file_views(review_id, file_path);
+CREATE INDEX idx_file_views_review_id ON file_views (review_id);
+CREATE INDEX idx_file_views_review_file ON file_views (review_id, file_path);
 CREATE TABLE comments (
     id TEXT PRIMARY KEY,
     review_id TEXT NOT NULL,
@@ -35,5 +35,5 @@ CREATE INDEX idx_comments_review_id ON comments (review_id);
 CREATE INDEX idx_comments_file_path ON comments (review_id, file_path);
 CREATE INDEX idx_comments_line ON comments (review_id, file_path, line_number);
 CREATE INDEX idx_comments_created_at ON comments (created_at DESC);
-CREATE INDEX idx_comments_resolved ON comments(resolved);
-CREATE INDEX idx_comments_review_resolved ON comments(review_id, resolved);
+CREATE INDEX idx_comments_resolved ON comments (resolved);
+CREATE INDEX idx_comments_review_resolved ON comments (review_id, resolved);
