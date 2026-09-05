@@ -1,6 +1,8 @@
 # Changelog
 
-## `Unreleased`
+## Unreleased
+
+- Add fuzzy branch filtering when creating reviews
 
 ## `0.3.0` - 2026-09-04
 
